@@ -166,6 +166,46 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
+      const syncTemplateSelection = (templateInput) => {
+        const container = templateInput.closest('form') || document;
+        const templateKeyInput = container.querySelector('[data-template-key-input]');
+        const colorInput = container.querySelector('[data-template-color-input]');
+        const colorLabel = container.querySelector('[data-template-color-label]');
+        const fontInput = container.querySelector('[data-template-font-input]');
+        const nameLabel = container.querySelector('[data-template-name-label]');
+        const typeLabel = container.querySelector('[data-template-type-label]');
+        const fontLabel = container.querySelector('[data-template-font-label]');
+
+        if (templateKeyInput) {
+          templateKeyInput.value = templateInput.dataset.templateKey || templateInput.value;
+        }
+
+        if (colorInput && colorInput.dataset.userEdited !== 'true' && templateInput.dataset.templateDefaultColor) {
+          colorInput.value = templateInput.dataset.templateDefaultColor;
+        }
+
+        if (colorLabel && colorInput) {
+          colorLabel.textContent = colorInput.value;
+        }
+
+        if (fontInput && fontInput.dataset.userEdited !== 'true' && templateInput.dataset.templateFont) {
+          fontInput.value = templateInput.dataset.templateFont;
+        }
+
+        if (nameLabel) {
+          nameLabel.textContent = templateInput.dataset.templateLabel || templateInput.value;
+        }
+
+        if (typeLabel) {
+          typeLabel.textContent = templateInput.dataset.templateTypeLabel || templateInput.value;
+        }
+
+        if (fontLabel && fontInput) {
+          const selectedOption = fontInput.options[fontInput.selectedIndex];
+          fontLabel.textContent = selectedOption ? selectedOption.textContent : fontInput.value;
+        }
+      };
+
       document.querySelectorAll('[data-auto-slug-source]').forEach((source) => {
         const targetSelector = source.dataset.autoSlugTarget;
         const target = targetSelector ? document.querySelector(targetSelector) : null;
@@ -216,6 +256,57 @@
           updatePricing(pricingToggle.checked ? 'yearly' : 'monthly');
         });
       }
+
+      document.querySelectorAll('[data-template-option]').forEach((input) => {
+        if (input.checked) {
+          syncTemplateSelection(input);
+        }
+
+        input.addEventListener('change', () => {
+          if (input.checked) {
+            syncTemplateSelection(input);
+          }
+        });
+      });
+
+      document.querySelectorAll('[data-template-color-input]').forEach((input) => {
+        const container = input.closest('form') || document;
+        const label = container.querySelector('[data-template-color-label]');
+
+        const syncColorLabel = () => {
+          if (label) {
+            label.textContent = input.value;
+          }
+        };
+
+        syncColorLabel();
+
+        input.addEventListener('input', () => {
+          input.dataset.userEdited = 'true';
+          syncColorLabel();
+        });
+      });
+
+      document.querySelectorAll('[data-template-font-input]').forEach((input) => {
+        const container = input.closest('form') || document;
+        const label = container.querySelector('[data-template-font-label]');
+
+        const syncFontLabel = () => {
+          if (!label) {
+            return;
+          }
+
+          const selectedOption = input.options[input.selectedIndex];
+          label.textContent = selectedOption ? selectedOption.textContent : input.value;
+        };
+
+        syncFontLabel();
+
+        input.addEventListener('change', () => {
+          input.dataset.userEdited = 'true';
+          syncFontLabel();
+        });
+      });
     });
   })();
 </script>

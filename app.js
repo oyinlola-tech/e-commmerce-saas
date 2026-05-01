@@ -1,6 +1,16 @@
-const express = require('express');
 const path = require('path');
+const env = require('./src/lib/load-env');
+const express = require('express');
 const expressLayouts = require('express-ejs-layouts');
+const {
+  storeTemplates,
+  fontPresets,
+  getStoreTheme
+} = require('./src/lib/store-themes');
+const {
+  buildCurrencyContext,
+  normalizeCurrencyCode
+} = require('./src/lib/currency');
 const {
   brand,
   platformUser,
@@ -43,8 +53,10 @@ const {
 } = require('./src/lib/state');
 
 const app = express();
-const PORT = Number(process.env.PORT || 3000);
-const ROOT_DOMAIN = process.env.APP_ROOT_DOMAIN || 'localhost';
+const PORT = env.port;
+const ROOT_DOMAIN = env.rootDomain;
+
+app.set('trust proxy', true);
 
 const parseCookies = (header = '') => {
   return String(header)
@@ -73,6 +85,18 @@ const isPlatformHost = (hostname) => {
 
 const isStorefrontHost = (req) => {
   return !isPlatformHost(req.hostname);
+};
+
+const isStoreScopedPath = (pathname = '') => {
+  return pathname === '/register'
+    || pathname === '/products'
+    || pathname.startsWith('/products/')
+    || pathname === '/cart'
+    || pathname === '/account'
+    || pathname === '/orders'
+    || pathname === '/checkout'
+    || pathname === '/order-confirmation'
+    || pathname.startsWith('/cart/');
 };
 
 const getDefaultStore = () => {
@@ -148,10 +172,12 @@ const renderStorefront = (req, res, view, payload = {}) => {
   const store = resolveStore(req);
   const customer = getCurrentCustomer(req, store?.id);
   const cart = getCart(store?.id);
+  const storeTheme = getStoreTheme(store);
 
   return res.render(view, {
     layout: 'layouts/store',
     store,
+    storeTheme,
     customer,
     cart,
     ...payload
@@ -160,10 +186,12 @@ const renderStorefront = (req, res, view, payload = {}) => {
 
 const renderStoreAdmin = (req, res, view, payload = {}) => {
   const store = resolveStore(req);
+  const storeTheme = getStoreTheme(store);
 
   return res.render(view, {
     layout: 'layouts/admin',
     store,
+    storeTheme,
     ...payload
   });
 };
@@ -197,21 +225,74 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   const activeStore = resolveStore(req);
+  const pricingStore = isStorefrontHost(req) || req.path.startsWith('/admin') || isStoreScopedPath(req.path)
+    ? activeStore
+    : null;
+  const currencyContext = await buildCurrencyContext(req, pricingStore);
+
+  if (currencyContext.shouldPersistSelection) {
+    res.cookie(currencyContext.cookieName, currencyContext.selectedCurrency, {
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 30
+    });
+    req.cookies[currencyContext.cookieName] = currencyContext.selectedCurrency;
+  }
 
   res.locals.pageTitle = '';
   res.locals.metaDescription = '';
   res.locals.currentPath = req.path;
+  res.locals.currentUrl = req.originalUrl;
   res.locals.platformBrand = brand;
   res.locals.platformUser = platformUser;
   res.locals.systemAdminUser = systemAdminUser;
   res.locals.success = req.query.success || null;
   res.locals.error = req.query.error || null;
   res.locals.currentStore = activeStore;
+  res.locals.currentStoreTheme = getStoreTheme(activeStore);
+  res.locals.storeTemplates = storeTemplates;
+  res.locals.fontPresets = fontPresets;
+  res.locals.currencyContext = currencyContext;
+  res.locals.selectedCurrency = currencyContext.selectedCurrency;
+  res.locals.currencyOptions = currencyContext.options;
+  res.locals.currencyPreferenceSource = currencyContext.source;
+  res.locals.visitorLocation = currencyContext.geoData;
+  res.locals.baseCurrency = currencyContext.baseCurrency;
+  res.locals.formatMoney = (amount) => currencyContext.formatAmount(amount);
+  res.locals.convertMoney = (amount) => currencyContext.convertAmount(amount);
   res.locals.storefrontUrl = buildStorefrontUrl(activeStore);
   res.locals.storeAdminUrl = buildStoreAdminUrl(activeStore);
   next();
+});
+
+app.post('/preferences/currency', async (req, res) => {
+  const activeStore = resolveStore(req);
+  const pricingStore = isStorefrontHost(req) || String(req.body.scope || '').toLowerCase() === 'store'
+    ? activeStore
+    : null;
+  const currencyContext = await buildCurrencyContext(req, pricingStore);
+  const requestedCurrency = normalizeCurrencyCode(req.body.code);
+  const allowedCurrencies = currencyContext.options.map((entry) => entry.code);
+  const returnTo = String(req.body.returnTo || req.headers.referer || '/').trim();
+  const safeReturnTo = returnTo.startsWith('/') && !returnTo.startsWith('//')
+    ? returnTo
+    : '/';
+
+  if (!requestedCurrency || !allowedCurrencies.includes(requestedCurrency)) {
+    return res.redirect(`${safeReturnTo}${safeReturnTo.includes('?') ? '&' : '?'}error=${encodeURIComponent('Currency is not available for this storefront')}`);
+  }
+
+  res.cookie(currencyContext.cookieName, requestedCurrency, {
+    sameSite: 'lax',
+    maxAge: 1000 * 60 * 60 * 24 * 30
+  });
+
+  if (pricingStore) {
+    req.cookies[currencyContext.cookieName] = requestedCurrency;
+  }
+
+  return res.redirect(safeReturnTo);
 });
 
 app.get('/', (req, res) => {
@@ -258,6 +339,22 @@ app.post('/signup', (req, res) => {
     const customer = createCustomer(store.id, req.body);
     res.cookie(customerCookieName(store.id), customer.id, { sameSite: 'lax' });
     return res.redirect(req.query.returnTo || '/account?success=Account created');
+  }
+
+  const hasStoreSetup = req.body.store_name || req.body.store_subdomain || req.body.store_type;
+
+  if (hasStoreSetup) {
+    const store = createStore({
+      name: req.body.store_name || `${String(req.body.name || 'New').trim() || 'New'} Store`,
+      subdomain: req.body.store_subdomain,
+      ownerId: platformUser.id,
+      store_type: req.body.store_type,
+      template_key: req.body.template_key,
+      theme_color: req.body.theme_color,
+      font_preset: req.body.font_preset
+    });
+
+    return res.redirect(`/dashboard?success=${encodeURIComponent(`${store.name} created successfully`)}`);
   }
 
   return res.redirect('/dashboard?success=Welcome to Aisle');
@@ -309,7 +406,11 @@ app.post('/stores', (req, res) => {
   const store = createStore({
     name: req.body.name,
     subdomain: req.body.subdomain,
-    ownerId: platformUser.id
+    ownerId: platformUser.id,
+    store_type: req.body.store_type,
+    template_key: req.body.template_key,
+    theme_color: req.body.theme_color,
+    font_preset: req.body.font_preset
   });
 
   return res.redirect(`/dashboard?success=${encodeURIComponent(`${store.name} created successfully`)}`);

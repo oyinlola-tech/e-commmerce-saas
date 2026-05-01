@@ -1,6 +1,6 @@
 <%
   const tenantList = Array.isArray(stores) ? stores : [];
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const launchBadge = (status) => {
     switch ((status || '').toLowerCase()) {
       case 'pilot':
@@ -39,11 +39,11 @@
               </div>
               <div class="rounded-2xl bg-slate-50 p-4">
                 <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Monthly revenue</p>
-                <p class="mt-2 text-sm font-semibold text-slate-900"><%= currency.format(store.monthly_revenue || 0) %></p>
+                <p class="mt-2 text-sm font-semibold text-slate-900"><%= money(store.monthly_revenue || 0) %></p>
               </div>
               <div class="rounded-2xl bg-slate-50 p-4">
                 <p class="text-xs uppercase tracking-[0.2em] text-slate-400">AOV</p>
-                <p class="mt-2 text-sm font-semibold text-slate-900"><%= currency.format(store.average_order_value || 0) %></p>
+                <p class="mt-2 text-sm font-semibold text-slate-900"><%= money(store.average_order_value || 0) %></p>
               </div>
               <div class="rounded-2xl bg-slate-50 p-4">
                 <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Health score</p>

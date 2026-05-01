@@ -1,12 +1,15 @@
 <%
   const storeBrandColor = store && store.theme_color ? store.theme_color : '#4F46E5';
+  const activeStoreTheme = typeof storeTheme !== 'undefined'
+    ? storeTheme
+    : (typeof currentStoreTheme !== 'undefined' ? currentStoreTheme : null);
 %>
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <%- include('../partials/head', { brandColor: storeBrandColor }) %>
+    <%- include('../partials/head', { brandColor: storeBrandColor, storeTheme: activeStoreTheme }) %>
   </head>
-  <body class="store-shell body-frame min-h-screen text-gray-900 antialiased">
+  <body data-template="<%= activeStoreTheme && activeStoreTheme.templateKey ? activeStoreTheme.templateKey : 'fashion' %>" class="store-shell body-frame theme-template min-h-screen text-gray-900 antialiased <%= activeStoreTheme && activeStoreTheme.templateKey ? `theme-template-${activeStoreTheme.templateKey}` : '' %> <%= activeStoreTheme && activeStoreTheme.fonts ? `font-preset-${activeStoreTheme.fonts.key}` : '' %>">
     <div class="flex min-h-screen flex-col">
       <%- include('../partials/store-header') %>
       <%- include('../partials/flash') %>

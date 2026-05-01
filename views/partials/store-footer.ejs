@@ -1,3 +1,9 @@
+<%
+  const storeThemeData = typeof storeTheme !== 'undefined'
+    ? storeTheme
+    : (typeof currentStoreTheme !== 'undefined' ? currentStoreTheme : {});
+  const themeTrustPoints = Array.isArray(storeThemeData.trustPoints) ? storeThemeData.trustPoints : [];
+%>
 <footer class="border-t border-slate-200/70 bg-white/88 backdrop-blur">
   <div class="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.35fr_repeat(3,1fr)] lg:px-8">
     <div class="space-y-4">
@@ -8,8 +14,8 @@
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <% (store && Array.isArray(store.markets) ? store.markets.slice(0, 3) : []).forEach((market) => { %>
-          <span class="signal-chip text-slate-700"><%= market %></span>
+        <% (themeTrustPoints.length ? themeTrustPoints.slice(0, 3) : (store && Array.isArray(store.markets) ? store.markets.slice(0, 3) : [])).forEach((entry) => { %>
+          <span class="signal-chip text-slate-700"><%= entry %></span>
         <% }) %>
       </div>
     </div>

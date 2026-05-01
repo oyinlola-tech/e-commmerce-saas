@@ -1,7 +1,14 @@
 <script>
   (() => {
-    const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
     const initialCart = <%- JSON.stringify(cart || { items: [], total: 0 }).replace(/</g, '\\u003c') %>;
+    const initialCurrencyContext = <%- JSON.stringify((currencyContext && currencyContext.client) || {
+      baseCurrency: 'USD',
+      selectedCurrency: 'USD',
+      locale: 'en-US',
+      exchangeRate: 1,
+      options: [],
+      source: 'store-default'
+    }).replace(/</g, '\\u003c') %>;
 
     const escapeHtml = (value = '') => {
       return String(value).replace(/[&<>"']/g, (character) => {
@@ -17,8 +24,21 @@
       });
     };
 
+    const getCurrencyFormatter = () => {
+      const activeContext = window.currencyContext || initialCurrencyContext;
+      return new Intl.NumberFormat(activeContext.locale || 'en-US', {
+        style: 'currency',
+        currency: activeContext.selectedCurrency || 'USD'
+      });
+    };
+
+    const toDisplayedAmount = (value) => {
+      const activeContext = window.currencyContext || initialCurrencyContext;
+      return Number(value || 0) * Number(activeContext.exchangeRate || 1);
+    };
+
     const formatCurrency = (value) => {
-      return currency.format(Number(value || 0));
+      return getCurrencyFormatter().format(toDisplayedAmount(value));
     };
 
     const getCartDrawer = () => document.querySelector('[data-cart-drawer]');
@@ -406,6 +426,7 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
+      window.currencyContext = initialCurrencyContext;
       window.cartState = normalizeCart(initialCart);
       syncCartViews();
 

@@ -1,7 +1,13 @@
 <%
   const ownerStores = Array.isArray(stores) ? stores : [];
   const overview = metrics || {};
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
+  const templateChoices = typeof storeTemplates !== 'undefined' && Array.isArray(storeTemplates) ? storeTemplates : [];
+  const fontChoices = typeof fontPresets !== 'undefined' && Array.isArray(fontPresets) ? fontPresets : [];
+  const defaultTemplateChoice = templateChoices[0] || null;
+  const defaultFontChoice = defaultTemplateChoice
+    ? (fontChoices.find((preset) => preset.key === defaultTemplateChoice.fontPreset) || fontChoices[0] || null)
+    : (fontChoices[0] || null);
 %>
 <section class="space-y-8 px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
   <div class="surface-card relative overflow-hidden rounded-[2rem] p-8 sm:p-10">
@@ -22,7 +28,7 @@
         </article>
         <article class="metric-card rounded-3xl p-5">
           <p class="text-sm font-medium text-slate-500">Platform GMV</p>
-          <p class="metric-value mt-2 text-3xl font-semibold text-slate-950"><%= currency.format(overview.gmv30d || 0) %></p>
+          <p class="metric-value mt-2 text-3xl font-semibold text-slate-950"><%= money(overview.gmv30d || 0) %></p>
         </article>
         <article class="metric-card rounded-3xl p-5">
           <p class="text-sm font-medium text-slate-500">Open tickets</p>
@@ -61,6 +67,9 @@
                 <div class="flex flex-wrap items-center gap-3">
                   <h3 class="section-title truncate text-2xl font-semibold text-slate-950"><%= entry.name %></h3>
                   <span class="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700"><%= entry.launch_status || 'live' %></span>
+                  <% if (entry.store_type || entry.template_key) { %>
+                    <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= (entry.store_type || entry.template_key).replace(/-/g, ' ') %></span>
+                  <% } %>
                 </div>
                 <p class="mt-2 text-sm leading-6 text-slate-600"><%= entry.tagline %></p>
                 <p class="mt-2 text-sm text-slate-500"><%= entry.subdomain %>.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></p>
@@ -74,7 +83,7 @@
           <div class="mt-6 grid gap-3 sm:grid-cols-4">
             <div class="rounded-2xl bg-slate-50 p-4">
               <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Revenue</p>
-              <p class="mt-2 text-sm font-semibold text-slate-900"><%= currency.format(entry.monthly_revenue || 0) %></p>
+              <p class="mt-2 text-sm font-semibold text-slate-900"><%= money(entry.monthly_revenue || 0) %></p>
             </div>
             <div class="rounded-2xl bg-slate-50 p-4">
               <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Orders</p>
@@ -114,12 +123,12 @@
 </section>
 
 <div id="create-store-modal" data-modal-backdrop="create-store-modal" aria-hidden="true" class="fixed inset-0 z-[65] hidden items-center justify-center bg-slate-950/60 px-4 py-8 backdrop-blur-sm">
-  <div class="w-full max-w-lg rounded-[2rem] bg-white p-8 shadow-2xl">
+  <div class="w-full max-w-5xl rounded-[2rem] bg-white p-8 shadow-2xl">
     <div class="flex items-start justify-between gap-4">
       <div>
         <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">New tenant</p>
         <h2 class="section-title mt-2 text-3xl font-semibold text-slate-950">Create a new store</h2>
-        <p class="mt-3 text-sm leading-6 text-slate-600">Brand name, subdomain, and enterprise-ready defaults will be created immediately.</p>
+        <p class="mt-3 text-sm leading-6 text-slate-600">Choose the vertical template, accent color, and font preset up front, then refine everything later from store settings.</p>
       </div>
       <button type="button" data-modal-close="create-store-modal" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary" aria-label="Close modal">
         <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -128,26 +137,92 @@
       </button>
     </div>
 
-    <form action="/stores" method="post" class="mt-8 space-y-5">
-      <div>
-        <label for="storeName" class="mb-1 block text-sm font-medium text-slate-700">Store name</label>
-        <input id="storeName" data-auto-slug-source data-auto-slug-target="#storeSubdomain" name="name" type="text" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Aisle Signature">
-      </div>
-      <div>
-        <label for="storeSubdomain" class="mb-1 block text-sm font-medium text-slate-700">Subdomain</label>
-        <div class="flex overflow-hidden rounded-2xl border border-slate-300 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
-          <input id="storeSubdomain" name="subdomain" type="text" class="min-w-0 flex-1 border-0 px-4 py-3 text-slate-900 focus:outline-none focus:ring-0" placeholder="aisle-signature">
-          <span class="inline-flex items-center border-l border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-500">.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></span>
+    <form action="/stores" method="post" class="mt-8 grid gap-8 xl:grid-cols-[0.92fr_1.08fr]">
+      <section class="space-y-5">
+        <div>
+          <label for="storeName" class="mb-1 block text-sm font-medium text-slate-700">Store name</label>
+          <input id="storeName" data-auto-slug-source data-auto-slug-target="#storeSubdomain" name="name" type="text" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Aisle Signature">
         </div>
-      </div>
-      <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+        <div>
+          <label for="storeSubdomain" class="mb-1 block text-sm font-medium text-slate-700">Subdomain</label>
+          <div class="flex overflow-hidden rounded-2xl border border-slate-300 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+            <input id="storeSubdomain" name="subdomain" type="text" class="min-w-0 flex-1 border-0 px-4 py-3 text-slate-900 focus:outline-none focus:ring-0" placeholder="aisle-signature">
+            <span class="inline-flex items-center border-l border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-500">.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></span>
+          </div>
+        </div>
+        <input type="hidden" name="template_key" value="<%= defaultTemplateChoice ? defaultTemplateChoice.key : 'fashion' %>" data-template-key-input>
+        <div>
+          <label class="mb-3 block text-sm font-medium text-slate-700">Store category</label>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <% templateChoices.forEach((template, index) => { %>
+              <label class="group cursor-pointer">
+                <input type="radio" name="store_type" value="<%= template.key %>" class="peer sr-only" data-template-option data-template-key="<%= template.key %>" data-template-label="<%= template.label %>" data-template-type-label="<%= template.typeLabel %>" data-template-default-color="<%= template.defaultColor %>" data-template-font="<%= template.fontPreset %>" <%= index === 0 ? 'checked' : '' %>>
+                <span class="theme-preview-tile block rounded-[1.75rem] border border-slate-200 p-4 transition peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary/20 group-hover:border-primary">
+                  <span class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    <span class="h-2.5 w-2.5 rounded-full" style="background-color: <%= template.defaultColor %>"></span>
+                    <%= template.typeLabel %>
+                  </span>
+                  <strong class="mt-3 block section-title text-xl font-semibold text-slate-950"><%= template.label %></strong>
+                  <span class="mt-2 block text-sm leading-6 text-slate-600"><%= template.description %></span>
+                </span>
+              </label>
+            <% }) %>
+          </div>
+        </div>
+      </section>
+
+      <section class="space-y-5">
+        <div class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label for="createThemeColor" class="mb-1 block text-sm font-medium text-slate-700">Accent color</label>
+              <div class="flex items-center gap-4 rounded-2xl border border-slate-300 bg-white px-4 py-3 shadow-sm">
+                <input id="createThemeColor" name="theme_color" type="color" value="<%= defaultTemplateChoice ? defaultTemplateChoice.defaultColor : '#4F46E5' %>" data-template-color-input class="h-12 w-16 rounded-xl border-0 bg-transparent p-0">
+                <div>
+                  <p class="text-sm font-medium text-slate-900" data-template-color-label><%= defaultTemplateChoice ? defaultTemplateChoice.defaultColor : '#4F46E5' %></p>
+                  <p class="mt-1 text-sm text-slate-500">Used for buttons, focus rings, links, and badges.</p>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label for="createFontPreset" class="mb-1 block text-sm font-medium text-slate-700">Font preset</label>
+              <select id="createFontPreset" name="font_preset" data-template-font-input class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <% fontChoices.forEach((preset) => { %>
+                  <option value="<%= preset.key %>" <%= defaultTemplateChoice && preset.key === defaultTemplateChoice.fontPreset ? 'selected' : '' %>><%= preset.label %></option>
+                <% }) %>
+              </select>
+              <p class="mt-2 text-sm text-slate-500">Swap typography later without changing the template structure.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+          <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">How this starts</p>
+          <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Template</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900" data-template-name-label><%= defaultTemplateChoice ? defaultTemplateChoice.label : 'Fashion Atelier' %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Category</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900" data-template-type-label><%= defaultTemplateChoice ? defaultTemplateChoice.typeLabel : 'Fashion' %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Fonts</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900" data-template-font-label><%= defaultFontChoice ? defaultFontChoice.label : 'Jakarta Modern' %></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
         <button type="button" data-modal-close="create-store-modal" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">
           Cancel
         </button>
         <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">
           Create Store
         </button>
-      </div>
+        </div>
+      </section>
     </form>
   </div>
 </div>

@@ -1,5 +1,5 @@
 <%
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const productList = Array.isArray(products) ? products : [];
 %>
 <section class="space-y-8">
@@ -30,7 +30,7 @@
               <div class="mt-4 grid gap-3 sm:grid-cols-3">
                 <div class="rounded-2xl bg-slate-50 p-3">
                   <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Price</p>
-                  <p class="mt-2 text-sm font-semibold text-slate-900"><%= currency.format(product.price || 0) %></p>
+                  <p class="mt-2 text-sm font-semibold text-slate-900"><%= money(product.price || 0) %></p>
                 </div>
                 <div class="rounded-2xl bg-slate-50 p-3">
                   <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Inventory</p>

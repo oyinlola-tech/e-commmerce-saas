@@ -1,14 +1,20 @@
 <%
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const productData = product || {};
   const gallery = Array.isArray(productData.images) && productData.images.length ? productData.images : [productData.image];
   const inStock = typeof productData.inventory === 'undefined' ? true : Number(productData.inventory) > 0;
   const recommendations = Array.isArray(relatedProducts) ? relatedProducts : [];
+  const storeThemeData = typeof storeTheme !== 'undefined'
+    ? storeTheme
+    : (typeof currentStoreTheme !== 'undefined' ? currentStoreTheme : {});
+  const themeClasses = storeThemeData.classes || {};
+  const themeCopy = storeThemeData.copy || {};
+  const themeTrustPoints = Array.isArray(storeThemeData.trustPoints) ? storeThemeData.trustPoints : [];
 %>
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
-  <div class="grid gap-10 lg:grid-cols-[1fr_0.95fr]">
+  <div class="grid gap-10 <%= themeClasses.productGrid || 'lg:grid-cols-[1fr_1fr]' %>">
     <div class="space-y-4">
-      <div class="surface-card overflow-hidden rounded-[2rem]">
+      <div class="theme-hero-frame overflow-hidden rounded-[2.35rem]">
         <img src="<%= gallery[0] %>" alt="<%= productData.name %>" class="h-full w-full object-cover">
       </div>
       <div class="grid grid-cols-4 gap-3">
@@ -22,19 +28,19 @@
 
     <div class="space-y-8">
       <div class="space-y-4">
-        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary"><%= productData.category || 'Product detail' %></p>
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary"><%= themeCopy.productLabel || productData.category || 'Product detail' %></p>
         <h1 class="section-title text-4xl font-semibold tracking-tight text-slate-950"><%= productData.name || 'Untitled product' %></h1>
         <div class="flex items-center gap-3">
-          <span class="section-title text-3xl font-semibold text-slate-950"><%= currency.format(productData.price || 0) %></span>
+          <span class="section-title text-3xl font-semibold text-slate-950"><%= money(productData.price || 0) %></span>
           <% if (productData.compare_at_price) { %>
-            <span class="text-lg text-slate-400 line-through"><%= currency.format(productData.compare_at_price) %></span>
+            <span class="text-lg text-slate-400 line-through"><%= money(productData.compare_at_price) %></span>
           <% } %>
         </div>
         <p class="max-w-2xl text-base leading-8 text-slate-600"><%= productData.description || 'A premium product with clear merchandising and a trustworthy path to checkout.' %></p>
       </div>
 
       <% if (productData.highlights && productData.highlights.length) { %>
-        <div class="surface-card rounded-[2rem] p-6">
+        <div class="theme-detail-panel rounded-[2rem] p-6">
           <p class="text-sm font-medium text-slate-500">Why customers choose it</p>
           <ul class="mt-4 space-y-3">
             <% productData.highlights.forEach((highlight) => { %>
@@ -47,22 +53,36 @@
         </div>
       <% } %>
 
-      <dl class="grid gap-4 sm:grid-cols-2">
-        <div class="surface-card rounded-[2rem] p-5">
-          <dt class="text-sm font-medium text-slate-500">SKU</dt>
-          <dd class="mt-2 text-base font-semibold text-slate-950"><%= productData.sku || 'N/A' %></dd>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div class="theme-panel rounded-[2rem] p-5">
+          <p class="text-sm font-medium text-slate-500">SKU</p>
+          <p class="mt-2 text-base font-semibold text-slate-950"><%= productData.sku || 'N/A' %></p>
         </div>
-        <div class="surface-card rounded-[2rem] p-5">
-          <dt class="text-sm font-medium text-slate-500">Availability</dt>
-          <dd class="mt-2">
+        <div class="theme-panel rounded-[2rem] p-5">
+          <p class="text-sm font-medium text-slate-500">Availability</p>
+          <p class="mt-2">
             <span class="inline-flex rounded-full px-3 py-1 text-sm font-semibold <%= inStock ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700' %>">
-              <%= inStock ? `In stock • ${productData.inventory} ready to ship` : 'Out of stock' %>
+              <%= inStock ? `In stock - ${productData.inventory} ready to ship` : 'Out of stock' %>
             </span>
-          </dd>
+          </p>
         </div>
-      </dl>
+      </div>
 
-      <div class="surface-card rounded-[2rem] p-6">
+      <% if (themeTrustPoints.length) { %>
+        <div class="theme-accent-note rounded-[2rem] px-6 py-5">
+          <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary"><%= storeThemeData.label || 'Store promise' %></p>
+          <ul class="mt-4 space-y-3">
+            <% themeTrustPoints.slice(0, 3).forEach((point) => { %>
+              <li class="flex items-start gap-3 text-sm leading-6 text-slate-600">
+                <span class="mt-2 inline-flex h-2 w-2 rounded-full bg-primary"></span>
+                <span><%= point %></span>
+              </li>
+            <% }) %>
+          </ul>
+        </div>
+      <% } %>
+
+      <div class="theme-summary-card rounded-[2rem] p-6">
         <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p class="text-sm font-medium text-slate-500">Quantity</p>
@@ -80,7 +100,7 @@
             <%= inStock ? 'Add to cart' : 'Out of stock' %>
           </button>
         </div>
-        <p class="mt-4 text-sm leading-6 text-slate-500">Secure checkout, order tracking, and support follow-up are available from your account after purchase.</p>
+        <p class="mt-4 text-sm leading-6 text-slate-500"><%= themeCopy.productPromise || 'Secure checkout, order tracking, and support follow-up are available from your account after purchase.' %></p>
       </div>
     </div>
   </div>
@@ -97,14 +117,14 @@
     </div>
     <div class="mt-8 grid gap-5 md:grid-cols-3">
       <% recommendations.forEach((entry) => { %>
-        <article class="surface-card lift-on-hover overflow-hidden rounded-[2rem]">
-          <a href="/products/<%= entry.slug %>" class="block aspect-[4/4.2] overflow-hidden bg-slate-100">
+        <article class="theme-product-card lift-on-hover overflow-hidden rounded-[2rem]">
+          <a href="/products/<%= entry.slug %>" class="block <%= themeClasses.catalogCardAspect || 'aspect-[4/5]' %> overflow-hidden bg-slate-100">
             <img src="<%= entry.image %>" alt="<%= entry.name %>" class="h-full w-full object-cover">
           </a>
           <div class="p-5">
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= entry.category %></p>
             <a href="/products/<%= entry.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= entry.name %></a>
-            <p class="mt-3 text-sm font-semibold text-slate-900"><%= currency.format(entry.price || 0) %></p>
+            <p class="mt-3 text-sm font-semibold text-slate-900"><%= money(entry.price || 0) %></p>
           </div>
         </article>
       <% }) %>

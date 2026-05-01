@@ -1,6 +1,12 @@
 const fs = require('fs');
 const path = require('path');
+const env = require('./load-env');
+const emptyState = require('../data/empty-state');
 const seed = require('../data/seed');
+const {
+  getStoreConfiguration,
+  isValidHexColor
+} = require('./store-themes');
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -11,12 +17,19 @@ const loadState = () => {
     return JSON.parse(fs.readFileSync(runtimeStatePath, 'utf8'));
   }
 
-  const initialState = clone(seed);
+  const initialState = clone(env.stateSeedOnBoot ? seed : emptyState);
   fs.writeFileSync(runtimeStatePath, JSON.stringify(initialState, null, 2));
   return initialState;
 };
 
 const state = loadState();
+state.stores = Array.isArray(state.stores) ? state.stores : [];
+state.customers = Array.isArray(state.customers) ? state.customers : [];
+state.products = Array.isArray(state.products) ? state.products : [];
+state.orders = Array.isArray(state.orders) ? state.orders : [];
+state.supportConversations = Array.isArray(state.supportConversations) ? state.supportConversations : [];
+state.incidents = Array.isArray(state.incidents) ? state.incidents : [];
+state.carts = state.carts && typeof state.carts === 'object' ? state.carts : {};
 
 const persistState = () => {
   fs.writeFileSync(runtimeStatePath, JSON.stringify(state, null, 2));
@@ -328,9 +341,15 @@ const uniqueSubdomain = (preferredValue) => {
   return candidate;
 };
 
-const createStore = ({ name, subdomain, ownerId }) => {
+const createStore = (payload = {}) => {
+  const { name, subdomain, ownerId } = payload;
   const cleanName = String(name || '').trim() || 'New Store';
   const normalizedSubdomain = uniqueSubdomain(subdomain || cleanName);
+  const configuration = getStoreConfiguration({
+    name: cleanName,
+    subdomain: normalizedSubdomain,
+    ...payload
+  });
   const store = {
     id: nextId('store'),
     owner_id: ownerId || state.platformUser.id,
@@ -338,10 +357,13 @@ const createStore = ({ name, subdomain, ownerId }) => {
     subdomain: normalizedSubdomain,
     custom_domain: '',
     logo: '',
-    theme_color: makeColorFromName(cleanName),
+    store_type: configuration.store_type,
+    template_key: configuration.template_key,
+    font_preset: configuration.font_preset,
+    theme_color: configuration.theme_color || makeColorFromName(cleanName),
     ssl_status: 'issued',
-    tagline: `A premium storefront operated by ${cleanName}.`,
-    description: `${cleanName} is configured for international selling, modern merchandising, and enterprise-ready customer operations.`,
+    tagline: configuration.tagline,
+    description: configuration.description,
     support_email: `support@${normalizedSubdomain}.store`,
     contact_phone: '+1 000 000 0000',
     fulfillment_sla: 'Orders ship within 24 hours on business days.',
@@ -371,15 +393,19 @@ const updateStoreSettings = (storeId, payload = {}) => {
     return null;
   }
 
-  const color = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(payload.theme_color || ''))
+  const configuration = getStoreConfiguration(payload, store);
+  const color = isValidHexColor(payload.theme_color)
     ? String(payload.theme_color)
-    : store.theme_color;
+    : configuration.theme_color;
 
   store.name = String(payload.name || store.name).trim() || store.name;
   store.logo = String(payload.logo || '').trim();
+  store.store_type = configuration.store_type;
+  store.template_key = configuration.template_key;
+  store.font_preset = configuration.font_preset;
   store.theme_color = color;
-  store.tagline = String(payload.tagline || store.tagline).trim() || store.tagline;
-  store.description = String(payload.description || store.description).trim() || store.description;
+  store.tagline = configuration.tagline;
+  store.description = configuration.description;
   store.support_email = String(payload.support_email || store.support_email).trim() || store.support_email;
   store.contact_phone = String(payload.contact_phone || store.contact_phone).trim() || store.contact_phone;
   store.fulfillment_sla = String(payload.fulfillment_sla || store.fulfillment_sla).trim() || store.fulfillment_sla;

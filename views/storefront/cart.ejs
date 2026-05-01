@@ -1,5 +1,5 @@
 <%
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const cartItems = cart && Array.isArray(cart.items) ? cart.items : [];
   const cartTotal = cart && typeof cart.total !== 'undefined' ? cart.total : 0;
 %>
@@ -28,7 +28,7 @@
               <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 class="text-lg font-semibold text-gray-900"><%= item.name %></h3>
-                  <p class="mt-1 text-sm text-gray-500">Unit price <%= currency.format(item.price || 0) %></p>
+                  <p class="mt-1 text-sm text-gray-500">Unit price <%= money(item.price || 0) %></p>
                 </div>
                 <button type="button" data-cart-remove data-product-id="<%= item.product_id %>" class="text-left text-sm font-semibold text-red-500 transition hover:text-red-600">Remove</button>
               </div>
@@ -42,7 +42,7 @@
                     <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" clip-rule="evenodd"></path></svg>
                   </button>
                 </div>
-                <p class="text-lg font-semibold text-gray-900"><%= currency.format((item.price || 0) * (item.quantity || 1)) %></p>
+                <p class="text-lg font-semibold text-gray-900"><%= money((item.price || 0) * (item.quantity || 1)) %></p>
               </div>
             </div>
           </article>
@@ -60,7 +60,7 @@
           </div>
           <div class="flex items-center justify-between">
             <span>Subtotal</span>
-            <span data-cart-subtotal class="font-semibold text-gray-900"><%= currency.format(cartTotal || 0) %></span>
+            <span data-cart-subtotal class="font-semibold text-gray-900"><%= money(cartTotal || 0) %></span>
           </div>
           <div class="flex items-center justify-between">
             <span>Shipping</span>
@@ -70,7 +70,7 @@
         <div class="mt-6 border-t border-gray-200 pt-6">
           <div class="flex items-center justify-between text-lg font-semibold text-gray-900">
             <span>Total</span>
-            <span data-cart-total><%= currency.format(cartTotal || 0) %></span>
+            <span data-cart-total><%= money(cartTotal || 0) %></span>
           </div>
         </div>
         <div class="mt-6">

@@ -3,7 +3,7 @@
   const tenantList = Array.isArray(stores) ? stores : [];
   const ticketList = Array.isArray(supportQueue) ? supportQueue : [];
   const incidentList = Array.isArray(incidents) ? incidents : [];
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const healthBadge = (status) => {
     switch ((status || '').toLowerCase()) {
       case 'attention':
@@ -53,7 +53,7 @@
         </article>
         <article class="metric-card rounded-3xl p-5">
           <p class="text-sm font-medium text-slate-500">GMV (30 days)</p>
-          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= currency.format(overview.gmv30d || 0) %></p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= money(overview.gmv30d || 0) %></p>
           <p class="mt-2 text-sm text-slate-500">Platform-wide transaction volume across all regions.</p>
         </article>
         <article class="metric-card rounded-3xl p-5">
@@ -98,7 +98,7 @@
             <div class="mt-5 grid gap-3 sm:grid-cols-4">
               <div class="rounded-2xl bg-slate-50 p-4">
                 <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Revenue</p>
-                <p class="mt-2 text-lg font-semibold text-slate-950"><%= currency.format(store.monthly_revenue || 0) %></p>
+                <p class="mt-2 text-lg font-semibold text-slate-950"><%= money(store.monthly_revenue || 0) %></p>
               </div>
               <div class="rounded-2xl bg-slate-50 p-4">
                 <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Orders</p>

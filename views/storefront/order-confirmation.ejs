@@ -1,5 +1,5 @@
 <%
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const orderData = order || {};
   const confirmationItems = Array.isArray(orderData.items) ? orderData.items : [];
 %>
@@ -26,7 +26,7 @@
       </div>
       <div>
         <p class="text-sm font-medium text-slate-500">Total</p>
-        <p class="mt-2 text-lg font-semibold text-slate-950"><%= currency.format(orderData.total || 0) %></p>
+        <p class="mt-2 text-lg font-semibold text-slate-950"><%= money(orderData.total || 0) %></p>
       </div>
     </div>
 
@@ -38,7 +38,7 @@
             <h2 class="truncate text-sm font-semibold text-slate-900"><%= item.name %></h2>
             <p class="mt-1 text-sm text-slate-500">Qty <%= item.quantity || 1 %></p>
           </div>
-          <p class="text-sm font-semibold text-slate-900"><%= currency.format((item.price || 0) * (item.quantity || 1)) %></p>
+          <p class="text-sm font-semibold text-slate-900"><%= money((item.price || 0) * (item.quantity || 1)) %></p>
         </article>
       <% }) %>
     </div>

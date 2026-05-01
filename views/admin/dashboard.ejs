@@ -1,5 +1,5 @@
 <%
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const metrics = {
     totalProducts: stats && typeof stats.totalProducts !== 'undefined' ? stats.totalProducts : (Array.isArray(products) ? products.length : 0),
     publishedProducts: stats && typeof stats.publishedProducts !== 'undefined' ? stats.publishedProducts : 0,
@@ -34,7 +34,7 @@
       <div class="grid gap-4 sm:grid-cols-2">
         <article class="metric-card rounded-3xl p-5">
           <p class="text-sm font-medium text-slate-500">Revenue (30 days)</p>
-          <p class="metric-value mt-2 text-3xl font-semibold text-slate-950"><%= currency.format(metrics.revenue30d || 0) %></p>
+          <p class="metric-value mt-2 text-3xl font-semibold text-slate-950"><%= money(metrics.revenue30d || 0) %></p>
         </article>
         <article class="metric-card rounded-3xl p-5">
           <p class="text-sm font-medium text-slate-500">Customers</p>
@@ -95,7 +95,7 @@
                   <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">#<%= entry.id %></td>
                   <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600"><%= entry.customer_name || (entry.customer && entry.customer.name) || 'Guest customer' %></td>
                   <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600"><%= entry.created_at ? new Date(entry.created_at).toLocaleDateString() : 'Today' %></td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-900"><%= currency.format(entry.total || 0) %></td>
+                  <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-900"><%= money(entry.total || 0) %></td>
                   <td class="whitespace-nowrap px-6 py-4">
                     <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold <%= statusClass(entry.status) %>"><%= entry.status || 'Pending' %></span>
                   </td>

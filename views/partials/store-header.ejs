@@ -3,12 +3,18 @@
   const storefrontLogo = store && store.logo ? store.logo : null;
   const cartItems = cart && Array.isArray(cart.items) ? cart.items : [];
   const cartCount = cartItems.length;
+  const storeThemeData = typeof storeTheme !== 'undefined'
+    ? storeTheme
+    : (typeof currentStoreTheme !== 'undefined' ? currentStoreTheme : {});
+  const storeTags = Array.isArray(storeThemeData.marketingTags) ? storeThemeData.marketingTags : [];
+  const availableCurrencies = Array.isArray(currencyOptions) ? currencyOptions : [];
+  const detectedLocation = visitorLocation || null;
 %>
 <header x-data="{ mobileOpen: false }" class="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
   <div class="border-b border-slate-100 bg-slate-950 text-slate-100">
     <div class="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-3 text-xs font-medium sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-      <p>Ships internationally across <%= store && store.markets ? store.markets.length : 1 %> markets.</p>
-      <p><%= store && store.fulfillment_sla ? store.fulfillment_sla : 'Fast fulfillment available.' %></p>
+      <p><%= storeThemeData.typeLabel || 'Storefront' %> template across <%= store && store.markets ? store.markets.length : 1 %> markets.</p>
+      <p><%= detectedLocation && detectedLocation.countryName ? `Showing prices for ${detectedLocation.countryName} in ${selectedCurrency}.` : (selectedCurrency && selectedCurrency !== baseCurrency ? `Prices currently shown in ${selectedCurrency}.` : (storeTags[0] || (store && store.fulfillment_sla ? store.fulfillment_sla : 'Fast fulfillment available.'))) %></p>
     </div>
   </div>
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -20,7 +26,7 @@
           <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-lg font-bold text-white shadow-soft"><%= storefrontName.charAt(0).toUpperCase() %></span>
         <% } %>
         <div class="min-w-0">
-          <span class="block truncate text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Flagship Store</span>
+          <span class="block truncate text-xs font-semibold uppercase tracking-[0.3em] text-slate-500"><%= storeThemeData.label || 'Flagship Store' %></span>
           <span class="block section-title truncate text-xl font-semibold text-slate-950"><%= storefrontName %></span>
         </div>
       </a>
@@ -32,6 +38,18 @@
       </nav>
 
       <div class="hidden items-center gap-3 md:flex">
+        <% if (availableCurrencies.length > 1) { %>
+          <form action="/preferences/currency" method="post" class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <input type="hidden" name="returnTo" value="<%= currentUrl || currentPath || '/' %>">
+            <input type="hidden" name="scope" value="store">
+            <label for="desktop-currency" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Currency</label>
+            <select id="desktop-currency" name="code" onchange="this.form.submit()" class="border-0 bg-transparent pr-6 text-sm font-medium text-slate-700 focus:outline-none focus:ring-0">
+              <% availableCurrencies.forEach((entry) => { %>
+                <option value="<%= entry.code %>" <%= selectedCurrency === entry.code ? 'selected' : '' %>><%= entry.code %></option>
+              <% }) %>
+            </select>
+          </form>
+        <% } %>
         <button type="button" data-cart-open class="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" aria-label="Open cart">
           <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path d="M3 3a1 1 0 000 2h1.22l.756 3.026A2 2 0 006.916 9.5h7.168a2 2 0 001.94-1.474L17.78 4H6.28l-.31-1.238A1 1 0 005 2H3z"></path>
@@ -81,6 +99,18 @@
     </div>
 
     <div x-cloak x-show="mobileOpen" x-transition class="space-y-3 border-t border-slate-100 pb-5 pt-4 md:hidden">
+      <% if (availableCurrencies.length > 1) { %>
+        <form action="/preferences/currency" method="post" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <input type="hidden" name="returnTo" value="<%= currentUrl || currentPath || '/' %>">
+          <input type="hidden" name="scope" value="store">
+          <label for="mobile-currency" class="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Currency</label>
+          <select id="mobile-currency" name="code" onchange="this.form.submit()" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+            <% availableCurrencies.forEach((entry) => { %>
+              <option value="<%= entry.code %>" <%= selectedCurrency === entry.code ? 'selected' : '' %>><%= entry.label %></option>
+            <% }) %>
+          </select>
+        </form>
+      <% } %>
       <a href="/" class="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-primary">Home</a>
       <a href="/products" class="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-primary">Catalog</a>
       <a href="/orders" class="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-primary">Orders</a>

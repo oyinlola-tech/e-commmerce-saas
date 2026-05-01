@@ -1,12 +1,15 @@
 <%
   const adminBrandColor = store && store.theme_color ? store.theme_color : '#4F46E5';
+  const activeStoreTheme = typeof storeTheme !== 'undefined'
+    ? storeTheme
+    : (typeof currentStoreTheme !== 'undefined' ? currentStoreTheme : null);
 %>
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <%- include('../partials/head', { brandColor: adminBrandColor }) %>
+    <%- include('../partials/head', { brandColor: adminBrandColor, storeTheme: activeStoreTheme }) %>
   </head>
-  <body class="admin-shell body-frame min-h-screen text-gray-900 antialiased">
+  <body data-template="<%= activeStoreTheme && activeStoreTheme.templateKey ? activeStoreTheme.templateKey : 'fashion' %>" class="admin-shell body-frame theme-template min-h-screen text-gray-900 antialiased <%= activeStoreTheme && activeStoreTheme.templateKey ? `theme-template-${activeStoreTheme.templateKey}` : '' %> <%= activeStoreTheme && activeStoreTheme.fonts ? `font-preset-${activeStoreTheme.fonts.key}` : '' %>">
     <div class="min-h-screen">
       <%- include('../partials/admin-sidebar') %>
       <div class="lg:pl-72">

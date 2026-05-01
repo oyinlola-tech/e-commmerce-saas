@@ -1,3 +1,23 @@
+ :root {
+  --store-canvas-start: #fcfdfd;
+  --store-canvas-mid: #f5f8f8;
+  --store-canvas-end: #ffffff;
+  --store-glow-1: rgba(15, 118, 110, 0.12);
+  --store-glow-2: rgba(8, 145, 178, 0.14);
+  --store-surface: rgba(255, 255, 255, 0.82);
+  --store-surface-strong: rgba(255, 255, 255, 0.94);
+  --store-surface-muted: rgba(248, 250, 252, 0.9);
+  --store-border: rgba(226, 232, 240, 0.82);
+  --store-chip-bg: rgba(255, 255, 255, 0.72);
+  --store-chip-text: #0f172a;
+  --store-muted: #64748b;
+  --store-shadow: 0 22px 60px -35px rgba(15, 23, 42, 0.28);
+  --store-shadow-soft: 0 18px 48px -36px rgba(15, 23, 42, 0.22);
+  --store-hero-shadow: 0 30px 86px -40px rgba(15, 23, 42, 0.24);
+  --store-card-radius: 2rem;
+  --store-panel-radius: 2.35rem;
+}
+
 body {
   background-attachment: fixed;
 }
@@ -29,24 +49,24 @@ body {
 
 .store-shell {
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 24%),
-    radial-gradient(circle at 85% 15%, rgba(8, 145, 178, 0.14), transparent 22%),
-    linear-gradient(180deg, #fcfdfd 0%, #f5f8f8 48%, #ffffff 100%);
+    radial-gradient(circle at 8% 0%, var(--store-glow-1), transparent 30%),
+    radial-gradient(circle at 92% 10%, var(--store-glow-2), transparent 24%),
+    linear-gradient(180deg, var(--store-canvas-start) 0%, var(--store-canvas-mid) 48%, var(--store-canvas-end) 100%);
 }
 
 .admin-shell,
 .control-shell {
   background:
-    radial-gradient(circle at 10% 10%, rgba(15, 118, 110, 0.14), transparent 18%),
-    radial-gradient(circle at 90% 0%, rgba(59, 130, 246, 0.12), transparent 18%),
+    radial-gradient(circle at 10% 10%, var(--store-glow-1), transparent 20%),
+    radial-gradient(circle at 90% 0%, var(--store-glow-2), transparent 18%),
     linear-gradient(180deg, #f5f7fb 0%, #eff4f7 45%, #f8fafc 100%);
 }
 
 .surface-card {
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--store-border);
+  background: var(--store-surface);
   backdrop-filter: blur(16px);
-  box-shadow: 0 22px 60px -35px rgba(15, 23, 42, 0.28);
+  box-shadow: var(--store-shadow);
 }
 
 .surface-card-dark {
@@ -57,7 +77,7 @@ body {
 
 .surface-muted {
   background:
-    linear-gradient(180deg, rgba(248, 250, 252, 0.92), rgba(255, 255, 255, 0.95));
+    linear-gradient(180deg, var(--store-surface-muted), var(--store-surface-strong));
 }
 
 .eyebrow {
@@ -70,13 +90,12 @@ body {
   font-weight: 700;
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.66);
-  border: 1px solid rgba(203, 213, 225, 0.85);
-  color: #0f172a;
+  background: var(--store-chip-bg);
+  border: 1px solid var(--store-border);
+  color: var(--store-chip-text);
 }
 
 .section-title {
-  font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
   letter-spacing: -0.04em;
 }
 
@@ -95,8 +114,9 @@ body {
   padding: 0.45rem 0.85rem;
   font-size: 0.78rem;
   font-weight: 700;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(203, 213, 225, 0.82);
+  background: var(--store-chip-bg);
+  border: 1px solid var(--store-border);
+  color: var(--store-chip-text);
 }
 
 .signal-dot {
@@ -128,10 +148,10 @@ body {
 }
 
 .metric-card {
-  border: 1px solid rgba(226, 232, 240, 0.86);
+  border: 1px solid var(--store-border);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.92));
-  box-shadow: 0 18px 48px -36px rgba(15, 23, 42, 0.34);
+    linear-gradient(180deg, var(--store-surface-strong), var(--store-surface-muted));
+  box-shadow: var(--store-shadow-soft);
 }
 
 .metric-card strong,
@@ -140,9 +160,9 @@ body {
 }
 
 .table-shell {
-  border: 1px solid rgba(226, 232, 240, 0.88);
+  border: 1px solid var(--store-border);
   background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 22px 48px -36px rgba(15, 23, 42, 0.28);
+  box-shadow: var(--store-shadow-soft);
 }
 
 .ambient-divider {
@@ -160,6 +180,207 @@ body {
 .lift-on-hover:hover {
   transform: translateY(-3px);
   box-shadow: 0 22px 54px -34px rgba(15, 23, 42, 0.28);
+}
+
+.theme-template {
+  --store-shadow-edge: color-mix(in srgb, var(--color-primary) 16%, rgba(15, 23, 42, 0.18));
+}
+
+.theme-template-fashion {
+  --store-canvas-start: #fff9f5;
+  --store-canvas-mid: #f7f0eb;
+  --store-canvas-end: #fffdfc;
+  --store-glow-1: rgba(154, 52, 18, 0.16);
+  --store-glow-2: rgba(15, 23, 42, 0.08);
+  --store-surface: rgba(255, 251, 247, 0.86);
+  --store-surface-muted: rgba(251, 244, 239, 0.94);
+  --store-border: rgba(234, 214, 204, 0.84);
+  --store-chip-bg: rgba(255, 247, 242, 0.8);
+}
+
+.theme-template-electronics {
+  --store-canvas-start: #f5f8ff;
+  --store-canvas-mid: #eef4ff;
+  --store-canvas-end: #fbfdff;
+  --store-glow-1: rgba(37, 99, 235, 0.16);
+  --store-glow-2: rgba(15, 23, 42, 0.1);
+  --store-surface: rgba(248, 251, 255, 0.84);
+  --store-surface-muted: rgba(240, 246, 255, 0.94);
+  --store-border: rgba(194, 216, 255, 0.84);
+  --store-chip-bg: rgba(244, 249, 255, 0.86);
+}
+
+.theme-template-home-decor {
+  --store-canvas-start: #fffaf2;
+  --store-canvas-mid: #f7f2ea;
+  --store-canvas-end: #fffdf9;
+  --store-glow-1: rgba(180, 83, 9, 0.16);
+  --store-glow-2: rgba(120, 113, 108, 0.12);
+  --store-surface: rgba(255, 252, 247, 0.88);
+  --store-surface-muted: rgba(250, 246, 238, 0.94);
+  --store-border: rgba(226, 214, 191, 0.88);
+  --store-chip-bg: rgba(255, 250, 242, 0.82);
+}
+
+.theme-template-beauty {
+  --store-canvas-start: #fff8fb;
+  --store-canvas-mid: #fef0f5;
+  --store-canvas-end: #fffdfd;
+  --store-glow-1: rgba(219, 39, 119, 0.14);
+  --store-glow-2: rgba(244, 114, 182, 0.12);
+  --store-surface: rgba(255, 250, 253, 0.88);
+  --store-surface-muted: rgba(253, 242, 248, 0.94);
+  --store-border: rgba(244, 199, 221, 0.88);
+  --store-chip-bg: rgba(255, 245, 249, 0.82);
+}
+
+.theme-template-gourmet {
+  --store-canvas-start: #fff9f4;
+  --store-canvas-mid: #f9f0e6;
+  --store-canvas-end: #fffdfa;
+  --store-glow-1: rgba(194, 65, 12, 0.16);
+  --store-glow-2: rgba(120, 53, 15, 0.1);
+  --store-surface: rgba(255, 251, 246, 0.88);
+  --store-surface-muted: rgba(251, 243, 236, 0.94);
+  --store-border: rgba(235, 211, 194, 0.9);
+  --store-chip-bg: rgba(255, 248, 241, 0.84);
+}
+
+.theme-template-outdoors {
+  --store-canvas-start: #f5fbfa;
+  --store-canvas-mid: #eef6f3;
+  --store-canvas-end: #fcfffd;
+  --store-glow-1: rgba(15, 118, 110, 0.16);
+  --store-glow-2: rgba(6, 78, 59, 0.12);
+  --store-surface: rgba(247, 252, 250, 0.86);
+  --store-surface-muted: rgba(239, 248, 245, 0.94);
+  --store-border: rgba(194, 225, 217, 0.88);
+  --store-chip-bg: rgba(244, 251, 249, 0.82);
+}
+
+.theme-template-kids {
+  --store-canvas-start: #fffaf5;
+  --store-canvas-mid: #fff3e8;
+  --store-canvas-end: #fffefd;
+  --store-glow-1: rgba(234, 88, 12, 0.14);
+  --store-glow-2: rgba(251, 191, 36, 0.12);
+  --store-surface: rgba(255, 252, 248, 0.88);
+  --store-surface-muted: rgba(255, 246, 237, 0.94);
+  --store-border: rgba(245, 215, 191, 0.9);
+  --store-chip-bg: rgba(255, 248, 242, 0.84);
+}
+
+.theme-template-jewelry {
+  --store-canvas-start: #fff8fa;
+  --store-canvas-mid: #f8eff2;
+  --store-canvas-end: #fffdfd;
+  --store-glow-1: rgba(107, 33, 60, 0.14);
+  --store-glow-2: rgba(15, 23, 42, 0.08);
+  --store-surface: rgba(255, 250, 252, 0.88);
+  --store-surface-muted: rgba(249, 241, 245, 0.94);
+  --store-border: rgba(230, 207, 217, 0.88);
+  --store-chip-bg: rgba(255, 245, 249, 0.82);
+}
+
+.theme-hero-frame,
+.theme-panel,
+.theme-summary-card,
+.theme-detail-panel,
+.theme-preview-tile {
+  border: 1px solid var(--store-border);
+  background: linear-gradient(180deg, var(--store-surface-strong), var(--store-surface));
+  box-shadow: var(--store-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.theme-hero-frame {
+  border-radius: var(--store-panel-radius);
+}
+
+.theme-panel,
+.theme-summary-card,
+.theme-detail-panel,
+.theme-preview-tile {
+  border-radius: var(--store-card-radius);
+}
+
+.theme-panel-soft {
+  background: linear-gradient(180deg, var(--store-surface-muted), var(--store-surface-strong));
+}
+
+.theme-muted-text {
+  color: var(--store-muted);
+}
+
+.theme-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--store-border);
+  background: var(--store-chip-bg);
+  padding: 0.7rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--store-chip-text);
+}
+
+.theme-stat {
+  border: 1px solid var(--store-border);
+  background: linear-gradient(180deg, var(--store-surface-strong), var(--store-surface-muted));
+  box-shadow: var(--store-shadow-soft);
+}
+
+.theme-input {
+  border-color: var(--store-border) !important;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.theme-product-card {
+  border: 1px solid var(--store-border);
+  background: linear-gradient(180deg, var(--store-surface-strong), var(--store-surface));
+  box-shadow: var(--store-shadow-soft);
+}
+
+.theme-product-card img,
+.theme-hero-media img {
+  box-shadow: var(--store-hero-shadow);
+}
+
+.theme-accent-note {
+  border: 1px dashed var(--store-border);
+  background: color-mix(in srgb, var(--color-primary) 4%, white);
+}
+
+.theme-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--store-border), transparent);
+}
+
+.theme-template-fashion .theme-product-card,
+.theme-template-jewelry .theme-product-card {
+  border-radius: 2.1rem;
+}
+
+.theme-template-electronics .theme-product-card,
+.theme-template-outdoors .theme-product-card {
+  border-radius: 1.65rem;
+}
+
+.theme-template-home-decor .theme-product-card,
+.theme-template-gourmet .theme-product-card {
+  border-radius: 2rem;
+}
+
+.theme-template-beauty .theme-product-card,
+.theme-template-kids .theme-product-card {
+  border-radius: 2.2rem;
+}
+
+.theme-template-jewelry .theme-chip {
+  letter-spacing: 0.2em;
 }
 
 @media (max-width: 768px) {

@@ -27,7 +27,7 @@
   ];
   const overview = metrics || {};
   const featuredStores = Array.isArray(stores) ? stores : [];
-  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
 %>
 <section class="relative overflow-hidden">
   <div class="hero-orb hero-orb-primary left-0 top-10 h-72 w-72"></div>
@@ -59,7 +59,7 @@
           </div>
           <div class="metric-card rounded-3xl p-5">
             <dt class="text-sm font-medium text-slate-500">GMV (30d)</dt>
-            <dd class="metric-value mt-2 text-2xl font-semibold text-slate-950"><%= currency.format(overview.gmv30d || 0) %></dd>
+            <dd class="metric-value mt-2 text-2xl font-semibold text-slate-950"><%= money(overview.gmv30d || 0) %></dd>
           </div>
           <div class="metric-card rounded-3xl p-5">
             <dt class="text-sm font-medium text-slate-500">Markets</dt>
@@ -105,7 +105,7 @@
                     <p class="text-sm font-semibold text-slate-950"><%= store.name %></p>
                     <p class="text-xs text-slate-500"><%= store.markets ? store.markets.join(', ') : 'Global' %></p>
                   </div>
-                  <span class="text-sm font-semibold text-primary"><%= currency.format(store.monthly_revenue || 0) %></span>
+                  <span class="text-sm font-semibold text-primary"><%= money(store.monthly_revenue || 0) %></span>
                 </div>
               <% }) %>
             </div>
