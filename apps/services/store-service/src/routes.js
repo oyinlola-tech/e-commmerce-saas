@@ -82,6 +82,47 @@ const normalizeSubdomain = (value = '') => {
   return sanitizeSlug(value).slice(0, 120);
 };
 
+const updateStoreRecord = async ({ db, cache, bus, storeId, existingStore, payload }) => {
+  const theme = normalizeThemeContract({
+    store_type: payload.store_type || existingStore.store_type,
+    template_key: payload.template_key || existingStore.template_key,
+    font_preset: payload.font_preset || existingStore.font_preset
+  });
+
+  await db.execute(
+    `
+      UPDATE stores
+      SET name = ?, custom_domain = ?, logo_url = ?, theme_color = ?, store_type = ?, template_key = ?,
+          font_preset = ?, support_email = ?, contact_phone = ?, is_active = ?, ssl_status = ?
+      WHERE id = ?
+    `,
+    [
+      payload.name || existingStore.name,
+      payload.custom_domain === undefined ? existingStore.custom_domain : payload.custom_domain,
+      payload.logo_url === undefined ? existingStore.logo_url : payload.logo_url,
+      payload.theme_color || existingStore.theme_color,
+      theme.store_type,
+      theme.template_key,
+      theme.font_preset,
+      payload.support_email === undefined ? existingStore.support_email : payload.support_email,
+      payload.contact_phone === undefined ? existingStore.contact_phone : payload.contact_phone,
+      typeof payload.is_active === 'undefined' ? existingStore.is_active : Number(Boolean(payload.is_active)),
+      payload.ssl_status || existingStore.ssl_status,
+      storeId
+    ]
+  );
+
+  const store = (await db.query('SELECT * FROM stores WHERE id = ?', [storeId]))[0];
+  await invalidateStoreCache(cache, store);
+  await bus.publish(EVENT_NAMES.STORE_UPDATED, {
+    store_id: store.id,
+    owner_id: store.owner_id,
+    custom_domain: store.custom_domain
+  });
+
+  return store;
+};
+
 const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
   const requireInternal = buildRequireInternal(config);
 
@@ -274,41 +315,13 @@ const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
       throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
     }
 
-    const theme = normalizeThemeContract({
-      store_type: req.body.store_type || result.store.store_type,
-      template_key: req.body.template_key || result.store.template_key,
-      font_preset: req.body.font_preset || result.store.font_preset
-    });
-
-    await db.execute(
-      `
-        UPDATE stores
-        SET name = ?, custom_domain = ?, logo_url = ?, theme_color = ?, store_type = ?, template_key = ?,
-            font_preset = ?, support_email = ?, contact_phone = ?, is_active = ?, ssl_status = ?
-        WHERE id = ?
-      `,
-      [
-        req.body.name || result.store.name,
-        req.body.custom_domain === undefined ? result.store.custom_domain : req.body.custom_domain,
-        req.body.logo_url === undefined ? result.store.logo_url : req.body.logo_url,
-        req.body.theme_color || result.store.theme_color,
-        theme.store_type,
-        theme.template_key,
-        theme.font_preset,
-        req.body.support_email === undefined ? result.store.support_email : req.body.support_email,
-        req.body.contact_phone === undefined ? result.store.contact_phone : req.body.contact_phone,
-        typeof req.body.is_active === 'undefined' ? result.store.is_active : Number(Boolean(req.body.is_active)),
-        req.body.ssl_status || result.store.ssl_status,
-        req.params.id
-      ]
-    );
-
-    const store = (await db.query('SELECT * FROM stores WHERE id = ?', [req.params.id]))[0];
-    await invalidateStoreCache(cache, store);
-    await bus.publish(EVENT_NAMES.STORE_UPDATED, {
-      store_id: store.id,
-      owner_id: store.owner_id,
-      custom_domain: store.custom_domain
+    const store = await updateStoreRecord({
+      db,
+      cache,
+      bus,
+      storeId: req.params.id,
+      existingStore: result.store,
+      payload: req.body
     });
 
     return res.json({
@@ -347,8 +360,18 @@ const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
       throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
     }
 
-    req.params.id = String(storeId);
-    return app._router.handle(req, res, () => undefined);
+    const store = await updateStoreRecord({
+      db,
+      cache,
+      bus,
+      storeId,
+      existingStore: result.store,
+      payload: req.body
+    });
+
+    return res.json({
+      store: sanitizeStore(store)
+    });
   }));
 };
 
