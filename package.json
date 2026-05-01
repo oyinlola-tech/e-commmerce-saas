@@ -31,6 +31,8 @@
     "start:support-service": "node apps/services/support-service/server.js",
     "start:chat-service": "node apps/services/chat-service/server.js",
     "start:notification-service": "node apps/services/notification-service/server.js",
+    "swagger": "node scripts/swagger.js",
+    "swagger:export": "node scripts/swagger.js --export-only",
     "lint": "eslint .",
     "smoke": "node tests/smoke.js"
   },

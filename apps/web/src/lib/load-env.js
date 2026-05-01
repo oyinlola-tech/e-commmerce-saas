@@ -53,6 +53,10 @@ const getSecret = (name) => {
     return value;
   }
 
+  if (environment === 'production') {
+    throw new Error(`${name} must be set in production.`);
+  }
+
   return crypto.randomBytes(32).toString('hex');
 };
 

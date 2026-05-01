@@ -1,7 +1,43 @@
 const createGatewayOpenApiSpec = (config) => {
-  const defaultServerUrl = config.isProduction
-    ? `https://${config.rootDomain}`
-    : config.gatewayUrl;
+  const parsedGatewayUrl = new URL(config.gatewayUrl);
+  const localPortSuffix = parsedGatewayUrl.port ? `:${parsedGatewayUrl.port}` : '';
+  const servers = config.isProduction
+    ? [
+        {
+          url: `https://${config.rootDomain}`,
+          description: 'Platform gateway',
+          x-aisleAudience: 'platform'
+        },
+        {
+          url: `https://{storeSubdomain}.${config.rootDomain}`,
+          description: 'Storefront gateway',
+          x-aisleAudience: 'storefront',
+          variables: {
+            storeSubdomain: {
+              default: 'aisle',
+              description: 'Store subdomain used for tenant-aware storefront requests.'
+            }
+          }
+        }
+      ]
+    : [
+        {
+          url: `http://localhost${localPortSuffix}`,
+          description: 'Local platform gateway',
+          x-aisleAudience: 'platform'
+        },
+        {
+          url: `http://{storeSubdomain}.localhost${localPortSuffix}`,
+          description: 'Local storefront gateway',
+          x-aisleAudience: 'storefront',
+          variables: {
+            storeSubdomain: {
+              default: 'aisle',
+              description: 'Local store subdomain used for tenant-aware storefront requests.'
+            }
+          }
+        }
+      ];
 
   return {
     openapi: '3.1.0',
@@ -10,16 +46,13 @@ const createGatewayOpenApiSpec = (config) => {
       version: '1.0.0',
       description: 'Gateway-level API contract for platform auth, tenant operations, storefront flows, and billing subscriptions.'
     },
-    servers: [
-      {
-        url: defaultServerUrl,
-        description: config.isProduction ? 'Production gateway' : 'Local gateway'
-      }
-    ],
+    servers,
     tags: [
       { name: 'Health', description: 'Operational health and metrics endpoints.' },
+      { name: 'Security', description: 'Browser security helpers such as CSRF token bootstrap.' },
       { name: 'Platform Auth', description: 'Platform owner and staff authentication.' },
       { name: 'Storefront Auth', description: 'Customer registration and login.' },
+      { name: 'Owner Stores', description: 'Owner-scoped store management endpoints.' },
       { name: 'Products', description: 'Storefront product browsing.' },
       { name: 'Cart', description: 'Customer cart lifecycle.' },
       { name: 'Orders', description: 'Checkout and order management.' },
@@ -192,6 +225,28 @@ const createGatewayOpenApiSpec = (config) => {
           }
         }
       },
+      '/api/csrf-token': {
+        get: {
+          tags: ['Security'],
+          summary: 'Generate a gateway CSRF token',
+          description: 'Use this before state-changing browser API requests that rely on cookies, then send the returned token in `X-CSRF-Token` or `_csrf`.',
+          responses: {
+            '200': {
+              description: 'CSRF bootstrap payload',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      csrfToken: { type: 'string' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       '/api/platform/auth/register': {
         post: {
           tags: ['Platform Auth'],
@@ -347,6 +402,68 @@ const createGatewayOpenApiSpec = (config) => {
                     properties: {
                       token: { type: 'string' },
                       customer: { $ref: '#/components/schemas/Customer' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/customers/logout': {
+        post: {
+          tags: ['Storefront Auth'],
+          summary: 'Clear storefront auth cookies',
+          responses: {
+            '204': {
+              description: 'Customer session cleared'
+            }
+          }
+        }
+      },
+      '/api/owner/stores/{storeId}/logo': {
+        post: {
+          tags: ['Owner Stores'],
+          summary: 'Upload a store logo',
+          description: 'Accepts a PNG, JPEG, or WebP file up to 2 MB and stores the resulting public URL on the store record.',
+          security: [
+            { bearerAuth: [] },
+            { platformTokenCookie: [] }
+          ],
+          parameters: [
+            {
+              name: 'storeId',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer', minimum: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'multipart/form-data': {
+                schema: {
+                  type: 'object',
+                  required: ['logo'],
+                  properties: {
+                    logo: {
+                      type: 'string',
+                      format: 'binary'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '200': {
+              description: 'Store logo updated',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      logo_url: { type: 'string' }
                     }
                   }
                 }

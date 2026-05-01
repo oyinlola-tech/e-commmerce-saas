@@ -8,7 +8,8 @@ This system is not free to use.
 
 - Shared services use `packages/shared/src/env.js`.
 - Service processes look for `.env`, `.env.development`, `.env.development.local`, `.env.production`, and `.env.production.local` in both the workspace root and the app root.
-- The SSR web app uses `apps/web/src/lib/load-env.js` and reads `.env*` files from the `apps/web` root.
+- The SSR web app uses `apps/web/src/lib/load-env.js` and reads `.env*` files from both the workspace root and `apps/web`.
+- `PLATFORM_ROOT_DOMAIN` must resolve to a valid hostname. Invalid host values are rejected at startup.
 
 ## Shared Service Variables
 
@@ -21,10 +22,12 @@ This system is not free to use.
 | `DB_POOL_MIN` | `2` | Minimum idle MySQL connections |
 | `DB_POOL_MAX` | `12` | Maximum pooled MySQL connections |
 | `DB_IDLE_TIMEOUT_MS` | `60000` | MySQL idle timeout |
+| `DB_ACQUIRE_TIMEOUT_MS` | `10000` | MySQL acquire timeout |
 | `DB_CONNECT_RETRIES` | `5` | Bootstrap retry count for MySQL |
-| `JWT_SECRET` | `aisle-jwt-secret` | JWT signing secret |
+| `DB_CONNECT_RETRY_DELAY_MS` | `1000` | Delay between MySQL bootstrap retries |
+| `JWT_SECRET` | Generated in development, required in production | JWT signing secret |
 | `JWT_ACCESS_TTL` | `1h` | Access-token lifetime for platform and customer JWTs |
-| `INTERNAL_SHARED_SECRET` | `aisle-internal-secret` | HMAC secret for internal headers |
+| `INTERNAL_SHARED_SECRET` | Generated in development, required in production | HMAC secret for internal headers |
 | `INTERNAL_REQUEST_MAX_AGE_MS` | `300000` | Maximum accepted age for signed internal requests |
 | `INTERNAL_REQUEST_NONCE_TTL_MS` | `300000` | Replay-protection nonce retention window |
 | `RABBITMQ_URL` | `amqp://127.0.0.1:5672` | RabbitMQ connection |
@@ -38,9 +41,12 @@ This system is not free to use.
 | `GATEWAY_URL` | `http://127.0.0.1:4000` | Gateway base URL |
 | `COOKIE_SECURE` | `NODE_ENV === production` | Enables `Secure` cookies |
 | `COOKIE_DOMAIN` | empty | Optional cookie domain override |
-| `COOKIE_SAMESITE` | `strict` | SameSite mode for auth cookies |
+| `COOKIE_SAMESITE` | `lax` | SameSite mode for auth cookies |
+| `STORE_LOGO_UPLOAD_DIR` | `<workspace>/uploads/logos` | Shared logo upload directory used by store-service and the SSR app |
 | `GATEWAY_RATE_LIMIT_MAX` | `300` | Global per-minute gateway request limit |
 | `GATEWAY_AUTH_RATE_LIMIT_MAX` | `20` | Auth-route rate limit window cap |
+| `PAGE_CACHE_TTL_SECONDS` | `60` | Default cache TTL for short-lived gateway/service page data |
+| `STATIC_ASSET_CACHE_SECONDS` | `3600` | Cache TTL for non-versioned static assets |
 | `USER_SERVICE_URL` | `http://127.0.0.1:4101` | User service base URL |
 | `STORE_SERVICE_URL` | `http://127.0.0.1:4102` | Store service base URL |
 | `COMPLIANCE_SERVICE_URL` | `http://127.0.0.1:4103` | Compliance service base URL |
@@ -63,11 +69,35 @@ This system is not free to use.
 | --- | --- | --- |
 | `NODE_ENV` | `development` | Runtime mode |
 | `PORT` | `3000` | Web app port |
-| `APP_ROOT_DOMAIN` | `localhost` | Hostname used to distinguish platform versus storefront routes |
+| `PLATFORM_ROOT_DOMAIN` or `APP_ROOT_DOMAIN` | `localhost` | Hostname used to distinguish platform versus storefront routes |
 | `STATE_SEED_ON_BOOT` | `false` | Toggles demo state seeding |
+| `JWT_SECRET` | Generated in development, required in production | SSR demo token secret |
+| `INTERNAL_SHARED_SECRET` | Generated in development, required in production | Shared signing secret when the web app talks to services directly |
+| `COOKIE_SECRET` | Generated in development, required in production | Secret for signed SSR cookies |
+| `CSRF_SECRET` | Generated in development, required in production | Secret used by the double-submit CSRF middleware |
+| `COOKIE_SECURE` | `NODE_ENV === production` | Enables `Secure` SSR cookies |
+| `COOKIE_DOMAIN` | empty | Optional cookie domain override |
+| `COOKIE_SAMESITE` | `lax` | SameSite mode for SSR cookies |
 | `IP_GEOLOCATION_API_BASE` | `https://ipapi.co` | Geolocation API base URL |
 | `FX_RATES_API_BASE` | `https://api.frankfurter.dev/v1` | Currency conversion API base URL |
 | `EXTERNAL_API_TIMEOUT_MS` | `2500` | Outbound request timeout |
+| `BACKEND_REQUEST_TIMEOUT_MS` | `REQUEST_TIMEOUT_MS` fallback | Timeout for SSR-to-service HTTP requests |
+| `STATIC_ASSET_CACHE_SECONDS` | `3600` | Cache lifetime for non-versioned assets |
+| `STORE_LOGO_UPLOAD_DIR` | `<workspace>/uploads/logos` | Local logo upload directory |
+| `USER_SERVICE_URL` | `http://127.0.0.1:4101` | Direct service URL for web-only flows |
+| `STORE_SERVICE_URL` | `http://127.0.0.1:4102` | Direct service URL for web-only flows |
+| `CUSTOMER_SERVICE_URL` | `http://127.0.0.1:4104` | Direct service URL for web-only flows |
+| `PRODUCT_SERVICE_URL` | `http://127.0.0.1:4105` | Direct service URL for web-only flows |
+| `CART_SERVICE_URL` | `http://127.0.0.1:4106` | Direct service URL for web-only flows |
+| `ORDER_SERVICE_URL` | `http://127.0.0.1:4107` | Direct service URL for web-only flows |
+| `BILLING_SERVICE_URL` | `http://127.0.0.1:4109` | Direct service URL for web-only flows |
+
+## Security Notes
+
+- Development defaults now generate random JWT, internal HMAC, cookie, and CSRF secrets when those variables are omitted. Production must set `JWT_SECRET`, `INTERNAL_SHARED_SECRET`, `COOKIE_SECRET`, and `CSRF_SECRET` explicitly.
+- SSR forms include a `_csrf` field, while browser API clients should fetch `GET /api/csrf-token` from the gateway and send the returned token in `X-CSRF-Token`.
+- Sensitive cookies are only written on secure requests in production. Make sure TLS termination forwards `X-Forwarded-Proto=https` and that `trust proxy` remains enabled.
+- `STORE_LOGO_UPLOAD_DIR` should point at persistent storage in shared or production deployments. Local disk is the development fallback only.
 
 ## Infrastructure Expectations
 
@@ -75,6 +105,7 @@ This system is not free to use.
 - RabbitMQ is optional but enables event-driven automation.
 - Redis now backs cache and gateway rate limiting when available, with an in-memory fallback for local development.
 - The payment service still uses mock checkout/webhook URLs, but now supports both storefront payments and platform subscription billing flows.
+- For first-time environments, the implemented services bootstrap their own tables and indexes from `apps/services/*/src/schema.js` when they start.
 
 ## Recommended Local Startup Order
 

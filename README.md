@@ -110,6 +110,8 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | `npm run start:support-service` | Reserved for future `support-service` implementation |
 | `npm run start:chat-service` | Reserved for future `chat-service` implementation |
 | `npm run start:notification-service` | Reserved for future `notification-service` implementation |
+| `npm run lint` | Runs the workspace ESLint configuration |
+| `npm run smoke` | Probes health/docs/storefront endpoints for a lightweight end-to-end check |
 
 ## Infrastructure Requirements
 
@@ -117,7 +119,7 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | --- | --- | --- |
 | MySQL | Primary persistence for implemented services | Required for implemented backend services |
 | RabbitMQ | Event bus transport | Optional but needed for real event-driven behavior |
-| Redis | Reserved runtime dependency | Configured by shared defaults, but not central to current implemented flows |
+| Redis | Optional cache and rate-limit store | Used for cache and throttling when available, with in-memory fallback |
 | External FX API | Currency conversion in SSR web app | Default base: `https://api.frankfurter.dev/v1` |
 | External geolocation API | Currency/location context in SSR web app | Default base: `https://ipapi.co` |
 
@@ -130,8 +132,8 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | `NODE_ENV` | `development` | Runtime mode |
 | `PORT` | Service-specific | Listener port |
 | `DATABASE_URL` | `mysql://root:password@127.0.0.1:3306/<service_db>` | MySQL connection |
-| `JWT_SECRET` | `aisle-jwt-secret` | JWT signing secret |
-| `INTERNAL_SHARED_SECRET` | `aisle-internal-secret` | HMAC signing secret for internal requests |
+| `JWT_SECRET` | Generated in development, required in production | JWT signing secret |
+| `INTERNAL_SHARED_SECRET` | Generated in development, required in production | HMAC signing secret for internal requests |
 | `RABBITMQ_URL` | `amqp://127.0.0.1:5672` | RabbitMQ connection string |
 | `REDIS_URL` | `redis://127.0.0.1:6379` | Redis connection string |
 | `PLATFORM_ROOT_DOMAIN` | `aislecommerce.com` | Platform root domain |
@@ -139,6 +141,10 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | `REQUEST_TIMEOUT_MS` | `5000` | Internal HTTP request timeout |
 | `WEB_APP_URL` | `http://127.0.0.1:3000` | SSR web app base URL |
 | `GATEWAY_URL` | `http://127.0.0.1:4000` | Gateway base URL |
+| `COOKIE_SECURE` | `NODE_ENV === production` | Enables `Secure` cookies |
+| `COOKIE_DOMAIN` | empty | Optional cookie domain override |
+| `COOKIE_SAMESITE` | `lax` | SameSite mode for auth and session cookies |
+| `STORE_LOGO_UPLOAD_DIR` | `<workspace>/uploads/logos` | Shared logo upload directory for store assets |
 | `USER_SERVICE_URL` | `http://127.0.0.1:4101` | User service URL |
 | `STORE_SERVICE_URL` | `http://127.0.0.1:4102` | Store service URL |
 | `COMPLIANCE_SERVICE_URL` | `http://127.0.0.1:4103` | Compliance service URL |
@@ -158,11 +164,31 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | --- | --- | --- |
 | `NODE_ENV` | `development` | Runtime mode |
 | `PORT` | `3000` | SSR web port |
-| `APP_ROOT_DOMAIN` | `localhost` | Hostname used to distinguish platform vs storefront requests |
+| `PLATFORM_ROOT_DOMAIN` or `APP_ROOT_DOMAIN` | `localhost` | Hostname used to distinguish platform vs storefront requests |
 | `STATE_SEED_ON_BOOT` | `false` | Demo state boot seeding flag |
+| `COOKIE_SECRET` | Generated in development, required in production | Signed cookie secret for SSR state cookies |
+| `CSRF_SECRET` | Generated in development, required in production | Double-submit CSRF secret for SSR forms |
 | `IP_GEOLOCATION_API_BASE` | `https://ipapi.co` | Geolocation API base URL |
 | `FX_RATES_API_BASE` | `https://api.frankfurter.dev/v1` | FX API base URL |
 | `EXTERNAL_API_TIMEOUT_MS` | `2500` | Outbound request timeout |
+| `BACKEND_REQUEST_TIMEOUT_MS` | `REQUEST_TIMEOUT_MS` fallback | Internal service timeout used by the SSR app |
+| `STATIC_ASSET_CACHE_SECONDS` | `3600` | Cache lifetime for non-versioned static assets |
+| `STORE_LOGO_UPLOAD_DIR` | `<workspace>/uploads/logos` | Local storage path for uploaded store logos |
+
+## Security and Performance Highlights
+
+- SSR forms now use double-submit CSRF protection. EJS forms should include `<input type="hidden" name="_csrf" value="<%= csrfToken %>">`.
+- The gateway exposes `GET /api/csrf-token` for state-changing browser API calls that rely on cookies. Send the returned token in `X-CSRF-Token` or `_csrf`.
+- The gateway CORS policy is now host-aware and restricted to trusted platform/store origins instead of `*`.
+- Auth, session, and wishlist cookies are set with `HttpOnly`, `SameSite=Lax`, production `Secure`, and HTTPS-aware write guards.
+- `helmet`, a stricter CSP, compression, static caching, request timeouts, and structured logging are enabled across the main entrypoints.
+- Store logos are validated by size, MIME type, and magic bytes before being stored on disk for development use. Configure `STORE_LOGO_UPLOAD_DIR` if you do not want the default `<workspace>/uploads/logos` path.
+
+## Frontend and Owner Experience
+
+- Store owners can upload a logo during signup or store settings updates, and the asset is served from `/logos/*` with long-lived cache headers.
+- The storefront now includes a working wishlist flow, lazy-loaded commerce images, and cached browser currency context to reduce repeat geolocation lookups.
+- Platform admin pages, owner dashboards, and error pages are wired to usable placeholder data so demo navigation does not dead-end.
 
 ## How to Run the Repository
 
@@ -173,16 +199,23 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 3. Start RabbitMQ if you want active event subscriptions.
 4. Configure environment variables.
 5. Start the gateway and the services you need.
-6. Start the web app if you want the SSR interface.
+6. On a fresh database, each implemented service will create its own tables and indexes from its `src/schema.js` file during startup. No separate migration step is required for first-time setup.
+7. Start the web app if you want the SSR interface.
+8. Run `npm run smoke` after startup if you want a quick health/docs/storefront probe.
 
 ### Minimal UI preview
 
 If you only want to preview the interface, the SSR app can run by itself because it uses local state helpers and sample data instead of depending on the full service mesh for every screen.
 
+### Deployment note
+
+Docker-specific files and references are not part of this repository anymore. Local execution is expected through the workspace `npm` scripts, while deployment automation is handled separately.
+
 ## API Surface Overview
 
 ### Gateway
 
+- `GET /api/csrf-token`
 - Resolves store hostnames through `store-service`
 - Extracts bearer or cookie tokens
 - Applies role checks for platform, owner, and customer flows
@@ -204,6 +237,7 @@ If you only want to preview the interface, the SSR app can run by itself because
 - `GET /stores`
 - `GET /stores/:id`
 - `PUT /stores/:id`
+- `POST /stores/:id/logo`
 - `GET /settings`
 - `PUT /settings`
 
@@ -242,6 +276,7 @@ If you only want to preview the interface, the SSR app can run by itself because
 - `POST /cart/items`
 - `PATCH /cart/items/:productId`
 - `DELETE /cart/items/:productId`
+- `POST /cart/clear`
 - `POST /cart/merge`
 
 ### Order service

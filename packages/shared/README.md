@@ -22,4 +22,5 @@ This package is not free to use.
 ## Notes
 
 - This package is the foundation for service startup, trust boundaries, and event flow.
+- `src/service-runner.js` passes each service's `schemaStatements` into `src/database.js`, so fresh databases are created directly from the service schema files.
 - Architecture details live in [../../docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md).
