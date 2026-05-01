@@ -10,6 +10,8 @@
   const themeClasses = storeThemeData.classes || {};
   const themeCopy = storeThemeData.copy || {};
   const themeTrustPoints = Array.isArray(storeThemeData.trustPoints) ? storeThemeData.trustPoints : [];
+  const recentlyViewed = Array.isArray(recentlyViewedProducts) ? recentlyViewedProducts : [];
+  const productTags = Array.isArray(productData.tags) ? productData.tags : [];
 %>
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
   <div class="grid gap-10 <%= themeClasses.productGrid || 'lg:grid-cols-[1fr_1fr]' %>">
@@ -28,7 +30,15 @@
 
     <div class="space-y-8">
       <div class="space-y-4">
-        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary"><%= themeCopy.productLabel || productData.category || 'Product detail' %></p>
+        <div class="flex flex-wrap items-center gap-3">
+          <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary"><%= themeCopy.productLabel || productData.category || 'Product detail' %></p>
+          <% if (productData.badge) { %>
+            <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= productData.badge %></span>
+          <% } %>
+          <% if (productData.audience) { %>
+            <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= productData.audience %></span>
+          <% } %>
+        </div>
         <h1 class="section-title text-4xl font-semibold tracking-tight text-slate-950"><%= productData.name || 'Untitled product' %></h1>
         <div class="flex items-center gap-3">
           <span class="section-title text-3xl font-semibold text-slate-950"><%= money(productData.price || 0) %></span>
@@ -36,8 +46,21 @@
             <span class="text-lg text-slate-400 line-through"><%= money(productData.compare_at_price) %></span>
           <% } %>
         </div>
+        <% if (productData.rating) { %>
+          <p class="text-sm font-medium text-slate-500"><%= productData.rating.toFixed(1) %>/5 <% if (productData.review_count) { %>from <%= productData.review_count %> verified customer reviews<% } %></p>
+        <% } %>
         <p class="max-w-2xl text-base leading-8 text-slate-600"><%= productData.description || 'A premium product with clear merchandising and a trustworthy path to checkout.' %></p>
       </div>
+
+      <% if (productTags.length) { %>
+        <div class="flex flex-wrap gap-3">
+          <% productTags.forEach((tag) => { %>
+            <a href="/products?tag=<%= encodeURIComponent(tag) %>" class="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">
+              <%= tag %>
+            </a>
+          <% }) %>
+        </div>
+      <% } %>
 
       <% if (productData.highlights && productData.highlights.length) { %>
         <div class="theme-detail-panel rounded-[2rem] p-6">
@@ -128,6 +151,32 @@
           </a>
           <div class="p-5">
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= entry.category %></p>
+            <a href="/products/<%= entry.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= entry.name %></a>
+            <p class="mt-3 text-sm font-semibold text-slate-900"><%= money(entry.price || 0) %></p>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  </section>
+<% } %>
+
+<% if (recentlyViewed.length) { %>
+  <section class="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8 lg:pb-20">
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Recently viewed</p>
+        <h2 class="section-title mt-3 text-3xl font-semibold text-slate-950">Keep comparing before you check out</h2>
+      </div>
+      <a href="/wishlist" class="text-sm font-semibold text-primary transition hover:underline">Open wishlist</a>
+    </div>
+    <div class="mt-8 grid gap-5 md:grid-cols-3 xl:grid-cols-4">
+      <% recentlyViewed.forEach((entry) => { %>
+        <article class="theme-product-card overflow-hidden rounded-[2rem]">
+          <a href="/products/<%= entry.slug %>" class="block <%= themeClasses.catalogCardAspect || 'aspect-[4/5]' %> overflow-hidden bg-slate-100">
+            <img src="<%= entry.image %>" alt="<%= entry.name %>" loading="lazy" class="h-full w-full object-cover">
+          </a>
+          <div class="p-5">
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= entry.category || 'Collection' %></p>
             <a href="/products/<%= entry.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= entry.name %></a>
             <p class="mt-3 text-sm font-semibold text-slate-900"><%= money(entry.price || 0) %></p>
           </div>

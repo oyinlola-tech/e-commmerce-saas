@@ -43,6 +43,7 @@ This system is not free to use.
 | `COOKIE_DOMAIN` | empty | Optional cookie domain override |
 | `COOKIE_SAMESITE` | `lax` | SameSite mode for auth cookies |
 | `STORE_LOGO_UPLOAD_DIR` | `<workspace>/uploads/logos` | Shared logo upload directory used by store-service and the SSR app |
+| `SWAGGER_PORT` | `4015` | Port used by the standalone Swagger preview started with `npm run swagger` |
 | `GATEWAY_RATE_LIMIT_MAX` | `300` | Global per-minute gateway request limit |
 | `GATEWAY_AUTH_RATE_LIMIT_MAX` | `20` | Auth-route rate limit window cap |
 | `PAGE_CACHE_TTL_SECONDS` | `60` | Default cache TTL for short-lived gateway/service page data |
@@ -98,6 +99,13 @@ This system is not free to use.
 - SSR forms include a `_csrf` field, while browser API clients should fetch `GET /api/csrf-token` from the gateway and send the returned token in `X-CSRF-Token`.
 - Sensitive cookies are only written on secure requests in production. Make sure TLS termination forwards `X-Forwarded-Proto=https` and that `trust proxy` remains enabled.
 - `STORE_LOGO_UPLOAD_DIR` should point at persistent storage in shared or production deployments. Local disk is the development fallback only.
+
+## API Testing Notes
+
+- `npm run swagger` starts a standalone Swagger UI preview on `http://127.0.0.1:4015` and exports `docs/swagger/gateway.openapi.json`.
+- `tests/aisle-api.http` contains ready-made gateway requests for health, auth, compliance, billing, customer, cart, checkout, and owner flows.
+- `npm run api:request -- --service <name> --path <route>` sends signed internal requests directly to a service when the route is intentionally not gateway-exposed.
+- If you change `SWAGGER_PORT`, the standalone preview URLs move with it, but the gateway-hosted docs remain at `/docs` on the gateway base URL.
 
 ## Infrastructure Expectations
 

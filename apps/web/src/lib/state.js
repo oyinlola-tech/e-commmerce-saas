@@ -35,6 +35,158 @@ const persistState = () => {
   fs.writeFileSync(runtimeStatePath, JSON.stringify(state, null, 2));
 };
 
+const mergeSeedCollection = (collectionName) => {
+  const seedCollection = Array.isArray(seed[collectionName]) ? seed[collectionName] : [];
+  const targetCollection = Array.isArray(state[collectionName]) ? state[collectionName] : [];
+  let mutated = false;
+
+  seedCollection.forEach((entry) => {
+    const alreadyExists = targetCollection.some((current) => String(current.id) === String(entry.id));
+    if (!alreadyExists) {
+      targetCollection.push(clone(entry));
+      mutated = true;
+    }
+  });
+
+  state[collectionName] = targetCollection;
+  return mutated;
+};
+
+const buildFacetEntries = (values = []) => {
+  const facets = new Map();
+
+  values
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean)
+    .forEach((entry) => {
+      const facetKey = slugify(entry);
+      if (facetKey && !facets.has(facetKey)) {
+        facets.set(facetKey, {
+          name: entry,
+          slug: facetKey
+        });
+      }
+    });
+
+  return Array.from(facets.values());
+};
+
+const applyStoreDefaults = (store) => {
+  if (!store) {
+    return false;
+  }
+
+  const configuration = getStoreConfiguration(store, store);
+  let mutated = false;
+
+  if (store.store_type !== configuration.store_type) {
+    store.store_type = configuration.store_type;
+    mutated = true;
+  }
+
+  if (store.template_key !== configuration.template_key) {
+    store.template_key = configuration.template_key;
+    mutated = true;
+  }
+
+  if (store.font_preset !== configuration.font_preset) {
+    store.font_preset = configuration.font_preset;
+    mutated = true;
+  }
+
+  if (!isValidHexColor(store.theme_color) || store.theme_color !== configuration.theme_color) {
+    store.theme_color = configuration.theme_color;
+    mutated = true;
+  }
+
+  if (!String(store.tagline || '').trim()) {
+    store.tagline = configuration.tagline;
+    mutated = true;
+  }
+
+  if (!String(store.description || '').trim()) {
+    store.description = configuration.description;
+    mutated = true;
+  }
+
+  return mutated;
+};
+
+const applyProductDefaults = (product) => {
+  if (!product) {
+    return false;
+  }
+
+  let mutated = false;
+
+  if (!Array.isArray(product.tags)) {
+    product.tags = [];
+    mutated = true;
+  }
+
+  if (!Array.isArray(product.images)) {
+    product.images = product.image ? [product.image] : [];
+    mutated = true;
+  }
+
+  if (product.badge === undefined) {
+    product.badge = '';
+    mutated = true;
+  }
+
+  if (product.audience === undefined) {
+    product.audience = '';
+    mutated = true;
+  }
+
+  if (product.rating === undefined) {
+    product.rating = null;
+    mutated = true;
+  }
+
+  if (product.review_count === undefined) {
+    product.review_count = null;
+    mutated = true;
+  }
+
+  return mutated;
+};
+
+const ensureSeedBaseline = () => {
+  let mutated = false;
+
+  ['stores', 'customers', 'products', 'orders', 'supportConversations', 'incidents'].forEach((collectionName) => {
+    if (mergeSeedCollection(collectionName)) {
+      mutated = true;
+    }
+  });
+
+  Object.entries(seed.carts || {}).forEach(([storeId, cart]) => {
+    if (!state.carts[storeId]) {
+      state.carts[storeId] = clone(cart);
+      mutated = true;
+    }
+  });
+
+  state.stores.forEach((store) => {
+    if (applyStoreDefaults(store)) {
+      mutated = true;
+    }
+  });
+
+  state.products.forEach((product) => {
+    if (applyProductDefaults(product)) {
+      mutated = true;
+    }
+  });
+
+  if (mutated) {
+    persistState();
+  }
+};
+
+ensureSeedBaseline();
+
 const themePalette = ['#0F766E', '#1D4ED8', '#B45309', '#BE123C', '#0B7285', '#4C1D95'];
 
 const slugify = (value = '') => {
@@ -121,27 +273,88 @@ const findCustomerByEmail = (storeId, email) => {
   return state.customers.find((customer) => customer.store_id === storeId && String(customer.email || '').toLowerCase() === normalized) || null;
 };
 
+const normalizeDiscoveryToken = (value = '') => slugify(value);
+
+const toProductSearchValue = (product) => {
+  return [
+    product.name,
+    product.category,
+    product.description,
+    product.sku,
+    product.badge,
+    product.audience,
+    ...(Array.isArray(product.highlights) ? product.highlights : []),
+    ...(Array.isArray(product.tags) ? product.tags : [])
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+};
+
+const compareProducts = (left, right, sort = 'featured') => {
+  switch (sort) {
+    case 'price-low':
+      return Number(left.price || 0) - Number(right.price || 0);
+    case 'price-high':
+      return Number(right.price || 0) - Number(left.price || 0);
+    case 'name':
+      return String(left.name || '').localeCompare(String(right.name || ''));
+    case 'newest':
+      return new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime();
+    default:
+      if (Boolean(right.featured) !== Boolean(left.featured)) {
+        return Number(Boolean(right.featured)) - Number(Boolean(left.featured));
+      }
+      return String(left.name || '').localeCompare(String(right.name || ''));
+  }
+};
+
 const getStoreProducts = (storeId, options = {}) => {
   const {
     publishedOnly = false,
-    category = null
+    category = null,
+    search = '',
+    sort = 'featured',
+    tag = null
   } = options;
+
+  const normalizedCategory = normalizeDiscoveryToken(category);
+  const normalizedSearch = String(search || '').trim().toLowerCase();
+  const normalizedTag = normalizeDiscoveryToken(tag);
 
   return state.products
     .filter((product) => product.store_id === storeId)
     .filter((product) => !publishedOnly || String(product.status || '').toLowerCase() === 'published')
     .filter((product) => {
-      if (!category || category === 'All') {
+      if (!normalizedCategory || normalizedCategory === 'all') {
         return true;
       }
-      return slugify(product.category) === slugify(category) || slugify(product.category) === slugify(toTitleCase(category));
+      return normalizeDiscoveryToken(product.category) === normalizedCategory;
     })
-    .sort((a, b) => {
-      if (Boolean(b.featured) !== Boolean(a.featured)) {
-        return Number(Boolean(b.featured)) - Number(Boolean(a.featured));
+    .filter((product) => {
+      if (!normalizedSearch) {
+        return true;
       }
-      return String(a.name || '').localeCompare(String(b.name || ''));
-    });
+
+      return toProductSearchValue(product).includes(normalizedSearch);
+    })
+    .filter((product) => {
+      if (!normalizedTag) {
+        return true;
+      }
+
+      const productTags = [
+        product.category,
+        product.badge,
+        product.audience,
+        ...(Array.isArray(product.tags) ? product.tags : [])
+      ]
+        .map((entry) => normalizeDiscoveryToken(entry))
+        .filter(Boolean);
+
+      return productTags.includes(normalizedTag);
+    })
+    .sort((a, b) => compareProducts(a, b, sort));
 };
 
 const getPublishedProducts = (storeId) => {
@@ -160,6 +373,19 @@ const getStoreCategories = (storeId) => {
     });
   });
   return Array.from(unique.values());
+};
+
+const getStoreDiscoveryFacets = (storeId) => {
+  const products = getPublishedProducts(storeId);
+
+  return {
+    categories: getStoreCategories(storeId),
+    tags: buildFacetEntries(products.flatMap((product) => [
+      product.badge,
+      product.audience,
+      ...(Array.isArray(product.tags) ? product.tags : [])
+    ]))
+  };
 };
 
 const getProductById = (storeId, productId) => {
@@ -615,6 +841,39 @@ const createOrder = (storeId, customer, payload = {}) => {
   return order;
 };
 
+const addOrderToCart = (storeId, orderId) => {
+  const order = getOrderById(storeId, orderId);
+  if (!order || !Array.isArray(order.items) || !order.items.length) {
+    return null;
+  }
+
+  const cart = ensureStoreCart(storeId);
+
+  order.items.forEach((item) => {
+    const product = getProductById(storeId, item.product_id);
+    if (!product) {
+      return;
+    }
+
+    const existingItem = cart.items.find((entry) => String(entry.product_id) === String(item.product_id));
+    if (existingItem) {
+      existingItem.quantity += Math.max(1, Number(item.quantity || 1));
+      return;
+    }
+
+    cart.items.push({
+      product_id: product.id,
+      name: product.name,
+      price: product.price,
+      quantity: Math.max(1, Number(item.quantity || 1)),
+      image: product.image
+    });
+  });
+
+  persistState();
+  return clone(ensureCartTotals(cart));
+};
+
 const updateOrderStatus = (storeId, orderId, status) => {
   const order = getOrderById(storeId, orderId);
   if (!order) {
@@ -726,6 +985,7 @@ module.exports = {
   getStoreProducts,
   getPublishedProducts,
   getStoreCategories,
+  getStoreDiscoveryFacets,
   getProductById,
   getProductBySlug,
   getStoreOrders,
@@ -751,6 +1011,7 @@ module.exports = {
   deleteProduct,
   createCustomer,
   createOrder,
+  addOrderToCart,
   updateOrderStatus,
   updateSupportConversation,
   replyToSupportConversation,

@@ -6,7 +6,7 @@
   <div class="max-w-3xl">
     <span class="eyebrow">My Orders</span>
     <h1 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950">Track every purchase in one place</h1>
-    <p class="mt-4 text-lg leading-8 text-slate-600">Review totals, fulfillment status, and the items tied to each order.</p>
+    <p class="mt-4 text-lg leading-8 text-slate-600">Review totals, fulfillment status, and the items tied to each order. Returning customers can also add a previous order back to the cart in one step.</p>
   </div>
 
   <% if (orders.length) { %>
@@ -34,6 +34,15 @@
                 <p class="text-sm font-semibold text-slate-900"><%= money((item.price || 0) * (item.quantity || 1)) %></p>
               </div>
             <% }) %>
+          </div>
+          <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-slate-500">Need a quick repeat order? Add these items back to the cart and adjust quantities there.</p>
+            <form action="/orders/<%= order.id %>/reorder" method="post">
+              <%- include('../partials/csrf-field') %>
+              <button type="submit" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary">
+                Buy again
+              </button>
+            </form>
           </div>
         </article>
       <% }) %>

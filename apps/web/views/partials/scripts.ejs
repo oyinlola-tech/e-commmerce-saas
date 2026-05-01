@@ -392,6 +392,17 @@
       return updatedCart;
     };
 
+    window.clearCart = async () => {
+      const updatedCart = await requestCart('/cart/clear', {
+        method: 'POST'
+      });
+
+      window.cartState = updatedCart;
+      syncCartViews();
+      window.showToast('Cart cleared.');
+      return updatedCart;
+    };
+
     window.toggleWishlistItem = async (productId) => {
       const normalizedId = String(productId);
       const isSaved = window.wishlistState.has(normalizedId);
@@ -491,6 +502,17 @@
           await window.removeCartItem(removeTrigger.dataset.productId);
         } catch (error) {
           window.showToast(error.message || 'Unable to remove item.', 'error');
+        }
+        return;
+      }
+
+      const clearTrigger = event.target.closest('[data-cart-clear]');
+      if (clearTrigger) {
+        event.preventDefault();
+        try {
+          await window.clearCart();
+        } catch (error) {
+          window.showToast(error.message || 'Unable to clear the cart.', 'error');
         }
       }
     });

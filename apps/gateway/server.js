@@ -99,7 +99,6 @@ app.use(helmet({
 }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
-app.use(cookieParser());
 
 app.use((req, res, next) => {
   req.requestId = req.headers['x-request-id'] || crypto.randomUUID();
@@ -206,7 +205,7 @@ const extractToken = (req) => {
     return authorization.slice('Bearer '.length);
   }
 
-  return req.cookies.platform_token || req.cookies.customer_token || null;
+  return req.cookies?.platform_token || req.cookies?.customer_token || null;
 };
 
 const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
@@ -382,7 +381,24 @@ const shouldEnforceGatewayCsrf = (req) => {
   return !authorization.startsWith('Bearer ');
 };
 
-const attachGatewayContext = (req, res, next) => {
+const buildGatewayContext = (req, auth = null) => {
+  const storeId = req.storeContext?.store?.id || req.params?.storeId || '';
+
+  return {
+    auth,
+    internalHeaders: createServiceHeaders(req, {
+      auth,
+      storeId
+    })
+  };
+};
+
+const attachGatewayProxyContext = (req, res, next) => {
+  req.gatewayContext = buildGatewayContext(req, null);
+  return next();
+};
+
+const attachGatewayAuthContext = (req, res, next) => {
   const auth = resolveAuthContext(req);
   const storeId = req.storeContext?.store?.id || req.params?.storeId || '';
 
@@ -390,12 +406,7 @@ const attachGatewayContext = (req, res, next) => {
     return res.status(403).json({ error: 'Customer token does not belong to this store.' });
   }
 
-  req.gatewayContext = {
-    auth,
-    internalHeaders: createServiceHeaders(req, {
-      storeId
-    })
-  };
+  req.gatewayContext = buildGatewayContext(req, auth);
 
   return next();
 };
@@ -551,7 +562,9 @@ const bootstrap = async () => {
 
   app.use(resolveStoreContext);
   app.use(gatewayCors);
-  app.use(attachGatewayContext);
+  app.use(attachGatewayProxyContext);
+  app.use('/api', cookieParser());
+  app.use('/api', attachGatewayAuthContext);
 
   app.get('/api/csrf-token', (req, res) => {
     return res.json({

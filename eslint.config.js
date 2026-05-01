@@ -34,5 +34,16 @@ module.exports = [
         varsIgnorePattern: '^_'
       }]
     }
+  },
+  {
+    files: ['**/*.test.js'],
+    languageOptions: {
+      globals: {
+        ...commonGlobals,
+        describe: 'readonly',
+        expect: 'readonly',
+        test: 'readonly'
+      }
+    }
   }
 ];

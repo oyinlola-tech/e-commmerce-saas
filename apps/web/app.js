@@ -8,7 +8,7 @@ const expressLayouts = require('express-ejs-layouts');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { doubleCsrf } = require('csrf-csrf');
-const { body, query } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const env = require('./src/lib/load-env');
 const {
   storeTypes,
@@ -30,7 +30,7 @@ const {
   getAllStores,
   getStoreProducts,
   getPublishedProducts,
-  getStoreCategories,
+  getStoreDiscoveryFacets,
   getProductById,
   getProductBySlug,
   getStoreOrders,
@@ -53,6 +53,7 @@ const {
   deleteProduct,
   createCustomer,
   createOrder,
+  addOrderToCart,
   updateOrderStatus,
   replyToSupportConversation,
   updateSupportConversation,
@@ -71,6 +72,7 @@ const {
   sanitizeUrl,
   validate,
   allowBodyFields,
+  allowQueryFields,
   commonRules,
   createHttpError
 } = require('../../packages/shared');
@@ -105,6 +107,8 @@ ensureLogoUploadDir().catch((error) => {
 const customerCookieName = (storeId) => `customer_${storeId}`;
 const orderCookieName = (storeId) => `last_order_${storeId}`;
 const wishlistCookieName = (storeId) => `wishlist_${storeId}`;
+const recentlyViewedCookieName = (storeId) => `recently_viewed_${storeId}`;
+const catalogSortOptions = ['featured', 'newest', 'price-low', 'price-high', 'name'];
 
 const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
   getSecret: () => env.csrfSecret,
@@ -128,6 +132,13 @@ const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsr
 const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const authPageRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -167,6 +178,14 @@ const buildFormData = (req, keys = []) => {
     }
     return accumulator;
   }, {});
+};
+
+const safeDecodeURIComponent = (value = '') => {
+  try {
+    return decodeURIComponent(String(value || ''));
+  } catch {
+    return String(value || '');
+  }
 };
 
 const parseCheckbox = (value) => {
@@ -283,6 +302,46 @@ const persistWishlist = (req, res, storeId, productIds) => {
   });
 };
 
+const getRecentlyViewedProductIds = (req, storeId) => {
+  const raw = readSignedCookie(req, recentlyViewedCookieName(storeId));
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.map((entry) => String(entry)).slice(0, 12);
+  } catch {
+    return [];
+  }
+};
+
+const persistRecentlyViewed = (req, res, storeId, productId) => {
+  const nextIds = [
+    String(productId),
+    ...getRecentlyViewedProductIds(req, storeId).filter((entry) => entry !== String(productId))
+  ].slice(0, 12);
+
+  setSignedCookie(req, res, recentlyViewedCookieName(storeId), JSON.stringify(nextIds), {
+    maxAge: 14 * 24 * 60 * 60 * 1000
+  });
+};
+
+const getRecentlyViewedProducts = (req, storeId, options = {}) => {
+  const excludeId = options.excludeId ? String(options.excludeId) : null;
+  const limit = Math.max(1, Number(options.limit || 4));
+
+  return getRecentlyViewedProductIds(req, storeId)
+    .filter((entry) => !excludeId || entry !== excludeId)
+    .map((entry) => getProductById(storeId, entry))
+    .filter((product) => product && String(product.status || '').toLowerCase() === 'published')
+    .slice(0, limit);
+};
+
 const renderPlatform = (res, view, payload = {}) => {
   return res.render(view, {
     layout: 'layouts/main',
@@ -299,6 +358,7 @@ const renderStorefront = (req, res, view, payload = {}) => {
   const wishlistProducts = store?.id
     ? getPublishedProducts(store.id).filter((product) => wishlistIds.includes(String(product.id)))
     : [];
+  const recentlyViewedProducts = store?.id ? getRecentlyViewedProducts(req, store.id, { limit: 6 }) : [];
 
   return res.render(view, {
     layout: 'layouts/store',
@@ -309,6 +369,7 @@ const renderStorefront = (req, res, view, payload = {}) => {
     wishlistIds,
     wishlistProducts,
     wishlistCount: wishlistIds.length,
+    recentlyViewedProducts,
     ...payload
   });
 };
@@ -1010,6 +1071,21 @@ const cartMutationValidation = (requiresQuantity = false) => validate([
     : [body('quantity').optional().isInt({ min: 1, max: 999 }).withMessage('quantity must be between 1 and 999.').toInt()])
 ]);
 
+const productIdentifierValidation = param('productId')
+  .trim()
+  .notEmpty()
+  .isLength({ max: 120 })
+  .withMessage('productId is required.')
+  .customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 }));
+
+const catalogQueryValidation = validate([
+  allowQueryFields(['category', 'search', 'sort', 'tag']),
+  query('category').optional().customSanitizer((value) => sanitizePlainText(safeDecodeURIComponent(value), { maxLength: 120 })),
+  commonRules.querySearch('search'),
+  commonRules.queryEnum('sort', catalogSortOptions),
+  query('tag').optional().customSanitizer((value) => sanitizePlainText(safeDecodeURIComponent(value), { maxLength: 120 }))
+]);
+
 app.post('/preferences/currency', currencyValidation, handleFormValidation((req, res) => {
   return res.redirect('/?error=Update the currency selection and try again.');
 }), async (req, res) => {
@@ -1034,12 +1110,15 @@ app.get('/', (req, res) => {
   if (isStorefrontHost(req)) {
     const store = resolveStore(req);
     const products = getPublishedProducts(store.id);
+    const discovery = getStoreDiscoveryFacets(store.id);
 
     return renderStorefront(req, res, 'storefront/home', {
       pageTitle: store.name,
       metaDescription: `${store.name} delivers premium essentials with international fulfillment, fast checkout, and service-led support.`,
       products,
-      featuredProducts: products.slice(0, 4),
+      featuredProducts: products.filter((product) => product.featured).slice(0, 4),
+      categories: discovery.categories,
+      discoveryTags: discovery.tags.slice(0, 8),
       stats: getStoreStats(store.id)
     });
   }
@@ -1113,7 +1192,7 @@ app.post(
   }
 );
 
-app.get('/login', (req, res) => {
+app.get('/login', authPageRateLimiter, (req, res) => {
   if (isStorefrontHost(req)) {
     return renderCustomerLogin(req, res);
   }
@@ -1379,7 +1458,12 @@ app.post('/admin/products/:id', productValidation, handleFormValidation((req, re
 
 app.post('/admin/products/:id/delete', validate([
   allowBodyFields(['_csrf']),
-  commonRules.paramId('id')
+  param('id')
+    .trim()
+    .notEmpty()
+    .isLength({ max: 120 })
+    .withMessage('id is required.')
+    .customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 }))
 ]), (req, res) => {
   const store = resolveStore(req);
   const removed = deleteProduct(store.id, req.params.id);
@@ -1453,21 +1537,30 @@ app.post('/admin/domain', domainValidation, handleFormValidation((req, res, erro
   return res.redirect('/admin/domain?success=Domain settings saved');
 });
 
-app.get('/products', [
-  query('category').optional().isString().customSanitizer((value) => sanitizePlainText(decodeURIComponent(value), { maxLength: 120 }))
-], (req, res) => {
+app.get('/products', catalogQueryValidation, (req, res) => {
   const store = resolveStore(req);
   const category = req.query.category || 'All';
+  const search = req.query.search || '';
+  const sort = req.query.sort || 'featured';
+  const tag = req.query.tag || '';
   const products = getStoreProducts(store.id, {
     publishedOnly: true,
-    category
+    category,
+    search,
+    sort,
+    tag
   });
+  const discovery = getStoreDiscoveryFacets(store.id);
 
   return renderStorefront(req, res, 'storefront/products', {
     pageTitle: 'Products',
     products,
-    categories: getStoreCategories(store.id),
-    activeCategory: category
+    categories: discovery.categories,
+    discoveryTags: discovery.tags.slice(0, 10),
+    activeCategory: category,
+    activeTag: tag,
+    searchQuery: search,
+    activeSort: sort
   });
 });
 
@@ -1483,10 +1576,16 @@ app.get('/products/:slug', (req, res) => {
     .filter((entry) => entry.id !== product.id && entry.category === product.category)
     .slice(0, 3);
 
+  persistRecentlyViewed(req, res, store.id, product.id);
+
   return renderStorefront(req, res, 'storefront/product', {
     pageTitle: product.name,
     product,
-    relatedProducts
+    relatedProducts,
+    recentlyViewedProducts: getRecentlyViewedProducts(req, store.id, {
+      excludeId: product.id,
+      limit: 4
+    })
   });
 });
 
@@ -1541,6 +1640,35 @@ app.get('/orders', (req, res) => {
     pageTitle: 'My orders',
     customerOrders: getCustomerOrders(store.id, customer)
   });
+});
+
+app.post('/orders/:id/reorder', validate([
+  allowBodyFields(['_csrf']),
+  param('id')
+    .trim()
+    .notEmpty()
+    .isLength({ max: 40 })
+    .withMessage('order id is required.')
+    .customSanitizer((value) => sanitizePlainText(value, { maxLength: 40 }))
+]), (req, res) => {
+  const store = resolveStore(req);
+  const customer = getCurrentCustomer(req, store.id);
+
+  if (!customer) {
+    return res.redirect('/login?returnTo=/orders');
+  }
+
+  const order = getOrderById(store.id, req.params.id);
+  if (!order || String(order.customer?.email || '').toLowerCase() !== String(customer.email || '').toLowerCase()) {
+    return res.redirect('/orders?error=Order not found');
+  }
+
+  const cart = addOrderToCart(store.id, order.id);
+  if (!cart) {
+    return res.redirect('/orders?error=Unable to add these items back to your cart');
+  }
+
+  return res.redirect('/cart?success=Items added back to your cart');
 });
 
 app.get('/checkout', (req, res) => {
@@ -1658,7 +1786,7 @@ app.post('/wishlist/items', validate([
 });
 
 app.delete('/wishlist/items/:productId', validate([
-  commonRules.paramId('productId')
+  productIdentifierValidation
 ]), (req, res) => {
   const store = resolveStore(req);
   const nextIds = getWishlistProductIds(req, store.id).filter((entry) => entry !== String(req.params.productId));

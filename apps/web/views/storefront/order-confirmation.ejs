@@ -2,6 +2,11 @@
   const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const orderData = order || {};
   const confirmationItems = Array.isArray(orderData.items) ? orderData.items : [];
+  const nextSteps = [
+    orderData.status ? `Order status: ${orderData.status}` : 'Order status: confirmed',
+    orderData.payment_status ? `Payment status: ${orderData.payment_status}` : 'Payment status: processing',
+    store && store.fulfillment_sla ? `Fulfillment: ${store.fulfillment_sla}` : 'Fulfillment: you will receive delivery updates as the order progresses.'
+  ];
 %>
 <section class="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
   <div class="surface-card rounded-[2rem] p-8 sm:p-10">
@@ -43,9 +48,20 @@
       <% }) %>
     </div>
 
+    <div class="mt-10 grid gap-4 rounded-[2rem] bg-slate-50 p-6 sm:grid-cols-3">
+      <% nextSteps.forEach((entry) => { %>
+        <div class="rounded-[1.5rem] bg-white px-4 py-4">
+          <p class="text-sm leading-6 text-slate-600"><%= entry %></p>
+        </div>
+      <% }) %>
+    </div>
+
     <div class="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-center">
       <a href="/orders" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">
         View orders
+      </a>
+      <a href="/account" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">
+        Track account
       </a>
       <a href="/" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">
         Back to home

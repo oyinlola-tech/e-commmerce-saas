@@ -12,8 +12,5 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
-  },
-  "dependencies": {
-    "csurf": "^1.11.0"
-}
+  }
 }

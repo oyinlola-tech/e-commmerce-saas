@@ -42,6 +42,9 @@ module.exports = {
       subdomain: 'aisle',
       custom_domain: 'www.aisle-store.com',
       logo: '',
+      store_type: 'unisex-lifestyle',
+      template_key: 'unisex-lifestyle',
+      font_preset: 'jakarta',
       theme_color: '#0F766E',
       ssl_status: 'issued',
       tagline: 'Cross-border essentials for modern homes, studios, and teams.',
@@ -63,12 +66,45 @@ module.exports = {
       support_backlog: 3
     },
     {
+      id: 'store_lune',
+      owner_id: 'owner_4',
+      name: 'Lune Rituals',
+      subdomain: 'lune-rituals',
+      custom_domain: '',
+      logo: '',
+      store_type: 'skincare',
+      template_key: 'skincare',
+      font_preset: 'gallery',
+      theme_color: '#C2417A',
+      ssl_status: 'issued',
+      tagline: 'Skincare, scalp care, and unisex body rituals with ingredient-first clarity.',
+      description: 'Lune Rituals pairs daily skincare, wash-day essentials, and refill-minded body care in one calm storefront designed for repeat purchase behavior.',
+      support_email: 'support@lunerituals.com',
+      contact_phone: '+1 646 555 0127',
+      fulfillment_sla: 'Orders placed before 14:00 local time usually leave our studio the same day.',
+      return_window_days: 30,
+      timezone: 'America/New_York',
+      markets: ['United States', 'Canada', 'United Kingdom', 'Nigeria'],
+      currencies: ['USD', 'CAD', 'GBP', 'NGN'],
+      launch_status: 'live',
+      operational_status: 'healthy',
+      health_score: 94,
+      conversion_rate: 5.1,
+      monthly_revenue: 88420,
+      monthly_orders: 1244,
+      average_order_value: 71.08,
+      support_backlog: 2
+    },
+    {
       id: 'store_verde',
       owner_id: 'owner_2',
       name: 'Verde Atelier',
       subdomain: 'verde-atelier',
       custom_domain: 'shop.verdeatelier.com',
       logo: '',
+      store_type: 'home-decor',
+      template_key: 'home-decor',
+      font_preset: 'gallery',
       theme_color: '#1D4ED8',
       ssl_status: 'issued',
       tagline: 'Seasonless pieces for hospitality, gifting, and elevated everyday use.',
@@ -96,6 +132,9 @@ module.exports = {
       subdomain: 'northstar-supply',
       custom_domain: '',
       logo: '',
+      store_type: 'electronics',
+      template_key: 'electronics',
+      font_preset: 'signal',
       theme_color: '#B45309',
       ssl_status: 'issued',
       tagline: 'Reliable B2B replenishment for offices, hospitality groups, and regional operators.',
@@ -169,6 +208,19 @@ module.exports = {
       segment: 'VIP',
       lifetime_value: 1435,
       orders_count: 8
+    },
+    {
+      id: 'customer_lune_1',
+      store_id: 'store_lune',
+      name: 'Sade Martins',
+      email: 'sade.martins@example.com',
+      address: '14 Admiralty Way',
+      city: 'Lagos',
+      country: 'Nigeria',
+      postal_code: '101233',
+      segment: 'Returning',
+      lifetime_value: 524,
+      orders_count: 5
     },
     {
       id: 'customer_northstar_1',
@@ -331,6 +383,176 @@ module.exports = {
       featured: false
     },
     {
+      id: 'prod_lune_1',
+      store_id: 'store_lune',
+      name: 'Cloud Milk Cleanser',
+      slug: 'cloud-milk-cleanser',
+      category: 'Cleanser',
+      price: 24,
+      compare_at_price: 28,
+      image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1200&q=80',
+      images: [
+        'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1200&q=80',
+        'https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=1200&q=80'
+      ],
+      description: 'A low-foam cleanser that lifts sunscreen, sweat, and makeup without leaving the skin tight after rinsing.',
+      highlights: [
+        'Cream-to-milk texture for daily AM and PM use',
+        'Barrier-friendly surfactants with glycerin support',
+        'Fragrance-free and suitable for sensitive routines'
+      ],
+      tags: ['Sensitive skin', 'Barrier care', 'Daily cleanse'],
+      badge: 'Best seller',
+      audience: 'Unisex',
+      rating: 4.8,
+      review_count: 216,
+      inventory: 132,
+      sku: 'LUN-CLOUD-024',
+      status: 'Published',
+      featured: true
+    },
+    {
+      id: 'prod_lune_2',
+      store_id: 'store_lune',
+      name: 'Golden Hour Vitamin C Serum',
+      slug: 'golden-hour-vitamin-c-serum',
+      category: 'Serum',
+      price: 39,
+      compare_at_price: 44,
+      image: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1200&q=80',
+      images: [
+        'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1200&q=80',
+        'https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=1200&q=80'
+      ],
+      description: 'A brightening serum that layers under moisturizer and SPF to support glow, even tone, and a smoother-looking texture.',
+      highlights: [
+        'Vitamin C derivative paired with niacinamide',
+        'Designed for daily layering without pilling',
+        'Works well in morning routines and travel kits'
+      ],
+      tags: ['Brightening', 'Uneven tone', 'Glow'],
+      badge: 'Glow routine',
+      audience: 'Women and unisex',
+      rating: 4.9,
+      review_count: 184,
+      inventory: 96,
+      sku: 'LUN-GOLD-039',
+      status: 'Published',
+      featured: true
+    },
+    {
+      id: 'prod_lune_3',
+      store_id: 'store_lune',
+      name: 'Silk Barrier Moisturizer',
+      slug: 'silk-barrier-moisturizer',
+      category: 'Moisturizer',
+      price: 34,
+      compare_at_price: null,
+      image: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?auto=format&fit=crop&w=1200&q=80',
+      images: [
+        'https://images.unsplash.com/photo-1612817288484-6f916006741a?auto=format&fit=crop&w=1200&q=80'
+      ],
+      description: 'A cushiony moisturizer for daily barrier support, smoother makeup prep, and easy night-time recovery.',
+      highlights: [
+        'Ceramide-rich cream with a satin finish',
+        'Comfortable under SPF and complexion products',
+        'Balanced for dry, normal, and combination skin'
+      ],
+      tags: ['Barrier care', 'Dry skin', 'Night routine'],
+      badge: 'Routine staple',
+      audience: 'Unisex',
+      rating: 4.7,
+      review_count: 132,
+      inventory: 78,
+      sku: 'LUN-SILK-034',
+      status: 'Published',
+      featured: true
+    },
+    {
+      id: 'prod_lune_4',
+      store_id: 'store_lune',
+      name: 'Soft Hold Curl Cream',
+      slug: 'soft-hold-curl-cream',
+      category: 'Haircare',
+      price: 27,
+      compare_at_price: 31,
+      image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=1200&q=80',
+      images: [
+        'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=1200&q=80'
+      ],
+      description: 'A lightweight cream for wash-day definition, softer hold, and touchable curls that keep their shape into day two.',
+      highlights: [
+        'Defines curls without crunch or heavy residue',
+        'Pairs well with leave-in conditioners and scalp serums',
+        'Designed for coily, curly, and wavy textures'
+      ],
+      tags: ['Wash day', 'Curl definition', 'Haircare'],
+      badge: 'Wash-day pick',
+      audience: 'Women and unisex',
+      rating: 4.8,
+      review_count: 149,
+      inventory: 88,
+      sku: 'LUN-CURL-027',
+      status: 'Published',
+      featured: true
+    },
+    {
+      id: 'prod_lune_5',
+      store_id: 'store_lune',
+      name: 'Moonrise Scalp Serum',
+      slug: 'moonrise-scalp-serum',
+      category: 'Haircare',
+      price: 32,
+      compare_at_price: null,
+      image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80',
+      images: [
+        'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80'
+      ],
+      description: 'A cooling scalp serum that fits between wash days to support comfort, a fresher scalp feel, and cleaner part lines.',
+      highlights: [
+        'Targeted nozzle for easy section-by-section application',
+        'Fast-drying finish that works with protective styles',
+        'Balanced for oil control and scalp comfort'
+      ],
+      tags: ['Scalp care', 'Protective styles', 'Between washes'],
+      badge: 'Scalp reset',
+      audience: 'Unisex',
+      rating: 4.6,
+      review_count: 98,
+      inventory: 54,
+      sku: 'LUN-MOON-032',
+      status: 'Published',
+      featured: false
+    },
+    {
+      id: 'prod_lune_6',
+      store_id: 'store_lune',
+      name: 'Quiet Skin Body Lotion',
+      slug: 'quiet-skin-body-lotion',
+      category: 'Body Care',
+      price: 22,
+      compare_at_price: null,
+      image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=1200&q=80',
+      images: [
+        'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=1200&q=80'
+      ],
+      description: 'A fast-absorbing body lotion with a soft finish for daily hydration, post-shower routines, and travel bags.',
+      highlights: [
+        'Comfortable finish with no sticky after-feel',
+        'Subtle unisex scent profile',
+        'Suitable for daily layering with body oils or fragrance'
+      ],
+      tags: ['Body ritual', 'Soft scent', 'Unisex'],
+      badge: 'Daily hydration',
+      audience: 'Unisex',
+      rating: 4.7,
+      review_count: 87,
+      inventory: 121,
+      sku: 'LUN-QUIET-022',
+      status: 'Published',
+      featured: false
+    },
+    {
       id: 'prod_verde_1',
       store_id: 'store_verde',
       name: 'Sierra Linen Set',
@@ -457,6 +679,26 @@ module.exports = {
       },
       items: [
         { product_id: 'prod_verde_1', name: 'Sierra Linen Set', price: 214, quantity: 1, image: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80' }
+      ]
+    },
+    {
+      id: '3124',
+      store_id: 'store_lune',
+      status: 'Delivered',
+      total: 95,
+      payment_status: 'Captured',
+      payment_method: 'Card',
+      created_at: daysAgo(3, 9),
+      customer_name: 'Sade Martins',
+      customer: {
+        name: 'Sade Martins',
+        email: 'sade.martins@example.com',
+        address: '14 Admiralty Way, Lagos, Nigeria 101233'
+      },
+      items: [
+        { product_id: 'prod_lune_2', name: 'Golden Hour Vitamin C Serum', price: 39, quantity: 1, image: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1200&q=80' },
+        { product_id: 'prod_lune_3', name: 'Silk Barrier Moisturizer', price: 34, quantity: 1, image: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?auto=format&fit=crop&w=1200&q=80' },
+        { product_id: 'prod_lune_6', name: 'Quiet Skin Body Lotion', price: 22, quantity: 1, image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=1200&q=80' }
       ]
     },
     {
@@ -643,6 +885,25 @@ module.exports = {
     store_verde: {
       items: [],
       total: 0
+    },
+    store_lune: {
+      items: [
+        {
+          product_id: 'prod_lune_1',
+          name: 'Cloud Milk Cleanser',
+          price: 24,
+          quantity: 1,
+          image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1200&q=80'
+        },
+        {
+          product_id: 'prod_lune_4',
+          name: 'Soft Hold Curl Cream',
+          price: 27,
+          quantity: 1,
+          image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=1200&q=80'
+        }
+      ],
+      total: 51
     },
     store_northstar: {
       items: [],

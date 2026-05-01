@@ -9,6 +9,10 @@
   const themeClasses = storeThemeData.classes || {};
   const themeCopy = storeThemeData.copy || {};
   const themeTags = Array.isArray(storeThemeData.marketingTags) ? storeThemeData.marketingTags : [];
+  const tagList = Array.isArray(discoveryTags) ? discoveryTags : [];
+  const activeSearch = typeof searchQuery === 'string' ? searchQuery : '';
+  const currentSort = typeof activeSort === 'string' ? activeSort : 'featured';
+  const currentTag = typeof activeTag === 'string' ? activeTag : '';
 %>
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
   <div class="theme-hero-frame overflow-hidden rounded-[2.35rem] p-8 sm:p-10">
@@ -28,17 +32,58 @@
       </div>
     </div>
 
+    <form action="/products" method="get" class="mt-8 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <div class="grid gap-4 md:grid-cols-[1fr_auto]">
+        <div class="flex items-center gap-3 rounded-[1.75rem] border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <svg class="h-5 w-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M8.5 3a5.5 5.5 0 104.39 8.81l3.65 3.65a1 1 0 001.42-1.42l-3.65-3.65A5.5 5.5 0 008.5 3zm-3.5 5.5a3.5 3.5 0 117 0 3.5 3.5 0 01-7 0z" clip-rule="evenodd"></path>
+          </svg>
+          <input type="text" name="search" value="<%= activeSearch %>" maxlength="120" class="w-full border-0 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-0" placeholder="Search products, routines, or concerns">
+        </div>
+        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+          Search catalog
+        </button>
+      </div>
+      <div class="grid gap-4 md:grid-cols-2">
+        <select name="category" class="rounded-[1.75rem] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+          <option value="All">All categories</option>
+          <% categoryList.forEach((category) => { %>
+            <% const categoryValue = category.slug || category.name; %>
+            <option value="<%= categoryValue %>" <%= currentCategory === categoryValue || currentCategory === category.name ? 'selected' : '' %>><%= category.name || category.slug %></option>
+          <% }) %>
+        </select>
+        <select name="sort" class="rounded-[1.75rem] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+          <option value="featured" <%= currentSort === 'featured' ? 'selected' : '' %>>Featured first</option>
+          <option value="newest" <%= currentSort === 'newest' ? 'selected' : '' %>>Newest</option>
+          <option value="price-low" <%= currentSort === 'price-low' ? 'selected' : '' %>>Price: low to high</option>
+          <option value="price-high" <%= currentSort === 'price-high' ? 'selected' : '' %>>Price: high to low</option>
+          <option value="name" <%= currentSort === 'name' ? 'selected' : '' %>>Alphabetical</option>
+        </select>
+      </div>
+    </form>
+
     <div class="mt-8 flex flex-wrap gap-3">
-      <a href="/products" class="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium <%= currentCategory === 'All' ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary' %>">
+      <a href="/products<%= activeSearch ? `?search=${encodeURIComponent(activeSearch)}` : '' %>" class="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium <%= currentCategory === 'All' ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary' %>">
         All
       </a>
       <% categoryList.forEach((category) => { %>
         <% const isActive = currentCategory === (category.name || category.slug) || currentCategory === (category.slug || category.name); %>
-        <a href="/products?category=<%= encodeURIComponent(category.slug || category.name) %>" class="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium <%= isActive ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary' %>">
+        <a href="/products?category=<%= encodeURIComponent(category.slug || category.name) %><%= activeSearch ? `&search=${encodeURIComponent(activeSearch)}` : '' %><%= currentSort ? `&sort=${encodeURIComponent(currentSort)}` : '' %>" class="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium <%= isActive ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary' %>">
           <%= category.name || category.slug %>
         </a>
       <% }) %>
     </div>
+
+    <% if (tagList.length) { %>
+      <div class="mt-5 flex flex-wrap gap-3">
+        <% tagList.slice(0, 8).forEach((entry) => { %>
+          <% const entryValue = entry.slug || entry.name; %>
+          <a href="/products?tag=<%= encodeURIComponent(entryValue) %><%= activeSearch ? `&search=${encodeURIComponent(activeSearch)}` : '' %><%= currentSort ? `&sort=${encodeURIComponent(currentSort)}` : '' %>" class="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium <%= currentTag === entryValue || currentTag === entry.name ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary' %>">
+            <%= entry.name || entry.slug %>
+          </a>
+        <% }) %>
+      </div>
+    <% } %>
   </div>
 
   <% if (productList.length) { %>
@@ -50,9 +95,17 @@
           </a>
           <div class="space-y-4 p-5">
             <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= product.category || storeThemeData.storeTypeLabel || storeThemeData.typeLabel || 'Collection' %></p>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= product.category || storeThemeData.storeTypeLabel || storeThemeData.typeLabel || 'Collection' %></p>
+                <% if (product.badge) { %>
+                  <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700"><%= product.badge %></span>
+                <% } %>
+              </div>
               <a href="/products/<%= product.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= product.name %></a>
               <p class="mt-2 text-sm leading-6 text-slate-600"><%= product.description %></p>
+              <% if (product.rating) { %>
+                <p class="mt-3 text-sm font-medium text-slate-500"><%= product.rating.toFixed(1) %>/5 <% if (product.review_count) { %>from <%= product.review_count %> reviews<% } %></p>
+              <% } %>
               <div class="mt-3 flex items-center gap-2">
                 <span class="text-base font-semibold text-slate-950"><%= money(product.price || 0) %></span>
                 <% if (product.compare_at_price) { %>

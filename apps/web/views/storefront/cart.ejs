@@ -11,6 +11,13 @@
         <h1 class="mt-2 text-4xl font-semibold tracking-tight text-gray-900">Review your items</h1>
         <p class="mt-4 text-lg leading-8 text-gray-600">Update quantities, remove products, and keep the order summary in sync before checkout.</p>
       </div>
+      <% if (cartItems.length) { %>
+        <div class="mt-6 flex justify-end">
+          <button type="button" data-cart-clear class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary">
+            Clear cart
+          </button>
+        </div>
+      <% } %>
 
       <div data-cart-page-empty class="<%= cartItems.length ? 'hidden' : '' %> mt-10 rounded-[2rem] border border-dashed border-gray-300 bg-gray-50 px-6 py-16 text-center">
         <h2 class="text-2xl font-semibold text-gray-900">Your cart is empty</h2>
@@ -83,6 +90,14 @@
               Proceed to Checkout
             </button>
           <% } %>
+        </div>
+        <div class="mt-6 rounded-[1.75rem] bg-slate-50 p-5 text-sm leading-6 text-slate-600">
+          <p class="font-semibold text-slate-900">Why customers finish checkout faster</p>
+          <ul class="mt-3 space-y-2">
+            <li>Delivery timing and returns stay visible through checkout.</li>
+            <li>Saved accounts make repeat purchases and order tracking easier.</li>
+            <li>Wishlist and reorder flows help customers come back without friction.</li>
+          </ul>
         </div>
       </section>
     </aside>

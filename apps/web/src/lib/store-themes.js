@@ -212,6 +212,218 @@ const storeTemplates = [
     }
   },
   {
+    key: 'skincare',
+    label: 'Skin Ritual',
+    typeLabel: 'Skincare',
+    description: 'Ingredient-led discovery, routine order guidance, and softer reassurance for replenishment behavior.',
+    defaultColor: '#C2417A',
+    fontPreset: 'gallery',
+    shell: 'skincare',
+    classes: {
+      heroGrid: 'lg:grid-cols-[1fr_1fr] lg:items-center',
+      heroMediaGrid: 'sm:grid-cols-2',
+      heroCardAspect: 'aspect-[4/4.8]',
+      featureGrid: 'lg:grid-cols-3',
+      catalogHeader: 'lg:grid-cols-[0.84fr_1.16fr] lg:items-end',
+      catalogGrid: 'sm:grid-cols-2 xl:grid-cols-4',
+      catalogCardAspect: 'aspect-[4/4.8]',
+      productGrid: 'lg:grid-cols-[0.94fr_1.06fr]',
+      checkoutGrid: 'lg:grid-cols-[1.02fr_0.98fr]'
+    },
+    marketingTags: ['Ingredient clarity', 'Routine builder', 'Barrier-safe picks'],
+    featureCards: [
+      { label: 'Trust', title: 'Explain actives without overwhelming the shopper', body: 'This layout helps customers understand ingredients, layering order, and skin-type fit with calmer, clearer merchandising.' },
+      { label: 'Retention', title: 'Built for replenishment and habit-forming products', body: 'Skincare customers often return on a cadence, so account, wishlist, and checkout moments all support repeat ordering.' },
+      { label: 'Confidence', title: 'Texture, benefits, and routine fit stay visible', body: 'Benefit-led storytelling sits close to the add-to-cart action so the purchase feels informed rather than risky.' }
+    ],
+    trustPoints: ['Routine and usage cues beside the CTA', 'Visible shipping and returns reassurance', 'Supports repeat purchase and refill behavior'],
+    shoppingBenefits: [
+      { label: 'Delivery clarity', title: 'Delivery windows stay close to the buy button', body: 'Shoppers should never wonder how soon the routine arrives or whether reorders can land before they run out.' },
+      { label: 'Official-store trust', title: 'Verified brand cues reduce hesitation', body: 'Inspired by marketplace trust patterns, the storefront keeps authenticity, returns, and support signals obvious.' },
+      { label: 'Routine logic', title: 'Search and filtering work by concern, not only by SKU', body: 'Customers can browse by glow, barrier care, sensitivity, or SPF instead of memorizing exact product names.' }
+    ],
+    discoveryCollections: [
+      { label: 'By concern', title: 'Brightening and tone support', body: 'Serums and moisturizers that help shoppers build a glow-focused routine.', category: 'Serum', tag: 'Brightening' },
+      { label: 'Daily basics', title: 'Barrier-friendly essentials', body: 'Comfort-led cleansers, moisturizers, and gentle body care for repeat use.', category: 'Moisturizer', tag: 'Barrier care' },
+      { label: 'Checkout favorites', title: 'Travel-ready add-ons', body: 'Smaller essentials that pair naturally with a main routine order.', category: 'Cleanser', tag: 'Daily cleanse' }
+    ],
+    copy: {
+      eyebrow: 'Routine-led skincare',
+      heroTitle: 'A calmer skincare storefront for ingredient trust, repeat rituals, and faster replenishment.',
+      heroBody: 'Use this template for cleansers, serums, moisturizers, SPF, masks, and body rituals that need clarity more than hype.',
+      heroSupport: 'Built for skincare brands that want softer storytelling, stronger trust, and easy reordering behavior.',
+      primaryCta: 'Shop the routine',
+      secondaryCta: 'Review orders',
+      catalogLabel: 'Routine finder',
+      catalogTitle: 'Help shoppers browse by need, not just by product type.',
+      catalogBody: 'The catalog works best when customers can move through concerns, textures, and ingredients with very little friction.',
+      productLabel: 'Routine detail',
+      productPromise: 'Show where a product belongs in the routine, what skin need it serves, and why customers can trust it.',
+      checkoutLabel: 'Restock checkout',
+      checkoutTitle: 'A softer checkout for habit-driven purchases.',
+      checkoutBody: 'Saved details, clear delivery promises, and calm trust copy keep the path to repeat purchase short and reassuring.'
+    }
+  },
+  {
+    key: 'haircare',
+    label: 'Hair Ritual House',
+    typeLabel: 'Haircare',
+    description: 'Wash-day discovery, scalp-first merchandising, and stronger guidance for texture-led routines.',
+    defaultColor: '#A21CAF',
+    fontPreset: 'editorial',
+    shell: 'haircare',
+    classes: {
+      heroGrid: 'lg:grid-cols-[1.02fr_0.98fr] lg:items-center',
+      heroMediaGrid: 'sm:grid-cols-2',
+      heroCardAspect: 'aspect-[4/4.8]',
+      featureGrid: 'lg:grid-cols-3',
+      catalogHeader: 'lg:grid-cols-[0.88fr_1.12fr] lg:items-end',
+      catalogGrid: 'sm:grid-cols-2 xl:grid-cols-4',
+      catalogCardAspect: 'aspect-[4/4.8]',
+      productGrid: 'lg:grid-cols-[0.96fr_1.04fr]',
+      checkoutGrid: 'lg:grid-cols-[1fr_1fr]'
+    },
+    marketingTags: ['Wash-day picks', 'Scalp care', 'Texture-friendly'],
+    featureCards: [
+      { label: 'Routine', title: 'Guide wash-day ordering naturally', body: 'Haircare shoppers often build a sequence, so this template supports pairings between shampoo, treatments, creams, and scalp products.' },
+      { label: 'Education', title: 'Texture and scalp guidance stay readable', body: 'The layout leaves room for curl-type notes, protective-style compatibility, and usage frequency without turning clinical.' },
+      { label: 'Loyalty', title: 'Repeat purchase is part of the design', body: 'Wishlist, reorder, and product detail rhythms all support customers coming back for familiar staples.' }
+    ],
+    trustPoints: ['Strong fit for curl care and scalp care', 'Merchandising supports routines and pairings', 'Checkout keeps delivery, returns, and support cues easy to scan'],
+    shoppingBenefits: [
+      { label: 'Concern-led browse', title: 'Customers can shop by scalp need or texture', body: 'Category discovery should feel more like a helpful consultation than a flat list of jars and tubes.' },
+      { label: 'Trust timing', title: 'Delivery and reorder cues stay visible for staples', body: 'Haircare replenishment matters, so the experience keeps “when will this arrive?” obvious from list page to checkout.' },
+      { label: 'Bundle behavior', title: 'The UI gently encourages routine-building baskets', body: 'Cross-sells feel useful when they reflect actual wash-day logic instead of generic upsells.' }
+    ],
+    discoveryCollections: [
+      { label: 'Scalp first', title: 'Reset buildup and comfort', body: 'Scalp serums, clarifiers, and treatments for lighter-feeling roots.', category: 'Haircare', tag: 'Scalp care' },
+      { label: 'Wash day', title: 'Define, soften, and seal', body: 'Creams, leave-ins, and post-wash essentials designed to work together.', category: 'Haircare', tag: 'Wash day' },
+      { label: 'Shared staples', title: 'Unisex daily care', body: 'Low-fuss essentials with broader scent and styling appeal.', category: 'Haircare', tag: 'Unisex' }
+    ],
+    copy: {
+      eyebrow: 'Texture-led care',
+      heroTitle: 'A haircare storefront built for wash-day routines, scalp comfort, and repeat buying.',
+      heroBody: 'Use it for curl care, scalp treatments, leave-ins, serums, oils, and routine sets that need better guidance than a generic grid can offer.',
+      heroSupport: 'Designed for brands that want clearer pairing logic and stronger reorder behavior across mobile and desktop.',
+      primaryCta: 'Shop wash-day',
+      secondaryCta: 'Review orders',
+      catalogLabel: 'Routine-led catalog',
+      catalogTitle: 'Let shoppers browse by wash day, scalp need, and texture support.',
+      catalogBody: 'This layout gives room to explain how products fit together so customers can build a better basket on the first visit.',
+      productLabel: 'Texture-first detail',
+      productPromise: 'Place usage order, texture fit, and support cues right beside the conversion moment.',
+      checkoutLabel: 'Routine checkout',
+      checkoutTitle: 'A cleaner finish for repeat haircare orders.',
+      checkoutBody: 'The final step keeps enough trust language to feel supportive while staying fast enough for staple-product reorders.'
+    }
+  },
+  {
+    key: 'womens-fashion',
+    label: 'Women\'s Studio',
+    typeLabel: 'Women\'s Fashion',
+    description: 'Editorial warmth, fit-first product detail, and a more polished fashion rhythm for women-focused catalogs.',
+    defaultColor: '#BE185D',
+    fontPreset: 'editorial',
+    shell: 'womens-fashion',
+    classes: {
+      heroGrid: 'lg:grid-cols-[1fr_1fr] lg:items-center',
+      heroMediaGrid: 'sm:grid-cols-2',
+      heroCardAspect: 'aspect-[4/5]',
+      featureGrid: 'lg:grid-cols-3',
+      catalogHeader: 'lg:grid-cols-[0.8fr_1.2fr] lg:items-end',
+      catalogGrid: 'sm:grid-cols-2 xl:grid-cols-4',
+      catalogCardAspect: 'aspect-[4/5]',
+      productGrid: 'lg:grid-cols-[0.92fr_1.08fr]',
+      checkoutGrid: 'lg:grid-cols-[1.04fr_0.96fr]'
+    },
+    marketingTags: ['New-in edits', 'Fit guidance', 'Giftable picks'],
+    featureCards: [
+      { label: 'Editorial', title: 'Merchandising feels styled instead of crowded', body: 'Collections, drops, and best-sellers are arranged to feel directional while still conversion-focused.' },
+      { label: 'Confidence', title: 'Fit and delivery reassurance stay visible', body: 'This template helps size, return, and shipping cues stay close to the product detail flow.' },
+      { label: 'Retention', title: 'Wishlist and reorder behavior are built in', body: 'A polished browse experience works even harder when customers can save favorites and revisit their best buys quickly.' }
+    ],
+    trustPoints: ['Fit confidence near the CTA', 'Stronger gift and returns reassurance', 'Editorial pacing without extra clutter'],
+    shoppingBenefits: [
+      { label: 'Discovery', title: 'Search and category flows feel styled', body: 'Customers can move from inspiration to specific product quickly, which is one of the strongest fashion conversion patterns.' },
+      { label: 'Trust', title: 'Size and return policy never feel hidden', body: 'The experience keeps the common “Will this work for me?” questions close to the decision point.' },
+      { label: 'Speed', title: 'Quick-add behavior supports higher-intent browsing', body: 'Shoppers can keep momentum while still saving pieces to revisit later.' }
+    ],
+    discoveryCollections: [
+      { label: 'Occasion', title: 'Event-ready looks', body: 'Collections merchandised around elevated evenings, gifting moments, and standout outfits.', category: 'Fashion', tag: 'New in' },
+      { label: 'Daily wear', title: 'Soft essentials and repeat favorites', body: 'Comfort-driven pieces that still feel styled and premium.', category: 'Fashion', tag: 'Wardrobe staple' },
+      { label: 'Accessories', title: 'Finish the edit', body: 'Bags, jewelry, shoes, and add-ons that naturally lift basket size.', category: 'Accessories', tag: 'Giftable' }
+    ],
+    copy: {
+      eyebrow: 'Styled fashion edit',
+      heroTitle: 'A more polished women-focused storefront for fit confidence, quick discovery, and repeat browsing.',
+      heroBody: 'Use this template for apparel, accessories, shoes, handbags, and elevated essentials that benefit from a softer editorial rhythm.',
+      heroSupport: 'Built to keep confidence high from category browse to checkout without flattening the brand into a generic grid.',
+      primaryCta: 'Shop the edit',
+      secondaryCta: 'Save favorites',
+      catalogLabel: 'Styled collection',
+      catalogTitle: 'Help shoppers browse by mood, fit, and occasion.',
+      catalogBody: 'The catalog balances inspiration and clarity so discovery stays enjoyable but the next action always feels obvious.',
+      productLabel: 'Fit-led detail',
+      productPromise: 'Keep styling notes, fit reassurance, and shipping clarity close to the buy moment.',
+      checkoutLabel: 'Styled checkout',
+      checkoutTitle: 'A composed finish for fashion purchases.',
+      checkoutBody: 'The final step stays elegant and fast, with enough reassurance around returns and delivery to keep hesitation low.'
+    }
+  },
+  {
+    key: 'unisex-lifestyle',
+    label: 'Unisex Edit',
+    typeLabel: 'Unisex Lifestyle',
+    description: 'Versatile merchandising for shared essentials, everyday care, wellness, and cross-category lifestyle brands.',
+    defaultColor: '#0F766E',
+    fontPreset: 'jakarta',
+    shell: 'unisex-lifestyle',
+    classes: {
+      heroGrid: 'lg:grid-cols-[1fr_1fr] lg:items-center',
+      heroMediaGrid: 'sm:grid-cols-2',
+      heroCardAspect: 'aspect-[4/4.7]',
+      featureGrid: 'lg:grid-cols-3',
+      catalogHeader: 'lg:grid-cols-[0.86fr_1.14fr] lg:items-end',
+      catalogGrid: 'sm:grid-cols-2 xl:grid-cols-4',
+      catalogCardAspect: 'aspect-[4/4.7]',
+      productGrid: 'lg:grid-cols-[0.96fr_1.04fr]',
+      checkoutGrid: 'lg:grid-cols-[1fr_1fr]'
+    },
+    marketingTags: ['Everyday essentials', 'Shared favorites', 'Giftable basics'],
+    featureCards: [
+      { label: 'Versatility', title: 'Built for mixed catalogs without feeling generic', body: 'Use this template when the brand spans body care, travel, wellness, accessories, fragrance, or shared daily-use products.' },
+      { label: 'Clarity', title: 'Cross-category discovery still feels organized', body: 'The experience keeps product groups clear without forcing every brand into one narrow merchandising mold.' },
+      { label: 'Retention', title: 'Excellent for reorder and repeat-browse behavior', body: 'Shared lifestyle staples benefit from saved lists, recent history, and a checkout that stays fast on return visits.' }
+    ],
+    trustPoints: ['Works well for shared-use essentials', 'Search and filters stay broad but useful', 'Strong fit for repeat purchase and gifting'],
+    shoppingBenefits: [
+      { label: 'Marketplace trust', title: 'Authenticity and support cues are explicit', body: 'Borrowing from stronger marketplace experiences, the store keeps trust points visible without feeling noisy.' },
+      { label: 'Discovery', title: 'Catalog pages support both browse and mission shopping', body: 'Shoppers can either explore broadly or search for a known staple without hitting a dead end.' },
+      { label: 'Reorder', title: 'Account and order pages encourage easy return visits', body: 'Inspired by stronger DTC account patterns, the customer area keeps buy-again behavior straightforward.' }
+    ],
+    discoveryCollections: [
+      { label: 'Daily use', title: 'Shared everyday staples', body: 'Products designed to live in routines, bags, bathrooms, and workdays without much explanation.', category: 'Wellness', tag: 'Unisex' },
+      { label: 'Giftable', title: 'Low-risk premium gifting', body: 'Universal products that work well for celebrations, travel packs, and premium bundles.', category: 'Lifestyle', tag: 'Giftable' },
+      { label: 'Restock', title: 'Fast repeat-purchase essentials', body: 'Products customers come back for often and want to find quickly.', category: 'Body Care', tag: 'Daily hydration' }
+    ],
+    copy: {
+      eyebrow: 'Shared essentials',
+      heroTitle: 'A unisex lifestyle storefront for shared routines, everyday products, and calmer repeat purchase behavior.',
+      heroBody: 'Use it for body care, fragrance, wellness, accessories, travel gear, and brands that sell versatile essentials to broad audiences.',
+      heroSupport: 'The layout is structured enough for search-led shopping but relaxed enough to support slower discovery too.',
+      primaryCta: 'Shop essentials',
+      secondaryCta: 'Open wishlist',
+      catalogLabel: 'Everyday edit',
+      catalogTitle: 'Keep broad catalogs feeling curated and easy to move through.',
+      catalogBody: 'Search, category browsing, and quick-add behavior all work together so the customer can either explore or restock fast.',
+      productLabel: 'Everyday detail',
+      productPromise: 'Clear benefit language, trust cues, and delivery expectations keep shared-use products simple to buy again.',
+      checkoutLabel: 'Easy checkout',
+      checkoutTitle: 'A clean finish for lower-friction repeat orders.',
+      checkoutBody: 'The final step favors clarity, saved context, and quick confidence for returning customers.'
+    }
+  },
+  {
     key: 'gourmet',
     label: 'Pantry Market',
     typeLabel: 'Food & Beverage',
@@ -417,6 +629,34 @@ const storeTypes = [
     recommendedFontPreset: 'editorial'
   },
   {
+    key: 'skincare',
+    label: 'Skincare',
+    description: 'Ingredient-led routines, replenishment products, and calmer educational merchandising.',
+    recommendedTemplateKey: 'skincare',
+    recommendedFontPreset: 'gallery'
+  },
+  {
+    key: 'haircare',
+    label: 'Haircare',
+    description: 'Wash-day systems, scalp products, texture-led merchandising, and routine pairings.',
+    recommendedTemplateKey: 'haircare',
+    recommendedFontPreset: 'editorial'
+  },
+  {
+    key: 'womens-fashion',
+    label: 'Women\'s Fashion',
+    description: 'Editorial browsing, fit-first PDPs, and styled merchandising for women-focused assortments.',
+    recommendedTemplateKey: 'womens-fashion',
+    recommendedFontPreset: 'editorial'
+  },
+  {
+    key: 'unisex-lifestyle',
+    label: 'Unisex Lifestyle',
+    description: 'Shared essentials, wellness, travel, accessories, and mixed lifestyle catalogs.',
+    recommendedTemplateKey: 'unisex-lifestyle',
+    recommendedFontPreset: 'jakarta'
+  },
+  {
     key: 'gourmet',
     label: 'Food & Beverage',
     description: 'Packaged foods, drinks, pantry goods, and gifting assortments with pairing-friendly merchandising.',
@@ -467,8 +707,24 @@ const inferStoreTypeKey = (store = {}) => {
     return 'electronics';
   }
 
-  if (normalizedCategories.some((entry) => ['beauty', 'skincare', 'fragrance', 'cosmetics'].includes(entry))) {
+  if (normalizedCategories.some((entry) => ['cleanser', 'serum', 'moisturizer', 'spf', 'sunscreen', 'mask', 'body care', 'skincare'].includes(entry))) {
+    return 'skincare';
+  }
+
+  if (normalizedCategories.some((entry) => ['haircare', 'hair', 'scalp', 'curl', 'leave-in', 'shampoo', 'conditioner'].includes(entry))) {
+    return 'haircare';
+  }
+
+  if (normalizedCategories.some((entry) => ['beauty', 'fragrance', 'cosmetics', 'makeup'].includes(entry))) {
     return 'beauty';
+  }
+
+  if (normalizedCategories.some((entry) => ['women', 'dress', 'dresses', 'heels', 'handbags', 'womens fashion', 'female'].includes(entry))) {
+    return 'womens-fashion';
+  }
+
+  if (normalizedCategories.some((entry) => ['unisex', 'lifestyle', 'wellness', 'body care', 'essentials'].includes(entry))) {
+    return 'unisex-lifestyle';
   }
 
   if (normalizedCategories.some((entry) => ['food', 'beverage', 'coffee', 'snacks'].includes(entry))) {

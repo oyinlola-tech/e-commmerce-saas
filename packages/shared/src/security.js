@@ -4,6 +4,21 @@ const DOMAIN_LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
 const HOSTNAME_PATTERN = new RegExp(`^(?=.{1,253}$)${DOMAIN_LABEL}(?:\\.${DOMAIN_LABEL})*$`, 'i');
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
+const takeBeforeFirstDelimiter = (value = '', delimiters = []) => {
+  let endIndex = value.length;
+
+  for (const delimiter of delimiters) {
+    const index = value.indexOf(delimiter);
+    if (index !== -1 && index < endIndex) {
+      endIndex = index;
+    }
+  }
+
+  return endIndex === value.length
+    ? value
+    : value.slice(0, endIndex);
+};
+
 const stripPort = (value = '') => {
   const normalized = String(value || '').trim();
 
@@ -44,11 +59,7 @@ const normalizeHostname = (value = '') => {
     })()
     : raw;
 
-  const firstSegment = withoutProtocol
-    .split(',')[0]
-    .trim()
-    .replace(/\/.*$/, '')
-    .replace(/[?#].*$/, '');
+  const firstSegment = takeBeforeFirstDelimiter(withoutProtocol.trim(), [',', '/', '?', '#']).trim();
 
   const hostname = stripPort(firstSegment).toLowerCase();
   if (!hostname) {

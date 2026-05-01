@@ -6,12 +6,12 @@ const createGatewayOpenApiSpec = (config) => {
         {
           url: `https://${config.rootDomain}`,
           description: 'Platform gateway',
-          x-aisleAudience: 'platform'
+          'x-aisleAudience': 'platform'
         },
         {
           url: `https://{storeSubdomain}.${config.rootDomain}`,
           description: 'Storefront gateway',
-          x-aisleAudience: 'storefront',
+          'x-aisleAudience': 'storefront',
           variables: {
             storeSubdomain: {
               default: 'aisle',
@@ -24,12 +24,12 @@ const createGatewayOpenApiSpec = (config) => {
         {
           url: `http://localhost${localPortSuffix}`,
           description: 'Local platform gateway',
-          x-aisleAudience: 'platform'
+          'x-aisleAudience': 'platform'
         },
         {
           url: `http://{storeSubdomain}.localhost${localPortSuffix}`,
           description: 'Local storefront gateway',
-          x-aisleAudience: 'storefront',
+          'x-aisleAudience': 'storefront',
           variables: {
             storeSubdomain: {
               default: 'aisle',
@@ -53,6 +53,7 @@ const createGatewayOpenApiSpec = (config) => {
       { name: 'Platform Auth', description: 'Platform owner and staff authentication.' },
       { name: 'Storefront Auth', description: 'Customer registration and login.' },
       { name: 'Owner Stores', description: 'Owner-scoped store management endpoints.' },
+      { name: 'Compliance', description: 'Owner identity and business verification workflows.' },
       { name: 'Products', description: 'Storefront product browsing.' },
       { name: 'Cart', description: 'Customer cart lifecycle.' },
       { name: 'Orders', description: 'Checkout and order management.' },
@@ -93,6 +94,25 @@ const createGatewayOpenApiSpec = (config) => {
             email: { type: 'string', format: 'email' },
             role: { type: 'string' },
             status: { type: 'string' }
+          }
+        },
+        Store: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            owner_id: { type: 'integer' },
+            name: { type: 'string' },
+            subdomain: { type: 'string' },
+            custom_domain: { type: 'string', nullable: true },
+            logo_url: { type: 'string', nullable: true },
+            theme_color: { type: 'string', nullable: true },
+            store_type: { type: 'string', nullable: true },
+            template_key: { type: 'string', nullable: true },
+            font_preset: { type: 'string', nullable: true },
+            support_email: { type: 'string', nullable: true },
+            contact_phone: { type: 'string', nullable: true },
+            is_active: { type: 'boolean' },
+            ssl_status: { type: 'string', nullable: true }
           }
         },
         Customer: {
@@ -189,6 +209,17 @@ const createGatewayOpenApiSpec = (config) => {
             status: { type: 'string' },
             provider_reference: { type: 'string', nullable: true },
             payment_reference: { type: 'string', nullable: true }
+          }
+        },
+        PaymentConfig: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            store_id: { type: 'integer' },
+            provider: { type: 'string' },
+            public_key: { type: 'string', nullable: true },
+            status: { type: 'string', nullable: true },
+            has_secret_key: { type: 'boolean' }
           }
         },
         PaymentProviderOption: {
@@ -334,6 +365,334 @@ const createGatewayOpenApiSpec = (config) => {
           }
         }
       },
+      '/api/platform/auth/me': {
+        get: {
+          tags: ['Platform Auth'],
+          summary: 'Get the signed platform user',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          responses: {
+            '200': {
+              description: 'Current platform user',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      user: { $ref: '#/components/schemas/PlatformUser' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/platform/stores': {
+        get: {
+          tags: ['Owner Stores'],
+          summary: 'List stores available to the signed platform user',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          responses: {
+            '200': {
+              description: 'Store list',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      stores: {
+                        type: 'array',
+                        items: { $ref: '#/components/schemas/Store' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        post: {
+          tags: ['Owner Stores'],
+          summary: 'Create a store for the signed owner',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['name', 'subdomain'],
+                  properties: {
+                    name: { type: 'string' },
+                    subdomain: { type: 'string' },
+                    custom_domain: { type: 'string' },
+                    logo_url: { type: 'string', format: 'uri' },
+                    theme_color: { type: 'string' },
+                    store_type: { type: 'string' },
+                    template_key: { type: 'string' },
+                    font_preset: { type: 'string' },
+                    support_email: { type: 'string', format: 'email' },
+                    contact_phone: { type: 'string' }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '201': {
+              description: 'Created store',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      store: { $ref: '#/components/schemas/Store' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/platform/stores/{storeId}': {
+        get: {
+          tags: ['Owner Stores'],
+          summary: 'Get one store',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          parameters: [
+            {
+              name: 'storeId',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer', minimum: 1 }
+            }
+          ],
+          responses: {
+            '200': {
+              description: 'Store detail',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      store: { $ref: '#/components/schemas/Store' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        put: {
+          tags: ['Owner Stores'],
+          summary: 'Update one store',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          parameters: [
+            {
+              name: 'storeId',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer', minimum: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    custom_domain: { type: 'string' },
+                    logo_url: { type: 'string', format: 'uri' },
+                    theme_color: { type: 'string' },
+                    store_type: { type: 'string' },
+                    template_key: { type: 'string' },
+                    font_preset: { type: 'string' },
+                    support_email: { type: 'string', format: 'email' },
+                    contact_phone: { type: 'string' },
+                    is_active: { type: 'boolean' },
+                    ssl_status: { type: 'string' }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '200': {
+              description: 'Updated store',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      store: { $ref: '#/components/schemas/Store' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/platform/stores/{storeId}/access-check': {
+        get: {
+          tags: ['Owner Stores'],
+          summary: 'Check whether the signed user can access a store',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          parameters: [
+            {
+              name: 'storeId',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer', minimum: 1 }
+            },
+            {
+              name: 'user_id',
+              in: 'query',
+              schema: { type: 'integer', minimum: 1 }
+            }
+          ],
+          responses: {
+            '200': {
+              description: 'Access decision',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      allowed: { type: 'boolean' },
+                      store: { $ref: '#/components/schemas/Store' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/platform/compliance/me': {
+        get: {
+          tags: ['Compliance'],
+          summary: 'Get the signed owner compliance profile bundle',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          responses: {
+            '200': {
+              description: 'KYC, KYB, documents, and reviews for the signed owner'
+            }
+          }
+        }
+      },
+      '/api/platform/compliance/kyc': {
+        post: {
+          tags: ['Compliance'],
+          summary: 'Submit or update KYC details',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['first_name', 'last_name'],
+                  properties: {
+                    first_name: { type: 'string' },
+                    last_name: { type: 'string' },
+                    bvn: { type: 'string' },
+                    country: { type: 'string' },
+                    metadata: { type: 'object', additionalProperties: true }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '201': {
+              description: 'KYC profile saved'
+            }
+          }
+        }
+      },
+      '/api/platform/compliance/kyb': {
+        post: {
+          tags: ['Compliance'],
+          summary: 'Submit or update KYB details',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['business_name'],
+                  properties: {
+                    store_id: { type: 'integer' },
+                    business_name: { type: 'string' },
+                    registration_number: { type: 'string' },
+                    country: { type: 'string' },
+                    metadata: { type: 'object', additionalProperties: true }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '201': {
+              description: 'KYB profile saved'
+            }
+          }
+        }
+      },
+      '/api/platform/compliance/submissions': {
+        get: {
+          tags: ['Compliance'],
+          summary: 'List compliance submissions',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          parameters: [
+            {
+              name: 'owner_id',
+              in: 'query',
+              schema: { type: 'integer', minimum: 1 }
+            }
+          ],
+          responses: {
+            '200': {
+              description: 'KYC and KYB submissions'
+            }
+          }
+        }
+      },
       '/api/customers/register': {
         post: {
           tags: ['Storefront Auth'],
@@ -421,6 +780,79 @@ const createGatewayOpenApiSpec = (config) => {
           }
         }
       },
+      '/api/customers/me': {
+        get: {
+          tags: ['Storefront Auth'],
+          summary: 'Get the signed storefront customer',
+          security: [
+            { customerTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          responses: {
+            '200': {
+              description: 'Current storefront customer',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      customer: { $ref: '#/components/schemas/Customer' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        put: {
+          tags: ['Storefront Auth'],
+          summary: 'Update the signed storefront customer',
+          security: [
+            { customerTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    phone: { type: 'string' },
+                    addresses: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        additionalProperties: true
+                      }
+                    },
+                    metadata: {
+                      type: 'object',
+                      additionalProperties: true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '200': {
+              description: 'Updated storefront customer',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      customer: { $ref: '#/components/schemas/Customer' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       '/api/owner/stores/{storeId}/logo': {
         post: {
           tags: ['Owner Stores'],
@@ -472,6 +904,260 @@ const createGatewayOpenApiSpec = (config) => {
           }
         }
       },
+      '/api/owner/stores/{storeId}/customers': {
+        get: {
+          tags: ['Owner Stores'],
+          summary: 'List customers for one owner-scoped store',
+          security: [
+            { bearerAuth: [] },
+            { platformTokenCookie: [] }
+          ],
+          parameters: [
+            {
+              name: 'storeId',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer', minimum: 1 }
+            }
+          ],
+          responses: {
+            '200': {
+              description: 'Store customer list',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      customers: {
+                        type: 'array',
+                        items: { $ref: '#/components/schemas/Customer' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/owner/stores/{storeId}/products': {
+        get: {
+          tags: ['Products'],
+          summary: 'List products for one owner-scoped store',
+          security: [
+            { bearerAuth: [] },
+            { platformTokenCookie: [] }
+          ],
+          parameters: [
+            { name: 'storeId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } },
+            { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+            { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+            { name: 'search', in: 'query', schema: { type: 'string' } },
+            { name: 'status', in: 'query', schema: { type: 'string', enum: ['draft', 'published', 'archived', 'deleted'] } },
+            { name: 'category', in: 'query', schema: { type: 'string' } }
+          ],
+          responses: {
+            '200': {
+              description: 'Owner product list'
+            }
+          }
+        },
+        post: {
+          tags: ['Products'],
+          summary: 'Create a product for one owner-scoped store',
+          security: [
+            { bearerAuth: [] },
+            { platformTokenCookie: [] }
+          ],
+          parameters: [
+            { name: 'storeId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['title', 'price'],
+                  properties: {
+                    title: { type: 'string' },
+                    slug: { type: 'string' },
+                    category: { type: 'string' },
+                    description: { type: 'string' },
+                    price: { type: 'number' },
+                    compare_at_price: { type: 'number' },
+                    sku: { type: 'string' },
+                    inventory_count: { type: 'integer' },
+                    images: {
+                      type: 'array',
+                      items: { type: 'string', format: 'uri' }
+                    },
+                    status: { type: 'string', enum: ['draft', 'published', 'archived'] }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '201': {
+              description: 'Created product',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      product: { $ref: '#/components/schemas/Product' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/owner/stores/{storeId}/products/{productId}': {
+        put: {
+          tags: ['Products'],
+          summary: 'Update a product for one owner-scoped store',
+          security: [
+            { bearerAuth: [] },
+            { platformTokenCookie: [] }
+          ],
+          parameters: [
+            { name: 'storeId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } },
+            { name: 'productId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string' },
+                    slug: { type: 'string' },
+                    category: { type: 'string' },
+                    description: { type: 'string' },
+                    price: { type: 'number' },
+                    compare_at_price: { type: 'number' },
+                    sku: { type: 'string' },
+                    inventory_count: { type: 'integer' },
+                    images: {
+                      type: 'array',
+                      items: { type: 'string', format: 'uri' }
+                    },
+                    status: { type: 'string', enum: ['draft', 'published', 'archived'] }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '200': {
+              description: 'Updated product'
+            }
+          }
+        },
+        delete: {
+          tags: ['Products'],
+          summary: 'Delete a product for one owner-scoped store',
+          security: [
+            { bearerAuth: [] },
+            { platformTokenCookie: [] }
+          ],
+          parameters: [
+            { name: 'storeId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } },
+            { name: 'productId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } }
+          ],
+          responses: {
+            '204': {
+              description: 'Product deleted'
+            }
+          }
+        }
+      },
+      '/api/owner/stores/{storeId}/orders': {
+        get: {
+          tags: ['Orders'],
+          summary: 'List orders for one owner-scoped store',
+          security: [
+            { bearerAuth: [] },
+            { platformTokenCookie: [] }
+          ],
+          parameters: [
+            { name: 'storeId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } },
+            { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+            { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }
+          ],
+          responses: {
+            '200': {
+              description: 'Owner order list'
+            }
+          }
+        }
+      },
+      '/api/owner/stores/{storeId}/orders/{orderId}': {
+        get: {
+          tags: ['Orders'],
+          summary: 'Get one order for an owner-scoped store',
+          security: [
+            { bearerAuth: [] },
+            { platformTokenCookie: [] }
+          ],
+          parameters: [
+            { name: 'storeId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } },
+            { name: 'orderId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } }
+          ],
+          responses: {
+            '200': {
+              description: 'Order detail',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      order: { $ref: '#/components/schemas/Order' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/owner/stores/{storeId}/orders/{orderId}/status': {
+        patch: {
+          tags: ['Orders'],
+          summary: 'Update an order status for an owner-scoped store',
+          security: [
+            { bearerAuth: [] },
+            { platformTokenCookie: [] }
+          ],
+          parameters: [
+            { name: 'storeId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } },
+            { name: 'orderId', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['status'],
+                  properties: {
+                    status: { type: 'string' }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '200': {
+              description: 'Updated order'
+            }
+          }
+        }
+      },
       '/api/products': {
         get: {
           tags: ['Products'],
@@ -480,6 +1166,8 @@ const createGatewayOpenApiSpec = (config) => {
             { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
             { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
             { name: 'search', in: 'query', schema: { type: 'string' } },
+            { name: 'sort', in: 'query', schema: { type: 'string', enum: ['featured', 'newest', 'price-low', 'price-high', 'name'] } },
+            { name: 'tag', in: 'query', schema: { type: 'string' } },
             { name: 'category', in: 'query', schema: { type: 'string' } },
             { name: 'min_price', in: 'query', schema: { type: 'number' } },
             { name: 'max_price', in: 'query', schema: { type: 'number' } }
@@ -740,6 +1428,39 @@ const createGatewayOpenApiSpec = (config) => {
           }
         }
       },
+      '/api/orders/{id}': {
+        get: {
+          tags: ['Orders'],
+          summary: 'Get one order for the signed customer',
+          security: [
+            { customerTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer', minimum: 1 }
+            }
+          ],
+          responses: {
+            '200': {
+              description: 'Order detail',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      order: { $ref: '#/components/schemas/Order' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       '/api/platform/billing/plans': {
         get: {
           tags: ['Billing'],
@@ -877,7 +1598,20 @@ const createGatewayOpenApiSpec = (config) => {
           ],
           responses: {
             '200': {
-              description: 'Provider configuration rows'
+              description: 'Provider configuration rows',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      configs: {
+                        type: 'array',
+                        items: { $ref: '#/components/schemas/PaymentConfig' }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -915,7 +1649,174 @@ const createGatewayOpenApiSpec = (config) => {
           },
           responses: {
             '201': {
-              description: 'Provider configuration saved'
+              description: 'Provider configuration saved',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      config: {
+                        allOf: [
+                          { $ref: '#/components/schemas/PaymentConfig' },
+                          {
+                            type: 'object',
+                            properties: {
+                              secret_key_preview: { type: 'string', nullable: true }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/owner/stores/{storeId}/settings': {
+        get: {
+          tags: ['Owner Stores'],
+          summary: 'Get owner-scoped store settings',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          parameters: [
+            {
+              name: 'storeId',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer', minimum: 1 }
+            }
+          ],
+          responses: {
+            '200': {
+              description: 'Store settings bundle',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      store: { $ref: '#/components/schemas/Store' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        put: {
+          tags: ['Owner Stores'],
+          summary: 'Update owner-scoped store settings',
+          security: [
+            { platformTokenCookie: [] },
+            { bearerAuth: [] }
+          ],
+          parameters: [
+            {
+              name: 'storeId',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer', minimum: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    custom_domain: { type: 'string' },
+                    logo_url: { type: 'string', format: 'uri' },
+                    theme_color: { type: 'string' },
+                    store_type: { type: 'string' },
+                    template_key: { type: 'string' },
+                    font_preset: { type: 'string' },
+                    support_email: { type: 'string', format: 'email' },
+                    contact_phone: { type: 'string' },
+                    is_active: { type: 'boolean' },
+                    ssl_status: { type: 'string' }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '200': {
+              description: 'Updated store settings',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      store: { $ref: '#/components/schemas/Store' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/payments/webhooks/{provider}': {
+        post: {
+          tags: ['Payments'],
+          summary: 'Receive a payment provider webhook',
+          parameters: [
+            {
+              name: 'provider',
+              in: 'path',
+              required: true,
+              schema: { type: 'string', enum: ['paystack', 'flutterwave'] }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  additionalProperties: true
+                }
+              }
+            }
+          },
+          responses: {
+            '200': {
+              description: 'Webhook accepted'
+            }
+          }
+        }
+      },
+      '/payments/mock/{provider}/{reference}': {
+        post: {
+          tags: ['Payments'],
+          summary: 'Trigger the mock payment callback flow',
+          parameters: [
+            {
+              name: 'provider',
+              in: 'path',
+              required: true,
+              schema: { type: 'string', enum: ['paystack', 'flutterwave'] }
+            },
+            {
+              name: 'reference',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' }
+            },
+            {
+              name: 'status',
+              in: 'query',
+              schema: { type: 'string', example: 'success' }
+            }
+          ],
+          responses: {
+            '200': {
+              description: 'Mock callback processed'
             }
           }
         }

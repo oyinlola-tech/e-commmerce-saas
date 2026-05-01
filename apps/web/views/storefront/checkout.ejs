@@ -8,6 +8,11 @@
   const themeClasses = storeThemeData.classes || {};
   const themeCopy = storeThemeData.copy || {};
   const themeTrustPoints = Array.isArray(storeThemeData.trustPoints) ? storeThemeData.trustPoints : [];
+  const checkoutHighlights = [
+    store && store.fulfillment_sla ? `Dispatch promise: ${store.fulfillment_sla}` : 'Dispatch promise: Orders move into fulfillment quickly after payment confirmation.',
+    store && store.return_window_days ? `${store.return_window_days}-day returns on eligible orders.` : 'Flexible returns on eligible orders.',
+    store && store.support_email ? `Support: ${store.support_email}` : 'Support stays available after purchase if you need delivery help.'
+  ];
 %>
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
   <div class="grid gap-8 <%= themeClasses.checkoutGrid || 'lg:grid-cols-[1.05fr_0.95fr]' %>">
@@ -130,6 +135,17 @@
           </ul>
         </section>
       <% } %>
+
+      <section class="theme-panel rounded-[2rem] p-6">
+        <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Before you pay</p>
+        <div class="mt-4 space-y-4">
+          <% checkoutHighlights.forEach((point) => { %>
+            <div class="rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4">
+              <p class="text-sm leading-6 text-slate-600"><%= point %></p>
+            </div>
+          <% }) %>
+        </div>
+      </section>
     </aside>
   </div>
 </section>

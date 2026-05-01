@@ -110,6 +110,9 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | `npm run start:support-service` | Reserved for future `support-service` implementation |
 | `npm run start:chat-service` | Reserved for future `chat-service` implementation |
 | `npm run start:notification-service` | Reserved for future `notification-service` implementation |
+| `npm run swagger` | Starts a Swagger UI preview on `http://127.0.0.1:4015`, exports the gateway OpenAPI spec, and exposes the API request collection |
+| `npm run swagger:export` | Writes the current gateway OpenAPI document to `docs/swagger/gateway.openapi.json` without starting the preview server |
+| `npm run api:request -- --service <name> --path <route>` | Sends a signed internal request directly to a service for endpoints that are not exposed through the gateway |
 | `npm run lint` | Runs the workspace ESLint configuration |
 | `npm run smoke` | Probes health/docs/storefront endpoints for a lightweight end-to-end check |
 
@@ -145,6 +148,7 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | `COOKIE_DOMAIN` | empty | Optional cookie domain override |
 | `COOKIE_SAMESITE` | `lax` | SameSite mode for auth and session cookies |
 | `STORE_LOGO_UPLOAD_DIR` | `<workspace>/uploads/logos` | Shared logo upload directory for store assets |
+| `SWAGGER_PORT` | `4015` | Port used by `npm run swagger` for the standalone API explorer |
 | `USER_SERVICE_URL` | `http://127.0.0.1:4101` | User service URL |
 | `STORE_SERVICE_URL` | `http://127.0.0.1:4102` | Store service URL |
 | `COMPLIANCE_SERVICE_URL` | `http://127.0.0.1:4103` | Compliance service URL |
@@ -183,11 +187,13 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 - Auth, session, and wishlist cookies are set with `HttpOnly`, `SameSite=Lax`, production `Secure`, and HTTPS-aware write guards.
 - `helmet`, a stricter CSP, compression, static caching, request timeouts, and structured logging are enabled across the main entrypoints.
 - Store logos are validated by size, MIME type, and magic bytes before being stored on disk for development use. Configure `STORE_LOGO_UPLOAD_DIR` if you do not want the default `<workspace>/uploads/logos` path.
+- All request validation now returns field-level `422` responses for invalid payloads, and the gateway plus SSR flows reject unsafe redirects and untrusted hosts.
 
 ## Frontend and Owner Experience
 
 - Store owners can upload a logo during signup or store settings updates, and the asset is served from `/logos/*` with long-lived cache headers.
-- The storefront now includes a working wishlist flow, lazy-loaded commerce images, and cached browser currency context to reduce repeat geolocation lookups.
+- The storefront now includes a working wishlist flow, lazy-loaded commerce images, cached browser currency context, quick search, category and tag discovery, recently viewed products, and buy-again order actions.
+- New demo merchandising templates and sample data are available for skincare, haircare, women-focused fashion, and unisex lifestyle storefronts so the customer experience feels more intentional for those categories.
 - Platform admin pages, owner dashboards, and error pages are wired to usable placeholder data so demo navigation does not dead-end.
 
 ## How to Run the Repository
@@ -202,6 +208,21 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 6. On a fresh database, each implemented service will create its own tables and indexes from its `src/schema.js` file during startup. No separate migration step is required for first-time setup.
 7. Start the web app if you want the SSR interface.
 8. Run `npm run smoke` after startup if you want a quick health/docs/storefront probe.
+
+### API docs and endpoint testing
+
+1. Run `npm run swagger`.
+2. Open `http://127.0.0.1:4015` for the standalone Swagger UI preview.
+3. Use the gateway-hosted docs at `http://127.0.0.1:4000/docs` if the gateway is already running.
+4. Download the exported spec from `docs/swagger/gateway.openapi.json` or `http://127.0.0.1:4015/openapi.json`.
+5. Open `tests/aisle-api.http` in a REST Client-compatible editor to exercise the main gateway endpoints with ready-made requests.
+6. Use `npm run api:request -- --service <name> --path <route>` when you need to hit an internal-only service endpoint with the required HMAC headers.
+
+The Swagger preview also exposes:
+
+- `GET /health` for preview status
+- `GET /service-map` for resolved gateway, web, and downstream service URLs
+- `GET /tests/aisle-api.http` for the bundled request collection
 
 ### Minimal UI preview
 
@@ -552,10 +573,9 @@ The tree below reflects the current project-owned repository structure and inten
 
 - `support-service`, `chat-service`, and `notification-service` do not yet have runnable service code.
 - The gateway already proxies support and chat routes, so those flows are not fully operational yet.
-- `order-service` calls `POST /cart/clear` during checkout, but `cart-service` does not currently implement that route.
 - `apps/web/app.js` is a prototype backed by local state helpers, not a full end-to-end gateway-backed interface for every flow.
-- `apps/gateway/server.js` references `crypto.randomUUID()` without importing `crypto`.
-- There is no visible automated test suite for the current repository snapshot.
+- Store logos currently use local disk in development. A shared object-storage adapter is still needed for multi-instance production deployments.
+- The smoke test and request collection improve coverage, but the repository still needs a broader integration and browser test suite for checkout, owner workflows, and payment-state transitions.
 
 ## Documentation Map
 

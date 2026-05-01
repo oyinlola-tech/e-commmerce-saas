@@ -1,0 +1,2879 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Aisle Commerce Gateway API",
+    "version": "1.0.0",
+    "description": "Gateway-level API contract for platform auth, tenant operations, storefront flows, and billing subscriptions."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Local platform gateway",
+      "x-aisleAudience": "platform"
+    },
+    {
+      "url": "http://{storeSubdomain}.localhost:4000",
+      "description": "Local storefront gateway",
+      "x-aisleAudience": "storefront",
+      "variables": {
+        "storeSubdomain": {
+          "default": "aisle",
+          "description": "Local store subdomain used for tenant-aware storefront requests."
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Operational health and metrics endpoints."
+    },
+    {
+      "name": "Security",
+      "description": "Browser security helpers such as CSRF token bootstrap."
+    },
+    {
+      "name": "Platform Auth",
+      "description": "Platform owner and staff authentication."
+    },
+    {
+      "name": "Storefront Auth",
+      "description": "Customer registration and login."
+    },
+    {
+      "name": "Owner Stores",
+      "description": "Owner-scoped store management endpoints."
+    },
+    {
+      "name": "Compliance",
+      "description": "Owner identity and business verification workflows."
+    },
+    {
+      "name": "Products",
+      "description": "Storefront product browsing."
+    },
+    {
+      "name": "Cart",
+      "description": "Customer cart lifecycle."
+    },
+    {
+      "name": "Orders",
+      "description": "Checkout and order management."
+    },
+    {
+      "name": "Billing",
+      "description": "Owner subscription plans, checkout, and invoices."
+    },
+    {
+      "name": "Payments",
+      "description": "Store payment-provider configuration."
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "platformTokenCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "platform_token"
+      },
+      "customerTokenCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "customer_token"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "PlatformUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "Store": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "owner_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "subdomain": {
+            "type": "string"
+          },
+          "custom_domain": {
+            "type": "string",
+            "nullable": true
+          },
+          "logo_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "theme_color": {
+            "type": "string",
+            "nullable": true
+          },
+          "store_type": {
+            "type": "string",
+            "nullable": true
+          },
+          "template_key": {
+            "type": "string",
+            "nullable": true
+          },
+          "font_preset": {
+            "type": "string",
+            "nullable": true
+          },
+          "support_email": {
+            "type": "string",
+            "nullable": true
+          },
+          "contact_phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "ssl_status": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "store_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "store_id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "price": {
+            "type": "number"
+          },
+          "compare_at_price": {
+            "type": "number",
+            "nullable": true
+          },
+          "sku": {
+            "type": "string",
+            "nullable": true
+          },
+          "inventory_count": {
+            "type": "integer"
+          },
+          "reserved_count": {
+            "type": "integer"
+          },
+          "available_inventory": {
+            "type": "integer"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "CartItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "product_id": {
+            "type": "integer"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "price": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Cart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "store_id": {
+            "type": "integer"
+          },
+          "customer_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total": {
+            "type": "number"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CartItem"
+            }
+          }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "store_id": {
+            "type": "integer"
+          },
+          "customer_id": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "payment_status": {
+            "type": "string"
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          }
+        }
+      },
+      "Subscription": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "owner_id": {
+            "type": "integer"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "billing_cycle": {
+            "type": "string",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "current_period_end": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "trial_ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "owner_id": {
+            "type": "integer"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "provider_reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "payment_reference": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PaymentConfig": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "store_id": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "public_key": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "has_secret_key": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PaymentProviderOption": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "inline": {
+            "type": "boolean"
+          },
+          "public_key": {
+            "type": "string",
+            "nullable": true
+          },
+          "checkout_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Gateway health check",
+        "responses": {
+          "200": {
+            "description": "Gateway status payload"
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Prometheus metrics",
+        "responses": {
+          "200": {
+            "description": "Prometheus text exposition format"
+          }
+        }
+      }
+    },
+    "/api/csrf-token": {
+      "get": {
+        "tags": [
+          "Security"
+        ],
+        "summary": "Generate a gateway CSRF token",
+        "description": "Use this before state-changing browser API requests that rely on cookies, then send the returned token in `X-CSRF-Token` or `_csrf`.",
+        "responses": {
+          "200": {
+            "description": "CSRF bootstrap payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "csrfToken": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/auth/register": {
+      "post": {
+        "tags": [
+          "Platform Auth"
+        ],
+        "summary": "Register a platform user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8
+                  },
+                  "role": {
+                    "type": "string",
+                    "default": "store_owner"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Platform user created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/PlatformUser"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/auth/login": {
+      "post": {
+        "tags": [
+          "Platform Auth"
+        ],
+        "summary": "Log in a platform user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated platform user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/PlatformUser"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/auth/logout": {
+      "post": {
+        "tags": [
+          "Platform Auth"
+        ],
+        "summary": "Clear platform auth cookies",
+        "responses": {
+          "204": {
+            "description": "Platform session cleared"
+          }
+        }
+      }
+    },
+    "/api/platform/auth/me": {
+      "get": {
+        "tags": [
+          "Platform Auth"
+        ],
+        "summary": "Get the signed platform user",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current platform user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/PlatformUser"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/stores": {
+      "get": {
+        "tags": [
+          "Owner Stores"
+        ],
+        "summary": "List stores available to the signed platform user",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Store list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stores": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Store"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Owner Stores"
+        ],
+        "summary": "Create a store for the signed owner",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "subdomain"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "subdomain": {
+                    "type": "string"
+                  },
+                  "custom_domain": {
+                    "type": "string"
+                  },
+                  "logo_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "theme_color": {
+                    "type": "string"
+                  },
+                  "store_type": {
+                    "type": "string"
+                  },
+                  "template_key": {
+                    "type": "string"
+                  },
+                  "font_preset": {
+                    "type": "string"
+                  },
+                  "support_email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "contact_phone": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "store": {
+                      "$ref": "#/components/schemas/Store"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/stores/{storeId}": {
+      "get": {
+        "tags": [
+          "Owner Stores"
+        ],
+        "summary": "Get one store",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Store detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "store": {
+                      "$ref": "#/components/schemas/Store"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Owner Stores"
+        ],
+        "summary": "Update one store",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "custom_domain": {
+                    "type": "string"
+                  },
+                  "logo_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "theme_color": {
+                    "type": "string"
+                  },
+                  "store_type": {
+                    "type": "string"
+                  },
+                  "template_key": {
+                    "type": "string"
+                  },
+                  "font_preset": {
+                    "type": "string"
+                  },
+                  "support_email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "contact_phone": {
+                    "type": "string"
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "ssl_status": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "store": {
+                      "$ref": "#/components/schemas/Store"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/stores/{storeId}/access-check": {
+      "get": {
+        "tags": [
+          "Owner Stores"
+        ],
+        "summary": "Check whether the signed user can access a store",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Access decision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "allowed": {
+                      "type": "boolean"
+                    },
+                    "store": {
+                      "$ref": "#/components/schemas/Store"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/compliance/me": {
+      "get": {
+        "tags": [
+          "Compliance"
+        ],
+        "summary": "Get the signed owner compliance profile bundle",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "KYC, KYB, documents, and reviews for the signed owner"
+          }
+        }
+      }
+    },
+    "/api/platform/compliance/kyc": {
+      "post": {
+        "tags": [
+          "Compliance"
+        ],
+        "summary": "Submit or update KYC details",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "first_name",
+                  "last_name"
+                ],
+                "properties": {
+                  "first_name": {
+                    "type": "string"
+                  },
+                  "last_name": {
+                    "type": "string"
+                  },
+                  "bvn": {
+                    "type": "string"
+                  },
+                  "country": {
+                    "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "KYC profile saved"
+          }
+        }
+      }
+    },
+    "/api/platform/compliance/kyb": {
+      "post": {
+        "tags": [
+          "Compliance"
+        ],
+        "summary": "Submit or update KYB details",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "business_name"
+                ],
+                "properties": {
+                  "store_id": {
+                    "type": "integer"
+                  },
+                  "business_name": {
+                    "type": "string"
+                  },
+                  "registration_number": {
+                    "type": "string"
+                  },
+                  "country": {
+                    "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "KYB profile saved"
+          }
+        }
+      }
+    },
+    "/api/platform/compliance/submissions": {
+      "get": {
+        "tags": [
+          "Compliance"
+        ],
+        "summary": "List compliance submissions",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "owner_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "KYC and KYB submissions"
+          }
+        }
+      }
+    },
+    "/api/customers/register": {
+      "post": {
+        "tags": [
+          "Storefront Auth"
+        ],
+        "summary": "Register a storefront customer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8
+                  },
+                  "phone": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "customer": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/login": {
+      "post": {
+        "tags": [
+          "Storefront Auth"
+        ],
+        "summary": "Log in a storefront customer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "customer": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/logout": {
+      "post": {
+        "tags": [
+          "Storefront Auth"
+        ],
+        "summary": "Clear storefront auth cookies",
+        "responses": {
+          "204": {
+            "description": "Customer session cleared"
+          }
+        }
+      }
+    },
+    "/api/customers/me": {
+      "get": {
+        "tags": [
+          "Storefront Auth"
+        ],
+        "summary": "Get the signed storefront customer",
+        "security": [
+          {
+            "customerTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current storefront customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Storefront Auth"
+        ],
+        "summary": "Update the signed storefront customer",
+        "security": [
+          {
+            "customerTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "addresses": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated storefront customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/stores/{storeId}/logo": {
+      "post": {
+        "tags": [
+          "Owner Stores"
+        ],
+        "summary": "Upload a store logo",
+        "description": "Accepts a PNG, JPEG, or WebP file up to 2 MB and stores the resulting public URL on the store record.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "platformTokenCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "logo"
+                ],
+                "properties": {
+                  "logo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Store logo updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "logo_url": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/stores/{storeId}/customers": {
+      "get": {
+        "tags": [
+          "Owner Stores"
+        ],
+        "summary": "List customers for one owner-scoped store",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "platformTokenCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Store customer list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Customer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/stores/{storeId}/products": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "List products for one owner-scoped store",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "platformTokenCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "published",
+                "archived",
+                "deleted"
+              ]
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner product list"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Create a product for one owner-scoped store",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "platformTokenCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "price"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": "number"
+                  },
+                  "compare_at_price": {
+                    "type": "number"
+                  },
+                  "sku": {
+                    "type": "string"
+                  },
+                  "inventory_count": {
+                    "type": "integer"
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft",
+                      "published",
+                      "archived"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created product",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "product": {
+                      "$ref": "#/components/schemas/Product"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/stores/{storeId}/products/{productId}": {
+      "put": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Update a product for one owner-scoped store",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "platformTokenCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": "number"
+                  },
+                  "compare_at_price": {
+                    "type": "number"
+                  },
+                  "sku": {
+                    "type": "string"
+                  },
+                  "inventory_count": {
+                    "type": "integer"
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft",
+                      "published",
+                      "archived"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated product"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Delete a product for one owner-scoped store",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "platformTokenCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Product deleted"
+          }
+        }
+      }
+    },
+    "/api/owner/stores/{storeId}/orders": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "List orders for one owner-scoped store",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "platformTokenCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner order list"
+          }
+        }
+      }
+    },
+    "/api/owner/stores/{storeId}/orders/{orderId}": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Get one order for an owner-scoped store",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "platformTokenCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/stores/{storeId}/orders/{orderId}/status": {
+      "patch": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Update an order status for an owner-scoped store",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "platformTokenCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated order"
+          }
+        }
+      }
+    },
+    "/api/products": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Browse storefront products",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "featured",
+                "newest",
+                "price-low",
+                "price-high",
+                "name"
+              ]
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_price",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "max_price",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated product list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Product"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products/{slug}": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Get one product by slug",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "product": {
+                      "$ref": "#/components/schemas/Product"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart": {
+      "get": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Fetch the active cart",
+        "responses": {
+          "200": {
+            "description": "Active cart",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cart": {
+                      "$ref": "#/components/schemas/Cart"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart/items": {
+      "post": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Add an item to the cart",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "product_id"
+                ],
+                "properties": {
+                  "product_id": {
+                    "type": "integer"
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "default": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Updated cart",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cart": {
+                      "$ref": "#/components/schemas/Cart"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart/items/{productId}": {
+      "patch": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Change item quantity",
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "quantity"
+                ],
+                "properties": {
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated cart",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cart": {
+                      "$ref": "#/components/schemas/Cart"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Remove an item from the cart",
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated cart",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cart": {
+                      "$ref": "#/components/schemas/Cart"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart/clear": {
+      "post": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Clear the current cart",
+        "responses": {
+          "200": {
+            "description": "Cleared cart"
+          }
+        }
+      }
+    },
+    "/api/checkout": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Create an order and payment session from the active cart",
+        "security": [
+          {
+            "customerTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "currency": {
+                    "type": "string",
+                    "example": "NGN"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "shipping_address": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "customer": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order and payment session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "$ref": "#/components/schemas/Order"
+                    },
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentProviderOption"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orders": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "List orders for the signed customer",
+        "security": [
+          {
+            "customerTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated orders"
+          }
+        }
+      }
+    },
+    "/api/orders/{id}": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Get one order for the signed customer",
+        "security": [
+          {
+            "customerTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/billing/plans": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "List available platform subscription plans",
+        "responses": {
+          "200": {
+            "description": "Subscription plan catalog"
+          }
+        }
+      }
+    },
+    "/api/platform/billing/subscriptions/me": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Get the signed owner subscription",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current owner subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "subscription": {
+                      "$ref": "#/components/schemas/Subscription"
+                    },
+                    "latest_invoice": {
+                      "$ref": "#/components/schemas/Invoice"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/billing/subscriptions/checkout-session": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Create a subscription checkout session",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "plan",
+                  "billing_cycle"
+                ],
+                "properties": {
+                  "plan": {
+                    "type": "string",
+                    "example": "growth"
+                  },
+                  "billing_cycle": {
+                    "type": "string",
+                    "enum": [
+                      "monthly",
+                      "yearly"
+                    ]
+                  },
+                  "currency": {
+                    "type": "string",
+                    "example": "NGN"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "example": "paystack"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invoice and provider checkout session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "subscription": {
+                      "$ref": "#/components/schemas/Subscription"
+                    },
+                    "invoice": {
+                      "$ref": "#/components/schemas/Invoice"
+                    },
+                    "payment": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentProviderOption"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/billing/subscriptions/cancel": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Cancel the signed owner subscription",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated subscription state"
+          }
+        }
+      }
+    },
+    "/api/platform/billing/subscriptions/invoices": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "List subscription invoices for the signed owner",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner invoices"
+          }
+        }
+      }
+    },
+    "/api/owner/stores/{storeId}/payments/config": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "List store payment provider configuration",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider configuration rows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentConfig"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Upsert store payment provider configuration",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "provider"
+                ],
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "paystack",
+                      "flutterwave"
+                    ]
+                  },
+                  "public_key": {
+                    "type": "string"
+                  },
+                  "secret_key": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "example": "active"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Provider configuration saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "config": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/PaymentConfig"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "secret_key_preview": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/stores/{storeId}/settings": {
+      "get": {
+        "tags": [
+          "Owner Stores"
+        ],
+        "summary": "Get owner-scoped store settings",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Store settings bundle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "store": {
+                      "$ref": "#/components/schemas/Store"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Owner Stores"
+        ],
+        "summary": "Update owner-scoped store settings",
+        "security": [
+          {
+            "platformTokenCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "custom_domain": {
+                    "type": "string"
+                  },
+                  "logo_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "theme_color": {
+                    "type": "string"
+                  },
+                  "store_type": {
+                    "type": "string"
+                  },
+                  "template_key": {
+                    "type": "string"
+                  },
+                  "font_preset": {
+                    "type": "string"
+                  },
+                  "support_email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "contact_phone": {
+                    "type": "string"
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "ssl_status": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated store settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "store": {
+                      "$ref": "#/components/schemas/Store"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/webhooks/{provider}": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Receive a payment provider webhook",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "paystack",
+                "flutterwave"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook accepted"
+          }
+        }
+      }
+    },
+    "/payments/mock/{provider}/{reference}": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Trigger the mock payment callback flow",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "paystack",
+                "flutterwave"
+              ]
+            }
+          },
+          {
+            "name": "reference",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "success"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mock callback processed"
+          }
+        }
+      }
+    }
+  }
+}

@@ -33,6 +33,7 @@
     "start:notification-service": "node apps/services/notification-service/server.js",
     "swagger": "node scripts/swagger.js",
     "swagger:export": "node scripts/swagger.js --export-only",
+    "api:request": "node scripts/internal-request.js",
     "lint": "eslint .",
     "smoke": "node tests/smoke.js"
   },
@@ -50,7 +51,7 @@
     "express-ejs-layouts": "^2.5.1",
     "express-rate-limit": "^8.4.1",
     "express-validator": "^7.3.2",
-    "file-type": "^20.5.0",
+    "file-type": "^21.3.2",
     "helmet": "^8.1.0",
     "http-proxy-middleware": "^3.0.5",
     "ioredis": "^5.10.1",
