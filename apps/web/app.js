@@ -1099,7 +1099,16 @@ app.post('/preferences/currency', currencyValidation, handleFormValidation((req,
   const safeReturnTo = safeRedirect(req, req.body.returnTo || req.headers.referer || '/', '/', pricingStore);
 
   if (!requestedCurrency || !allowedCurrencies.includes(requestedCurrency)) {
-    return res.redirect(`${safeReturnTo}${safeReturnTo.includes('?') ? '&' : '?'}error=${encodeURIComponent('Currency is not available for this storefront')}`);
+    let redirectWithError = '/?error=Currency%20is%20not%20available%20for%20this%20storefront';
+    try {
+      const parsedReturnTo = new URL(safeReturnTo, 'https://local.invalid');
+      parsedReturnTo.searchParams.set('error', 'Currency is not available for this storefront');
+      redirectWithError = `${parsedReturnTo.pathname}${parsedReturnTo.search}${parsedReturnTo.hash}`;
+    } catch {
+      // keep fallback redirectWithError
+    }
+
+    return res.redirect(redirectWithError);
   }
 
   setCurrencyPreferenceCookie(req, res, currencyContext.cookieName, requestedCurrency);
