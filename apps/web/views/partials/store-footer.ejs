@@ -3,6 +3,9 @@
     ? storeTheme
     : (typeof currentStoreTheme !== 'undefined' ? currentStoreTheme : {});
   const themeTrustPoints = Array.isArray(storeThemeData.trustPoints) ? storeThemeData.trustPoints : [];
+  const footerBlurb = store && store.footer_blurb
+    ? store.footer_blurb
+    : (store && store.description ? store.description : 'A premium commerce experience built for confident discovery and trustworthy fulfillment.');
 %>
 <footer class="border-t border-slate-200/70 bg-white/88 backdrop-blur">
   <div class="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.35fr_repeat(3,1fr)] lg:px-8">
@@ -10,7 +13,7 @@
       <div>
         <p class="section-title text-xl font-semibold text-slate-950"><%= store && store.name ? store.name : 'Aisle' %></p>
         <p class="mt-2 max-w-sm text-sm leading-6 text-slate-500">
-          <%= store && store.description ? store.description : 'A premium commerce experience built for confident discovery and trustworthy fulfillment.' %>
+          <%= footerBlurb %>
         </p>
       </div>
       <div class="flex flex-wrap gap-2">

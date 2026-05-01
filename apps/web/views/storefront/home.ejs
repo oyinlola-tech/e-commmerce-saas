@@ -15,6 +15,14 @@
   const categoryList = Array.isArray(categories) ? categories : [];
   const discoveryTagList = Array.isArray(discoveryTags) ? discoveryTags : [];
   const recentlyViewed = Array.isArray(recentlyViewedProducts) ? recentlyViewedProducts : [];
+  const heroEyebrow = store && store.hero_eyebrow ? store.hero_eyebrow : (themeCopy.eyebrow || 'Curated storefront');
+  const heroTitle = store && store.hero_title ? store.hero_title : (themeCopy.heroTitle || (store && store.tagline ? store.tagline : 'A premium storefront for modern essentials.'));
+  const heroDescription = store && store.hero_description ? store.hero_description : (themeCopy.heroBody || (store && store.description ? store.description : 'Designed for product discovery, trustworthy service, and confident checkout across international markets.'));
+  const heroSupport = store && store.hero_support ? store.hero_support : (themeCopy.heroSupport || (store && store.fulfillment_sla ? store.fulfillment_sla : 'Fast fulfillment available.'));
+  const primaryCtaText = store && store.primary_cta_text ? store.primary_cta_text : (themeCopy.primaryCta || 'Shop the collection');
+  const secondaryCtaText = store && store.secondary_cta_text ? store.secondary_cta_text : (themeCopy.secondaryCta || 'My account');
+  const featuredCollectionTitle = store && store.featured_collection_title ? store.featured_collection_title : (themeCopy.catalogTitle || 'Best-sellers customers trust first');
+  const featuredCollectionDescription = store && store.featured_collection_description ? store.featured_collection_description : (themeCopy.catalogBody || 'Thoughtfully merchandised products with clearer storytelling, faster scanning, and a premium path from browse to checkout.');
   const heroMetrics = [
     { label: 'Products live', value: overview.publishedProducts || featured.length || 0 },
     { label: 'Orders served', value: overview.totalOrders || 0 },
@@ -29,7 +37,7 @@
     <div class="grid gap-10 <%= themeClasses.heroGrid || 'lg:grid-cols-[1.04fr_0.96fr]' %>">
       <div class="space-y-8">
         <div class="flex flex-wrap gap-3">
-          <span class="eyebrow"><%= themeCopy.eyebrow || 'Curated storefront' %></span>
+          <span class="eyebrow"><%= heroEyebrow %></span>
           <% themeTags.slice(0, 2).forEach((tag) => { %>
             <span class="theme-chip"><%= tag %></span>
           <% }) %>
@@ -40,17 +48,17 @@
           <h1 class="section-title max-w-4xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
             <%= store && store.name ? store.name : 'Aisle' %>
           </h1>
-          <p class="max-w-3xl text-2xl leading-tight text-slate-900"><%= themeCopy.heroTitle || (store && store.tagline ? store.tagline : 'A premium storefront for modern essentials.') %></p>
-          <p class="max-w-2xl text-lg leading-8 text-slate-600"><%= themeCopy.heroBody || (store && store.description ? store.description : 'Designed for product discovery, trustworthy service, and confident checkout across international markets.') %></p>
-          <p class="max-w-2xl text-sm leading-7 text-slate-500"><%= themeCopy.heroSupport || (store && store.fulfillment_sla ? store.fulfillment_sla : 'Fast fulfillment available.') %></p>
+          <p class="max-w-3xl text-2xl leading-tight text-slate-900"><%= heroTitle %></p>
+          <p class="max-w-2xl text-lg leading-8 text-slate-600"><%= heroDescription %></p>
+          <p class="max-w-2xl text-sm leading-7 text-slate-500"><%= heroSupport %></p>
         </div>
 
         <div class="flex flex-col gap-3 sm:flex-row">
           <a href="/products" class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark">
-            <%= themeCopy.primaryCta || 'Shop the collection' %>
+            <%= primaryCtaText %>
           </a>
           <a href="/account" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-base font-semibold text-slate-700 transition hover:border-primary hover:text-primary">
-            <%= themeCopy.secondaryCta || 'My account' %>
+            <%= secondaryCtaText %>
           </a>
         </div>
 
@@ -176,10 +184,10 @@
   <div class="grid gap-6 <%= themeClasses.catalogHeader || 'lg:grid-cols-[0.82fr_1.18fr] lg:items-end' %>">
     <div>
       <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary"><%= themeCopy.catalogLabel || 'Featured collection' %></p>
-      <h2 class="section-title mt-3 text-4xl font-semibold tracking-tight text-slate-950"><%= themeCopy.catalogTitle || 'Best-sellers customers trust first' %></h2>
+      <h2 class="section-title mt-3 text-4xl font-semibold tracking-tight text-slate-950"><%= featuredCollectionTitle %></h2>
     </div>
     <div class="theme-accent-note rounded-[2rem] px-6 py-5">
-      <p class="text-sm leading-7 text-slate-600"><%= themeCopy.catalogBody || 'Thoughtfully merchandised products with clearer storytelling, faster scanning, and a premium path from browse to checkout.' %></p>
+      <p class="text-sm leading-7 text-slate-600"><%= featuredCollectionDescription %></p>
     </div>
   </div>
 

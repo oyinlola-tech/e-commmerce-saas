@@ -46,9 +46,28 @@ const saveLogoFile = async (file, storeId = 'store') => {
     throw error;
   }
 
+  // Security: Sanitize storeId to prevent path traversal attacks
+  const sanitizedStoreId = String(storeId).replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!sanitizedStoreId) {
+    const error = new Error('Invalid store identifier.');
+    error.status = 400;
+    throw error;
+  }
+
   await ensureLogoUploadDir();
-  const filename = `store-${storeId}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${getLogoExtension(mimeType)}`;
-  await fs.writeFile(path.join(env.logoUploadDir, filename), file.buffer);
+  const filename = `store-${sanitizedStoreId}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${getLogoExtension(mimeType)}`;
+  const targetPath = path.join(env.logoUploadDir, filename);
+  
+  // Security: Verify the resolved path is within the upload directory
+  const resolvedPath = path.resolve(targetPath);
+  const resolvedUploadDir = path.resolve(env.logoUploadDir);
+  if (!resolvedPath.startsWith(resolvedUploadDir)) {
+    const error = new Error('Invalid file path.');
+    error.status = 400;
+    throw error;
+  }
+  
+  await fs.writeFile(targetPath, file.buffer);
   return `/logos/${filename}`;
 };
 

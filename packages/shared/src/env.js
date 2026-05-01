@@ -37,11 +37,13 @@ const hasEnvValue = (value) => {
 };
 
 const toEnvPrefix = (value = '') => {
+  // Fixed: Split polynomial regex to prevent ReDoS attacks
   return String(value || '')
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+    .replace(/^_+/, '')
+    .replace(/_+$/, '');
 };
 
 const getScopedEnvValue = (prefix, name) => {

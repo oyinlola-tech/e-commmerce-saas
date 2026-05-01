@@ -584,7 +584,8 @@ const bootstrap = async () => {
   app.use(resolveStoreContext);
   app.use(gatewayCors);
   app.use(attachGatewayProxyContext);
-  app.use('/api', cookieParser());
+  // Security: Add cookie secret for signed cookies
+  app.use('/api', cookieParser(config.internalSharedSecret));
   app.use('/api', attachGatewayAuthContext);
 
   app.get('/api/csrf-token', (req, res) => {

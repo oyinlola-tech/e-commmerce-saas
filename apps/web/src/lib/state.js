@@ -109,6 +109,27 @@ const applyStoreDefaults = (store) => {
     mutated = true;
   }
 
+  [
+    'seo_title',
+    'seo_description',
+    'seo_keywords',
+    'announcement_text',
+    'hero_eyebrow',
+    'hero_title',
+    'hero_description',
+    'hero_support',
+    'primary_cta_text',
+    'secondary_cta_text',
+    'featured_collection_title',
+    'featured_collection_description',
+    'footer_blurb'
+  ].forEach((field) => {
+    if (typeof store[field] !== 'string') {
+      store[field] = '';
+      mutated = true;
+    }
+  });
+
   return mutated;
 };
 
@@ -609,6 +630,19 @@ const createStore = (payload = {}) => {
     ssl_status: 'issued',
     tagline: configuration.tagline,
     description: configuration.description,
+    seo_title: '',
+    seo_description: '',
+    seo_keywords: '',
+    announcement_text: '',
+    hero_eyebrow: '',
+    hero_title: '',
+    hero_description: '',
+    hero_support: '',
+    primary_cta_text: '',
+    secondary_cta_text: '',
+    featured_collection_title: '',
+    featured_collection_description: '',
+    footer_blurb: '',
     support_email: `support@${normalizedSubdomain}.store`,
     contact_phone: '+1 000 000 0000',
     fulfillment_sla: 'Orders ship within 24 hours on business days.',
@@ -651,6 +685,19 @@ const updateStoreSettings = (storeId, payload = {}) => {
   store.theme_color = color;
   store.tagline = configuration.tagline;
   store.description = configuration.description;
+  store.seo_title = String(payload.seo_title || '').trim();
+  store.seo_description = String(payload.seo_description || '').trim();
+  store.seo_keywords = String(payload.seo_keywords || '').trim();
+  store.announcement_text = String(payload.announcement_text || '').trim();
+  store.hero_eyebrow = String(payload.hero_eyebrow || '').trim();
+  store.hero_title = String(payload.hero_title || '').trim();
+  store.hero_description = String(payload.hero_description || '').trim();
+  store.hero_support = String(payload.hero_support || '').trim();
+  store.primary_cta_text = String(payload.primary_cta_text || '').trim();
+  store.secondary_cta_text = String(payload.secondary_cta_text || '').trim();
+  store.featured_collection_title = String(payload.featured_collection_title || '').trim();
+  store.featured_collection_description = String(payload.featured_collection_description || '').trim();
+  store.footer_blurb = String(payload.footer_blurb || '').trim();
   store.support_email = String(payload.support_email || store.support_email).trim() || store.support_email;
   store.contact_phone = String(payload.contact_phone || store.contact_phone).trim() || store.contact_phone;
   store.fulfillment_sla = String(payload.fulfillment_sla || store.fulfillment_sla).trim() || store.fulfillment_sla;

@@ -1,7 +1,13 @@
 <%
-  const brandLabel = platformBrand && platformBrand.platformName ? platformBrand.platformName : 'Aisle';
-  const resolvedTitle = pageTitle ? `${pageTitle} | ${brandLabel}` : brandLabel;
+  const brandLabel = pageBrandLabel
+    || (platformBrand && platformBrand.platformName ? platformBrand.platformName : 'Aisle');
+  const resolvedTitle = metaTitle || (pageTitle ? `${pageTitle} | ${brandLabel}` : brandLabel);
   const resolvedDescription = metaDescription || 'Launch, manage, and scale international storefronts from one enterprise commerce operating system.';
+  const resolvedKeywords = metaKeywords || '';
+  const resolvedCanonicalUrl = canonicalUrl || '';
+  const resolvedSocialImage = socialImage || '';
+  const resolvedMetaType = metaType || 'website';
+  const resolvedMetaRobots = metaRobots || 'index, follow';
   const resolvedBrandColor = brandColor || '#4F46E5';
   const resolvedStoreTheme = typeof storeTheme !== 'undefined' ? storeTheme : null;
   const resolvedBodyFont = resolvedStoreTheme && resolvedStoreTheme.fonts ? resolvedStoreTheme.fonts.bodyFamily : "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -11,6 +17,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><%= resolvedTitle %></title>
 <meta name="description" content="<%= resolvedDescription %>">
+<meta name="robots" content="<%= resolvedMetaRobots %>">
+<% if (resolvedKeywords) { %>
+<meta name="keywords" content="<%= resolvedKeywords %>">
+<% } %>
+<% if (resolvedCanonicalUrl) { %>
+<link rel="canonical" href="<%= resolvedCanonicalUrl %>">
+<meta property="og:url" content="<%= resolvedCanonicalUrl %>">
+<% } %>
+<meta property="og:title" content="<%= resolvedTitle %>">
+<meta property="og:description" content="<%= resolvedDescription %>">
+<meta property="og:type" content="<%= resolvedMetaType %>">
+<meta property="og:site_name" content="<%= brandLabel %>">
+<meta name="twitter:card" content="<%= resolvedSocialImage ? 'summary_large_image' : 'summary' %>">
+<meta name="twitter:title" content="<%= resolvedTitle %>">
+<meta name="twitter:description" content="<%= resolvedDescription %>">
+<% if (resolvedSocialImage) { %>
+<meta property="og:image" content="<%= resolvedSocialImage %>">
+<meta name="twitter:image" content="<%= resolvedSocialImage %>">
+<% } %>
 <meta name="csrf-token" content="<%= csrfToken %>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

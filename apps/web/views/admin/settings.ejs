@@ -15,6 +15,7 @@
   const recommendedFontForType = selectedStoreTypeChoice
     ? (fontChoices.find((preset) => preset.key === selectedStoreTypeChoice.recommendedFontPreset) || null)
     : null;
+  const themeCopy = storeThemeData.copy || {};
   const providerConfigs = typeof paymentProviderConfigs !== 'undefined' && paymentProviderConfigs ? paymentProviderConfigs : {};
   const providerDrafts = typeof paymentProviderDrafts !== 'undefined' && paymentProviderDrafts ? paymentProviderDrafts : {};
   const paymentConfigWarningMessage = typeof paymentProviderConfigWarning === 'string' ? paymentProviderConfigWarning : '';
@@ -22,6 +23,10 @@
   const flutterwaveConfig = providerConfigs.flutterwave || {};
   const paystackDraft = providerDrafts.paystack || {};
   const flutterwaveDraft = providerDrafts.flutterwave || {};
+  const previewHeroTitle = store && store.hero_title ? store.hero_title : (themeCopy.heroTitle || (store && store.tagline ? store.tagline : 'A premium storefront for modern essentials.'));
+  const previewHeroDescription = store && store.hero_description ? store.hero_description : (themeCopy.heroBody || (store && store.description ? store.description : 'Designed for product discovery, trustworthy service, and confident checkout across international markets.'));
+  const previewPrimaryCta = store && store.primary_cta_text ? store.primary_cta_text : (themeCopy.primaryCta || 'Shop the collection');
+  const previewFeaturedDescription = store && store.featured_collection_description ? store.featured_collection_description : (themeCopy.catalogBody || 'This preview reflects the currently active storefront design system.');
 %>
 <section class="space-y-8">
   <div>
@@ -145,6 +150,85 @@
       <section class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">SEO</p>
+            <h2 class="section-title mt-2 text-2xl font-semibold text-slate-950">Store search metadata</h2>
+          </div>
+          <p class="max-w-md text-sm leading-6 text-slate-500">These values power the storefront title, meta description, keywords, and social preview defaults. Leave a field blank to fall back to the store name and current storefront copy.</p>
+        </div>
+
+        <div class="mt-6 grid gap-5">
+          <div>
+            <label for="seoTitle" class="mb-1 block text-sm font-medium text-slate-700">SEO title</label>
+            <input id="seoTitle" name="seo_title" type="text" value="<%= store && store.seo_title ? store.seo_title : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= store && store.name ? store.name : 'Store name' %>">
+          </div>
+          <div>
+            <label for="seoDescription" class="mb-1 block text-sm font-medium text-slate-700">SEO description</label>
+            <textarea id="seoDescription" name="seo_description" rows="4" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= store && store.description ? store.description : 'Describe the store for search and social previews.' %>"><%= store && store.seo_description ? store.seo_description : '' %></textarea>
+          </div>
+          <div>
+            <label for="seoKeywords" class="mb-1 block text-sm font-medium text-slate-700">SEO keywords</label>
+            <input id="seoKeywords" name="seo_keywords" type="text" value="<%= store && store.seo_keywords ? store.seo_keywords : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="fashion, premium essentials, Lagos, international shipping">
+            <p class="mt-2 text-sm text-slate-500">Comma-separated keywords. Search engines weigh these lightly, but they can still help internal organization and share previews.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Storefront copy</p>
+            <h2 class="section-title mt-2 text-2xl font-semibold text-slate-950">Edit what shoppers actually read</h2>
+          </div>
+          <p class="max-w-md text-sm leading-6 text-slate-500">These fields override the template defaults for your store homepage, announcement bar, catalog intro, and footer. Leave any field blank to keep the theme copy.</p>
+        </div>
+
+        <div class="mt-6 grid gap-5 sm:grid-cols-2">
+          <div class="sm:col-span-2">
+            <label for="announcementText" class="mb-1 block text-sm font-medium text-slate-700">Announcement bar</label>
+            <input id="announcementText" name="announcement_text" type="text" value="<%= store && store.announcement_text ? store.announcement_text : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Free Lagos delivery above NGN 50,000">
+          </div>
+          <div>
+            <label for="heroEyebrow" class="mb-1 block text-sm font-medium text-slate-700">Hero eyebrow</label>
+            <input id="heroEyebrow" name="hero_eyebrow" type="text" value="<%= store && store.hero_eyebrow ? store.hero_eyebrow : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= themeCopy.eyebrow || 'Curated storefront' %>">
+          </div>
+          <div>
+            <label for="heroSupport" class="mb-1 block text-sm font-medium text-slate-700">Hero support line</label>
+            <input id="heroSupport" name="hero_support" type="text" value="<%= store && store.hero_support ? store.hero_support : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= themeCopy.heroSupport || (store && store.fulfillment_sla ? store.fulfillment_sla : 'Fast fulfillment available.') %>">
+          </div>
+          <div class="sm:col-span-2">
+            <label for="heroTitle" class="mb-1 block text-sm font-medium text-slate-700">Hero title</label>
+            <input id="heroTitle" name="hero_title" type="text" value="<%= store && store.hero_title ? store.hero_title : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= themeCopy.heroTitle || (store && store.tagline ? store.tagline : 'A premium storefront for modern essentials.') %>">
+          </div>
+          <div class="sm:col-span-2">
+            <label for="heroDescription" class="mb-1 block text-sm font-medium text-slate-700">Hero description</label>
+            <textarea id="heroDescription" name="hero_description" rows="4" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= themeCopy.heroBody || (store && store.description ? store.description : 'Designed for product discovery, trustworthy service, and confident checkout across international markets.') %>"><%= store && store.hero_description ? store.hero_description : '' %></textarea>
+          </div>
+          <div>
+            <label for="primaryCtaText" class="mb-1 block text-sm font-medium text-slate-700">Primary CTA label</label>
+            <input id="primaryCtaText" name="primary_cta_text" type="text" value="<%= store && store.primary_cta_text ? store.primary_cta_text : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= themeCopy.primaryCta || 'Shop the collection' %>">
+          </div>
+          <div>
+            <label for="secondaryCtaText" class="mb-1 block text-sm font-medium text-slate-700">Secondary CTA label</label>
+            <input id="secondaryCtaText" name="secondary_cta_text" type="text" value="<%= store && store.secondary_cta_text ? store.secondary_cta_text : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= themeCopy.secondaryCta || 'My account' %>">
+          </div>
+          <div>
+            <label for="featuredCollectionTitle" class="mb-1 block text-sm font-medium text-slate-700">Catalog section title</label>
+            <input id="featuredCollectionTitle" name="featured_collection_title" type="text" value="<%= store && store.featured_collection_title ? store.featured_collection_title : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= themeCopy.catalogTitle || 'Best-sellers customers trust first' %>">
+          </div>
+          <div>
+            <label for="footerBlurb" class="mb-1 block text-sm font-medium text-slate-700">Footer blurb</label>
+            <input id="footerBlurb" name="footer_blurb" type="text" value="<%= store && store.footer_blurb ? store.footer_blurb : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= store && store.description ? store.description : 'A premium commerce experience built for confident discovery and trustworthy fulfillment.' %>">
+          </div>
+          <div class="sm:col-span-2">
+            <label for="featuredCollectionDescription" class="mb-1 block text-sm font-medium text-slate-700">Catalog section description</label>
+            <textarea id="featuredCollectionDescription" name="featured_collection_description" rows="4" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= themeCopy.catalogBody || 'Thoughtfully merchandised products with clearer storytelling, faster scanning, and a premium path from browse to checkout.' %>"><%= store && store.featured_collection_description ? store.featured_collection_description : '' %></textarea>
+          </div>
+        </div>
+      </section>
+
+      <section class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Payments</p>
             <h2 class="section-title mt-2 text-2xl font-semibold text-slate-950">Store payment provider keys</h2>
           </div>
@@ -243,9 +327,21 @@
             </div>
           </div>
           <div class="mt-5 rounded-2xl bg-white p-4">
-            <button type="button" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-soft">Primary storefront button</button>
+            <button type="button" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-soft"><%= previewPrimaryCta %></button>
           </div>
-          <p class="mt-4 text-sm leading-6 text-slate-500"><%= storeThemeData.copy && storeThemeData.copy.catalogBody ? storeThemeData.copy.catalogBody : 'This preview reflects the currently active storefront design system.' %></p>
+          <p class="mt-4 text-base font-semibold text-slate-900"><%= previewHeroTitle %></p>
+          <p class="mt-2 text-sm leading-6 text-slate-500"><%= previewHeroDescription %></p>
+          <p class="mt-4 text-sm leading-6 text-slate-500"><%= previewFeaturedDescription %></p>
+        </div>
+      </section>
+
+      <section class="surface-card rounded-[2rem] p-6">
+        <p class="text-sm font-medium text-slate-500">SEO snippet</p>
+        <div class="mt-5 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Search preview</p>
+          <p class="mt-3 text-lg font-semibold text-blue-700"><%= store && store.seo_title ? store.seo_title : (store && store.name ? store.name : 'Store name') %></p>
+          <p class="mt-1 text-sm text-emerald-700"><%= storefrontUrl || '/' %></p>
+          <p class="mt-3 text-sm leading-6 text-slate-600"><%= store && store.seo_description ? store.seo_description : (store && store.description ? store.description : 'Describe the store for search and social previews.') %></p>
         </div>
       </section>
 

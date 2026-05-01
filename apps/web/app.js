@@ -277,6 +277,110 @@ const buildStoreAdminUrl = (store) => {
   return `${buildStorefrontUrl(store)}/admin`;
 };
 
+const buildStorefrontAbsoluteUrl = (store, pathname = '/') => {
+  const baseUrl = buildStorefrontUrl(store);
+  if (!store || !baseUrl || !/^https?:\/\//.test(baseUrl)) {
+    return '';
+  }
+
+  try {
+    return new URL(pathname || '/', baseUrl).toString();
+  } catch {
+    return '';
+  }
+};
+
+const buildStorefrontAssetUrl = (store, value = '') => {
+  const sanitizedValue = String(value || '').trim();
+  if (!sanitizedValue) {
+    return '';
+  }
+
+  if (/^https?:\/\//i.test(sanitizedValue)) {
+    return sanitizedValue;
+  }
+
+  if (sanitizedValue.startsWith('/')) {
+    return buildStorefrontAbsoluteUrl(store, sanitizedValue);
+  }
+
+  return '';
+};
+
+const joinKeywordList = (...groups) => {
+  const seen = new Set();
+
+  groups.flat().forEach((entry) => {
+    const keyword = sanitizePlainText(entry, { maxLength: 80 });
+    if (keyword) {
+      seen.add(keyword);
+    }
+  });
+
+  return Array.from(seen).join(', ');
+};
+
+const buildStoreSeoDescription = (store) => {
+  return sanitizePlainText(
+    store?.seo_description
+      || store?.description
+      || store?.tagline
+      || 'Discover a polished storefront with dependable fulfillment and customer support.',
+    { maxLength: 320 }
+  );
+};
+
+const buildStoreSeoKeywords = (store, additionalKeywords = []) => {
+  const customKeywords = String(store?.seo_keywords || '').trim();
+  if (customKeywords) {
+    return joinKeywordList(
+      customKeywords.split(',').map((entry) => entry.trim()),
+      additionalKeywords
+    );
+  }
+
+  return joinKeywordList(
+    store?.name,
+    store?.store_type,
+    store?.tagline,
+    Array.isArray(store?.markets) ? store.markets.slice(0, 3) : [],
+    additionalKeywords
+  );
+};
+
+const resolveStorefrontMetaRobots = (req, payload = {}) => {
+  if (payload.metaRobots) {
+    return payload.metaRobots;
+  }
+
+  const noIndexPaths = new Set([
+    '/login',
+    '/register',
+    '/wishlist',
+    '/cart',
+    '/checkout',
+    '/account',
+    '/orders',
+    '/order-confirmation'
+  ]);
+
+  return noIndexPaths.has(req.path)
+    ? 'noindex, nofollow'
+    : 'index, follow';
+};
+
+const buildStorefrontMeta = (req, store, payload = {}) => {
+  return {
+    pageBrandLabel: store?.name || '',
+    metaDescription: payload.metaDescription || buildStoreSeoDescription(store),
+    metaKeywords: payload.metaKeywords || buildStoreSeoKeywords(store),
+    canonicalUrl: payload.canonicalUrl || buildStorefrontAbsoluteUrl(store, payload.canonicalPath || req.path || '/'),
+    socialImage: payload.socialImage || buildStorefrontAssetUrl(store, store?.logo || ''),
+    metaType: payload.metaType || 'website',
+    metaRobots: resolveStorefrontMetaRobots(req, payload)
+  };
+};
+
 const createEmptyPaymentProviderConfigs = () => {
   return storePaymentProviders.reduce((accumulator, provider) => {
     accumulator[provider] = {
@@ -497,6 +601,7 @@ const renderStorefront = (req, res, view, payload = {}) => {
   const customer = getCurrentCustomer(req, store?.id);
   const cart = getCart(store?.id);
   const storeTheme = getStoreTheme(store);
+  const storefrontMeta = buildStorefrontMeta(req, store, payload);
   const wishlistIds = store?.id ? getWishlistProductIds(req, store.id) : [];
   const wishlistProducts = store?.id
     ? getPublishedProducts(store.id).filter((product) => wishlistIds.includes(String(product.id)))
@@ -513,6 +618,7 @@ const renderStorefront = (req, res, view, payload = {}) => {
     wishlistProducts,
     wishlistCount: wishlistIds.length,
     recentlyViewedProducts,
+    ...storefrontMeta,
     ...payload
   });
 };
@@ -523,6 +629,7 @@ const renderStoreAdmin = (req, res, view, payload = {}) => {
     layout: 'layouts/admin',
     store,
     storeTheme: getStoreTheme(store),
+    pageBrandLabel: store?.name || '',
     ...payload
   });
 };
@@ -1006,7 +1113,14 @@ app.use(async (req, res, next) => {
     }
 
     res.locals.pageTitle = '';
+    res.locals.metaTitle = '';
     res.locals.metaDescription = '';
+    res.locals.metaKeywords = '';
+    res.locals.canonicalUrl = '';
+    res.locals.socialImage = '';
+    res.locals.metaType = 'website';
+    res.locals.metaRobots = 'index, follow';
+    res.locals.pageBrandLabel = '';
     res.locals.currentPath = req.path;
     res.locals.currentUrl = req.originalUrl;
     res.locals.platformBrand = brand;
@@ -1114,6 +1228,19 @@ const storeSettingsValidation = [
     'contact_phone',
     'fulfillment_sla',
     'return_window_days',
+    'seo_title',
+    'seo_description',
+    'seo_keywords',
+    'announcement_text',
+    'hero_eyebrow',
+    'hero_title',
+    'hero_description',
+    'hero_support',
+    'primary_cta_text',
+    'secondary_cta_text',
+    'featured_collection_title',
+    'featured_collection_description',
+    'footer_blurb',
     'paystack_public_key',
     'paystack_secret_key',
     'paystack_status',
@@ -1133,6 +1260,19 @@ const storeSettingsValidation = [
   body('contact_phone').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 50 })),
   body('fulfillment_sla').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })),
   body('return_window_days').optional().isInt({ min: 1, max: 365 }).withMessage('Return window must be between 1 and 365 days.').toInt(),
+  body('seo_title').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })),
+  body('seo_description').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 320 })),
+  body('seo_keywords').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
+  body('announcement_text').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 180 })),
+  body('hero_eyebrow').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 80 })),
+  body('hero_title').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 180 })),
+  body('hero_description').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 500 })),
+  body('hero_support').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 160 })),
+  body('primary_cta_text').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 50 })),
+  body('secondary_cta_text').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 50 })),
+  body('featured_collection_title').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 160 })),
+  body('featured_collection_description').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 320 })),
+  body('footer_blurb').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 400 })),
   body('paystack_public_key').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
   body('paystack_secret_key').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
   body('paystack_status').optional().isIn(['active', 'inactive']).withMessage('Choose a valid Paystack status.'),
@@ -1290,7 +1430,11 @@ app.get('/', (req, res) => {
 
     return renderStorefront(req, res, 'storefront/home', {
       pageTitle: store.name,
-      metaDescription: `${store.name} delivers premium essentials with international fulfillment, fast checkout, and service-led support.`,
+      metaTitle: String(store.seo_title || '').trim() || store.name,
+      metaDescription: buildStoreSeoDescription(store),
+      metaKeywords: buildStoreSeoKeywords(store),
+      canonicalPath: '/',
+      socialImage: buildStorefrontAssetUrl(store, store.logo || ''),
       products,
       featuredProducts: products.filter((product) => product.featured).slice(0, 4),
       categories: discovery.categories,
@@ -1745,6 +1889,14 @@ app.get('/products', catalogQueryValidation, (req, res) => {
 
   return renderStorefront(req, res, 'storefront/products', {
     pageTitle: 'Products',
+    metaTitle: `Shop ${store.name}`,
+    metaDescription: buildStoreSeoDescription(store),
+    metaKeywords: buildStoreSeoKeywords(store, [
+      category !== 'All' ? category : '',
+      tag,
+      search
+    ]),
+    canonicalPath: '/products',
     products,
     categories: discovery.categories,
     discoveryTags: discovery.tags.slice(0, 10),
@@ -1771,6 +1923,15 @@ app.get('/products/:slug', (req, res) => {
 
   return renderStorefront(req, res, 'storefront/product', {
     pageTitle: product.name,
+    metaTitle: `${product.name} | ${store.name}`,
+    metaDescription: sanitizePlainText(product.description || buildStoreSeoDescription(store), { maxLength: 320 }),
+    metaKeywords: buildStoreSeoKeywords(store, [
+      product.category,
+      ...(Array.isArray(product.tags) ? product.tags.slice(0, 6) : [])
+    ]),
+    canonicalPath: `/products/${product.slug}`,
+    socialImage: buildStorefrontAssetUrl(store, product.image || store.logo || ''),
+    metaType: 'product',
     product,
     relatedProducts,
     recentlyViewedProducts: getRecentlyViewedProducts(req, store.id, {

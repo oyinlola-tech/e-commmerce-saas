@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const swaggerUi = require('swagger-ui-express');
 const { createServiceConfig } = require('../packages/shared/src/env');
 const { createGatewayOpenApiSpec } = require('../apps/gateway/src/openapi');
@@ -33,6 +34,17 @@ const startSwaggerServer = () => {
   const app = express();
   const swaggerPort = Number(process.env.SWAGGER_PORT || 4015);
   const exportedPath = writeSpecToDisk();
+
+  // Security: Add rate limiting to prevent abuse
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many requests from this IP, please try again later.'
+  });
+
+  app.use(limiter);
 
   app.get('/health', (req, res) => {
     return res.json({
