@@ -2,6 +2,13 @@
   "name": "@aisle/web",
   "version": "1.0.0",
   "private": true,
+  "description": "Proprietary Express SSR storefront and admin prototype for the Aisle Commerce SaaS platform by Oluwayemi Oyinlola Michael. Not free to use.",
+  "author": {
+    "name": "Oluwayemi Oyinlola Michael",
+    "url": "https://www.oyinlola.site/"
+  },
+  "homepage": "https://www.oyinlola.site/",
+  "license": "UNLICENSED",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"

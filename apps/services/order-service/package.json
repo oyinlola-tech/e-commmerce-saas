@@ -2,6 +2,13 @@
   "name": "@aisle/order-service",
   "version": "1.0.0",
   "private": true,
+  "description": "Proprietary checkout and order management service for Aisle Commerce by Oluwayemi Oyinlola Michael. Not free to use.",
+  "author": {
+    "name": "Oluwayemi Oyinlola Michael",
+    "url": "https://www.oyinlola.site/"
+  },
+  "homepage": "https://www.oyinlola.site/",
+  "license": "UNLICENSED",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

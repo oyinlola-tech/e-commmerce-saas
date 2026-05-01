@@ -1,5 +1,5 @@
 design.md
-src/data/runtime-state.json
+apps/web/src/data/runtime-state.json
 
 # Dependencies
 node_modules/
