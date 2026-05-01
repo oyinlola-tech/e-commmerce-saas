@@ -4,32 +4,57 @@
   const primaryCtaLabel = signedIn ? 'Open owner workspace' : 'Create your account';
   const secondaryCtaHref = signedIn ? '/#pricing' : '/login';
   const secondaryCtaLabel = signedIn ? 'View plans' : 'Sign in';
-  const pricingTiers = [
-    {
-      name: 'Launch',
-      description: 'For teams opening one serious storefront with real admin tools from day one.',
-      monthly: '$79',
-      yearly: '$759',
-      features: ['1 live storefront', 'Owner workspace', 'Domain management', 'Email support'],
-      featured: false
-    },
-    {
-      name: 'Scale',
-      description: 'For operators managing multiple stores who want clean workflows and room to expand.',
-      monthly: '$249',
-      yearly: '$2,390',
-      features: ['Up to 5 storefronts', 'Shared owner workspace', 'Priority support', 'Expanded operations tooling'],
-      featured: true
-    },
-    {
-      name: 'Enterprise',
-      description: 'For multi-brand teams planning custom workflows, governance, and white-glove rollout.',
-      monthly: '$799',
-      yearly: '$7,670',
-      features: ['Unlimited storefronts', 'Custom onboarding', 'Integration planning', 'Dedicated enablement'],
-      featured: false
-    }
-  ];
+  const availableBillingPlans = Array.isArray(billingPlans) && billingPlans.length
+    ? billingPlans
+    : [
+        {
+          code: 'launch',
+          name: 'Launch',
+          description: 'For teams opening one serious storefront with real admin tools from day one.',
+          monthly_amount: 10,
+          yearly_amount: 96,
+          features: ['1 live storefront', 'Owner workspace', 'Domain management', 'Email support'],
+          currency: selectedCurrency || 'USD',
+          trial_days: 7,
+          trial_authorization_amount: 1
+        },
+        {
+          code: 'scale',
+          name: 'Scale',
+          description: 'For operators managing multiple stores who want clean workflows and room to expand.',
+          monthly_amount: 40,
+          yearly_amount: 384,
+          features: ['Up to 5 storefronts', 'Priority support', 'Advanced analytics', 'Operational flexibility'],
+          currency: selectedCurrency || 'USD',
+          trial_days: 7,
+          trial_authorization_amount: 1
+        },
+        {
+          code: 'enterprise',
+          name: 'Enterprise',
+          description: 'For multi-brand teams planning custom workflows, governance, and white-glove rollout.',
+          monthly_amount: 100,
+          yearly_amount: 960,
+          features: ['Unlimited storefronts', 'Custom onboarding', 'Dedicated support lane', 'Implementation planning'],
+          currency: selectedCurrency || 'USD',
+          trial_days: 7,
+          trial_authorization_amount: 1
+        }
+      ];
+  const pricingFormatter = new Intl.NumberFormat((currencyContext && currencyContext.locale) || 'en-US', {
+    style: 'currency',
+    currency: availableBillingPlans[0] && availableBillingPlans[0].currency ? availableBillingPlans[0].currency : ((selectedCurrency || 'USD'))
+  });
+  const trialAuthorizationDisplay = pricingFormatter.format(Number((availableBillingPlans[0] && availableBillingPlans[0].trial_authorization_amount) || 1));
+  const pricingTiers = availableBillingPlans.map((plan) => ({
+    code: plan.code,
+    name: plan.name,
+    description: plan.description,
+    monthly: pricingFormatter.format(Number(plan.monthly_amount || 0)),
+    yearly: pricingFormatter.format(Number(plan.yearly_amount || 0)),
+    features: Array.isArray(plan.features) ? plan.features : [],
+    featured: plan.code === 'scale'
+  }));
   const buildStatusCards = [
     {
       label: 'Owner auth',
@@ -227,7 +252,13 @@
     <div class="mx-auto max-w-2xl text-center">
       <span class="eyebrow">Pricing</span>
       <h2 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950">Plans for teams who want the product to feel as serious as the price tag.</h2>
-      <p data-billing-copy class="mt-4 text-lg text-slate-600">Switch to annual billing and save 20%</p>
+      <p
+        data-billing-copy
+        data-billing-copy-monthly="Start with a 7-day trial. Paystack charges <%= trialAuthorizationDisplay %> to verify the card, refunds it after success, then charges the plan in 7 days."
+        data-billing-copy-yearly="Annual billing still starts with the same 7-day card verification flow, then charges the discounted yearly amount after the trial."
+        class="mt-4 text-lg text-slate-600">
+        Start with a 7-day trial. Paystack charges <%= trialAuthorizationDisplay %> to verify the card, refunds it after success, then charges the plan in 7 days.
+      </p>
     </div>
 
     <div class="mt-8 flex items-center justify-center gap-4">

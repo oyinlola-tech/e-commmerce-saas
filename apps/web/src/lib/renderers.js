@@ -80,6 +80,9 @@ const createRenderers = (context, helpers, paymentProviderService) => {
     const ownerStores = await helpers.listPlatformStores(req, req.platformAuth);
     const stores = ownerStores.map((store) => mergeStorePresentation(store));
     const billing = await helpers.getOwnerSubscription(req, req.platformAuth);
+    const billingPlans = await context.getPublicBillingPlans(req, {
+      currency: res.locals.selectedCurrency || 'USD'
+    });
 
     res.status(options.status || 200);
     return renderPlatform(res, 'platform/dashboard', {
@@ -88,6 +91,7 @@ const createRenderers = (context, helpers, paymentProviderService) => {
       metrics: buildOwnerDashboardMetrics(stores, billing.subscription),
       subscription: billing.subscription,
       latestInvoice: billing.latestInvoice,
+      billingPlans,
       errors: options.errors || {}
     });
   };
@@ -110,6 +114,28 @@ const createRenderers = (context, helpers, paymentProviderService) => {
       pageTitle: 'Sign in',
       errors,
       formData: buildFormData(req, ['email', 'returnTo']),
+      returnTo: resolveFormReturnTo(req, '/account', store)
+    });
+  };
+
+  const renderCustomerForgotPassword = (req, res, errors = {}, status = 200) => {
+    const store = resolveStore(req);
+    res.status(status);
+    return renderStorefront(req, res, 'storefront/forgot-password', {
+      pageTitle: 'Forgot password',
+      errors,
+      formData: buildFormData(req, ['email', 'returnTo']),
+      returnTo: resolveFormReturnTo(req, '/account', store)
+    });
+  };
+
+  const renderCustomerResetPassword = (req, res, errors = {}, status = 200) => {
+    const store = resolveStore(req);
+    res.status(status);
+    return renderStorefront(req, res, 'storefront/reset-password', {
+      pageTitle: 'Reset password',
+      errors,
+      formData: buildFormData(req, ['email', 'otp', 'returnTo']),
       returnTo: resolveFormReturnTo(req, '/account', store)
     });
   };
@@ -139,6 +165,36 @@ const createRenderers = (context, helpers, paymentProviderService) => {
       errors,
       formData: buildFormData(req, ['email', 'returnTo']),
       returnTo: resolveFormReturnTo(req, '/dashboard')
+    });
+  };
+
+  const renderOwnerForgotPassword = (req, res, errors = {}, status = 200) => {
+    res.status(status);
+    return renderPlatform(res, 'platform/forgot-password', {
+      pageTitle: 'Forgot password',
+      errors,
+      formData: buildFormData(req, ['email', 'returnTo']),
+      returnTo: resolveFormReturnTo(req, '/dashboard')
+    });
+  };
+
+  const renderOwnerResetPassword = (req, res, errors = {}, status = 200) => {
+    res.status(status);
+    return renderPlatform(res, 'platform/reset-password', {
+      pageTitle: 'Reset password',
+      errors,
+      formData: buildFormData(req, ['email', 'otp', 'returnTo']),
+      returnTo: resolveFormReturnTo(req, '/dashboard')
+    });
+  };
+
+  const renderPlatformAdminLogin = (req, res, errors = {}, status = 200) => {
+    res.status(status);
+    return renderPlatform(res, 'platform/admin-login', {
+      pageTitle: 'Platform admin sign in',
+      errors,
+      formData: buildFormData(req, ['email', 'returnTo']),
+      returnTo: resolveFormReturnTo(req, '/platform-admin')
     });
   };
 
@@ -392,8 +448,13 @@ const createRenderers = (context, helpers, paymentProviderService) => {
     renderOwnerDashboard,
     renderCustomerSignup,
     renderCustomerLogin,
+    renderCustomerForgotPassword,
+    renderCustomerResetPassword,
     renderOwnerSignup,
     renderOwnerLogin,
+    renderOwnerForgotPassword,
+    renderOwnerResetPassword,
+    renderPlatformAdminLogin,
     renderProductForm,
     renderSettingsPage,
     renderDomainPage,

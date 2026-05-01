@@ -1,3 +1,15 @@
+const buildPlatformAbsoluteUrl = (req, pathname = '/') => {
+  const protocol = String(req.headers['x-forwarded-proto'] || '')
+    .split(',')[0]
+    .trim()
+    || (req.secure ? 'https' : 'http');
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || req.hostname || '')
+    .split(',')[0]
+    .trim();
+  const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  return `${protocol}://${host}${normalizedPath}`;
+};
+
 const registerPlatformRoutes = (app, deps) => {
   const { context, helpers, validations, renderers } = deps;
   const {
@@ -16,8 +28,16 @@ const registerPlatformRoutes = (app, deps) => {
     registerPlatformUser,
     loginStorefrontCustomer,
     loginPlatformUser,
+    requestStorefrontPasswordReset,
+    confirmStorefrontPasswordReset,
+    requestPlatformPasswordReset,
+    confirmPlatformPasswordReset,
+    createOwnerSubscriptionCheckout,
+    verifyOwnerSubscriptionCheckout,
+    getPublicBillingPlans,
     createPlatformStore,
-    getPlatformStoreById
+    getPlatformStoreById,
+    clearWebAuthCookies
   } = context;
   const {
     resolveStore,
@@ -30,7 +50,9 @@ const registerPlatformRoutes = (app, deps) => {
     decorateProducts,
     buildProductDiscovery,
     buildStoreStats,
+    isPlatformAdminUser,
     requirePlatformUser,
+    requirePlatformAdmin,
     handleMultipartLogo,
     buildStorefrontUrl,
     buildStoreAdminUrl,
@@ -40,6 +62,9 @@ const registerPlatformRoutes = (app, deps) => {
     currencyValidation,
     ownerSignupValidation,
     ownerLoginValidation,
+    passwordResetRequestValidation,
+    passwordResetConfirmValidation,
+    subscriptionCheckoutValidation,
     storeCreationValidation
   } = validations;
   const {
@@ -49,6 +74,11 @@ const registerPlatformRoutes = (app, deps) => {
     renderOwnerSignup,
     renderCustomerLogin,
     renderOwnerLogin,
+    renderCustomerForgotPassword,
+    renderCustomerResetPassword,
+    renderOwnerForgotPassword,
+    renderOwnerResetPassword,
+    renderPlatformAdminLogin,
     renderOwnerDashboard,
     renderPlatformAdmin,
     renderErrorPage
@@ -111,11 +141,16 @@ const registerPlatformRoutes = (app, deps) => {
         });
       }
 
+      const billingPlans = await getPublicBillingPlans(req, {
+        currency: res.locals.selectedCurrency || 'USD'
+      });
+
       return renderPlatform(res, 'platform/index', {
         pageTitle: 'Aisle',
         metaDescription: 'Aisle gives retail teams a polished storefront, real authentication, and an owner workspace that feels like product, not a mockup.',
         metrics: {},
-        stores: []
+        stores: [],
+        billingPlans
       });
     } catch (error) {
       return next(error);
@@ -207,7 +242,7 @@ const registerPlatformRoutes = (app, deps) => {
             return res.redirect(`/dashboard?success=${encodeURIComponent(`${store.name} created successfully`)}`);
           } catch (error) {
             if (Number(error.status) === 403) {
-              return res.redirect('/dashboard?success=Account created&error=Store setup will unlock as soon as the trial subscription finishes provisioning.');
+              return res.redirect('/dashboard?success=Account created&error=Add a card and finish the 7-day trial setup before creating your first store.');
             }
 
             throw error;
@@ -273,6 +308,200 @@ const registerPlatformRoutes = (app, deps) => {
     } catch (error) {
       if ([400, 401, 403].includes(Number(error.status))) {
         return res.redirect(`/login?error=${encodeURIComponent(error.message || 'Unable to sign in with those credentials.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.get('/forgot-password', authPageRateLimiter, (req, res) => {
+    if (isStorefrontHost(req)) {
+      if (!resolveStore(req)) {
+        return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+      }
+
+      return renderCustomerForgotPassword(req, res);
+    }
+
+    return renderOwnerForgotPassword(req, res);
+  });
+
+  app.post('/forgot-password', authRateLimiter, passwordResetRequestValidation, handleFormValidation((req, res, errors) => {
+    if (isStorefrontHost(req)) {
+      return renderCustomerForgotPassword(req, res, errors, 422);
+    }
+
+    return renderOwnerForgotPassword(req, res, errors, 422);
+  }), async (req, res, next) => {
+    try {
+      if (isStorefrontHost(req)) {
+        const store = resolveStore(req);
+        if (!store) {
+          return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+        }
+
+        await requestStorefrontPasswordReset(req, store, {
+          email: req.body.email
+        });
+      } else {
+        await requestPlatformPasswordReset(req, {
+          email: req.body.email
+        });
+      }
+
+      const email = encodeURIComponent(String(req.body.email || '').trim());
+      return res.redirect(`/reset-password?email=${email}&success=${encodeURIComponent('If that account exists, an OTP has been sent to the email address.')}`);
+    } catch (error) {
+      if ([400, 404, 422].includes(Number(error.status))) {
+        const target = isStorefrontHost(req) ? '/forgot-password' : '/forgot-password';
+        return res.redirect(`${target}?error=${encodeURIComponent(error.message || 'Unable to send a reset OTP right now.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.get('/reset-password', authPageRateLimiter, (req, res) => {
+    if (req.query.email || req.query.returnTo) {
+      req.body = {
+        ...req.body,
+        email: req.query.email || '',
+        returnTo: req.query.returnTo || ''
+      };
+    }
+
+    if (isStorefrontHost(req)) {
+      if (!resolveStore(req)) {
+        return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+      }
+
+      return renderCustomerResetPassword(req, res);
+    }
+
+    return renderOwnerResetPassword(req, res);
+  });
+
+  app.post('/reset-password', authRateLimiter, passwordResetConfirmValidation, handleFormValidation((req, res, errors) => {
+    if (isStorefrontHost(req)) {
+      return renderCustomerResetPassword(req, res, errors, 422);
+    }
+
+    return renderOwnerResetPassword(req, res, errors, 422);
+  }), async (req, res, next) => {
+    try {
+      if (isStorefrontHost(req)) {
+        const store = resolveStore(req);
+        if (!store) {
+          return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+        }
+
+        await confirmStorefrontPasswordReset(req, store, {
+          email: req.body.email,
+          otp: req.body.otp,
+          password: req.body.password
+        });
+      } else {
+        await confirmPlatformPasswordReset(req, {
+          email: req.body.email,
+          otp: req.body.otp,
+          password: req.body.password
+        });
+      }
+
+      return res.redirect(`/login?success=${encodeURIComponent('Password reset complete. Sign in with your new password.')}`);
+    } catch (error) {
+      if ([400, 401, 404, 422].includes(Number(error.status))) {
+        return res.redirect(`/reset-password?email=${encodeURIComponent(req.body.email || '')}&error=${encodeURIComponent(error.message || 'Unable to reset the password.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.get('/platform-admin/login', authPageRateLimiter, (req, res) => {
+    if (req.platformAuth && req.currentPlatformUser && isPlatformAdminUser(req.currentPlatformUser)) {
+      return res.redirect('/platform-admin');
+    }
+
+    return renderPlatformAdminLogin(req, res);
+  });
+
+  app.post('/platform-admin/login', authRateLimiter, ownerLoginValidation, handleFormValidation((req, res, errors) => {
+    return renderPlatformAdminLogin(req, res, errors, 422);
+  }), async (req, res, next) => {
+    try {
+      const response = await loginPlatformUser(req, res, {
+        email: req.body.email,
+        password: req.body.password
+      });
+
+      if (!isPlatformAdminUser(response?.user)) {
+        clearWebAuthCookies(req, res);
+        return res.redirect('/platform-admin/login?error=That account does not have platform admin access.');
+      }
+
+      return res.redirect(resolveSafeLocalRedirect(req, req.body.returnTo || req.query.returnTo, '/platform-admin'));
+    } catch (error) {
+      if ([400, 401, 403].includes(Number(error.status))) {
+        return res.redirect(`/platform-admin/login?error=${encodeURIComponent(error.message || 'Unable to sign in with those credentials.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.post('/billing/subscribe', subscriptionCheckoutValidation, handleFormValidation((req, res) => {
+    return res.redirect('/dashboard?error=Choose a valid plan before starting the trial.');
+  }), async (req, res, next) => {
+    try {
+      if (requirePlatformUser(req, res)) {
+        return;
+      }
+
+      const checkout = await createOwnerSubscriptionCheckout(req, req.platformAuth, {
+        plan: req.body.plan,
+        billing_cycle: req.body.billing_cycle || 'monthly',
+        currency: res.locals.selectedCurrency || 'USD',
+        email: req.currentPlatformUser?.email || null,
+        callback_url: buildPlatformAbsoluteUrl(req, '/billing/callback')
+      });
+      const checkoutUrl = checkout?.providers?.[0]?.checkout_url;
+
+      if (!checkoutUrl) {
+        return res.redirect('/dashboard?error=Unable to start the billing session right now.');
+      }
+
+      return res.redirect(checkoutUrl);
+    } catch (error) {
+      if ([400, 403, 404, 422].includes(Number(error.status))) {
+        return res.redirect(`/dashboard?error=${encodeURIComponent(error.message || 'Unable to start the billing session right now.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.get('/billing/callback', async (req, res, next) => {
+    try {
+      if (requirePlatformUser(req, res)) {
+        return;
+      }
+
+      const reference = String(req.query.reference || req.query.trxref || '').trim();
+      if (!reference) {
+        return res.redirect('/dashboard?error=Payment reference was not returned by the payment provider.');
+      }
+
+      const verification = await verifyOwnerSubscriptionCheckout(req, req.platformAuth, reference);
+      const subscription = verification?.subscription || null;
+      if (subscription && ['trialing', 'active'].includes(String(subscription.status || '').toLowerCase())) {
+        return res.redirect('/dashboard?success=Card verified and your 7-day trial is now active.');
+      }
+
+      return res.redirect('/dashboard?error=We could not activate the trial with that payment method. Please try another card.');
+    } catch (error) {
+      if ([400, 403, 404, 422].includes(Number(error.status))) {
+        return res.redirect(`/dashboard?error=${encodeURIComponent(error.message || 'Unable to verify the billing session.')}`);
       }
 
       return next(error);
@@ -369,7 +598,7 @@ const registerPlatformRoutes = (app, deps) => {
   });
 
   app.get('/platform-admin', (req, res) => {
-    if (requirePlatformUser(req, res)) {
+    if (requirePlatformAdmin(req, res)) {
       return;
     }
 
@@ -387,7 +616,7 @@ const registerPlatformRoutes = (app, deps) => {
   });
 
   app.get('/platform-admin/stores', (req, res) => {
-    if (requirePlatformUser(req, res)) {
+    if (requirePlatformAdmin(req, res)) {
       return;
     }
 
@@ -404,7 +633,7 @@ const registerPlatformRoutes = (app, deps) => {
   });
 
   app.get('/platform-admin/support', (req, res) => {
-    if (requirePlatformUser(req, res)) {
+    if (requirePlatformAdmin(req, res)) {
       return;
     }
 
@@ -421,7 +650,7 @@ const registerPlatformRoutes = (app, deps) => {
   });
 
   app.get('/platform-admin/incidents', (req, res) => {
-    if (requirePlatformUser(req, res)) {
+    if (requirePlatformAdmin(req, res)) {
       return;
     }
 

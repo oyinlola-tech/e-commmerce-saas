@@ -1,48 +1,62 @@
-const DEFAULT_CURRENCY = String(process.env.SUBSCRIPTION_DEFAULT_CURRENCY || 'NGN').trim().toUpperCase();
+const DEFAULT_CURRENCY = 'USD';
+const TRIAL_DAYS = 7;
+const TRIAL_AUTHORIZATION_BASE_AMOUNT = Number(process.env.SUBSCRIPTION_TRIAL_AUTH_AMOUNT_USD || 1);
+const PLAN_ALIASES = {
+  basic: 'launch',
+  growth: 'scale'
+};
 
 const DEFAULT_PLANS = {
-  basic: {
-    code: 'basic',
-    name: 'Basic',
-    description: 'Launch one storefront with the core commerce stack.',
-    monthly_amount: 19000,
-    yearly_amount: 190000,
+  launch: {
+    code: 'launch',
+    name: 'Launch',
+    description: 'For teams launching one polished storefront with the core Aisle stack.',
+    monthly_amount: 10,
+    yearly_amount: 96,
     currency: DEFAULT_CURRENCY,
     trial_eligible: true,
     features: [
-      'One active store',
-      'Core catalog and checkout',
+      'One live storefront',
+      'Owner workspace',
+      'Domain management',
       'Email support'
-    ]
-  },
-  growth: {
-    code: 'growth',
-    name: 'Growth',
-    description: 'Scale into multi-market operations with stronger support.',
-    monthly_amount: 49000,
-    yearly_amount: 490000,
-    currency: DEFAULT_CURRENCY,
-    trial_eligible: false,
-    features: [
-      'Up to five active stores',
-      'Priority support',
-      'Advanced analytics'
     ]
   },
   scale: {
     code: 'scale',
     name: 'Scale',
-    description: 'Enterprise-ready support, operations, and flexibility.',
-    monthly_amount: 99000,
-    yearly_amount: 990000,
+    description: 'For operators growing across stores, teams, and more complex workflows.',
+    monthly_amount: 40,
+    yearly_amount: 384,
     currency: DEFAULT_CURRENCY,
-    trial_eligible: false,
+    trial_eligible: true,
     features: [
-      'Unlimited stores',
+      'Up to five active stores',
+      'Priority support',
+      'Advanced analytics',
+      'Operational flexibility'
+    ]
+  },
+  enterprise: {
+    code: 'enterprise',
+    name: 'Enterprise',
+    description: 'For larger teams that need higher-touch rollout, support, and controls.',
+    monthly_amount: 100,
+    yearly_amount: 960,
+    currency: DEFAULT_CURRENCY,
+    trial_eligible: true,
+    features: [
+      'Unlimited storefronts',
+      'Custom onboarding',
       'Dedicated support lane',
-      'Custom onboarding'
+      'Implementation planning'
     ]
   }
+};
+
+const normalizePlanCode = (planCode = '') => {
+  const normalized = String(planCode || '').trim().toLowerCase();
+  return PLAN_ALIASES[normalized] || normalized;
 };
 
 const getBillingPlans = () => {
@@ -50,7 +64,7 @@ const getBillingPlans = () => {
 };
 
 const getBillingPlan = (planCode) => {
-  return DEFAULT_PLANS[String(planCode || '').trim().toLowerCase()] || null;
+  return DEFAULT_PLANS[normalizePlanCode(planCode)] || null;
 };
 
 const getPlanPrice = (planCode, billingCycle) => {
@@ -63,6 +77,7 @@ const getPlanPrice = (planCode, billingCycle) => {
   const amount = cycle === 'yearly' ? plan.yearly_amount : plan.monthly_amount;
   return {
     ...plan,
+    code: normalizePlanCode(plan.code),
     billing_cycle: cycle,
     amount
   };
@@ -81,6 +96,9 @@ const getPeriodEnd = (billingCycle, startDate = new Date()) => {
 
 module.exports = {
   DEFAULT_CURRENCY,
+  TRIAL_DAYS,
+  TRIAL_AUTHORIZATION_BASE_AMOUNT,
+  normalizePlanCode,
   getBillingPlans,
   getBillingPlan,
   getPlanPrice,

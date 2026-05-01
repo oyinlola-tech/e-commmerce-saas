@@ -46,6 +46,7 @@ const createValidations = (context, helpers) => {
       'store_subdomain',
       'store_type',
       'template_key',
+      'template_picker',
       'theme_color',
       'font_preset',
       '_csrf'
@@ -61,6 +62,7 @@ const createValidations = (context, helpers) => {
     body('store_subdomain').optional().customSanitizer((value) => sanitizeSlug(value).slice(0, 120)),
     body('store_type').optional().trim().isLength({ max: 50 }),
     body('template_key').optional().trim().isLength({ max: 50 }),
+    body('template_picker').optional().trim().isLength({ max: 50 }),
     body('theme_color').optional().matches(/^#[0-9a-f]{6}$/i).withMessage('Use a valid hex colour.'),
     body('font_preset').optional().trim().isLength({ max: 50 })
   ];
@@ -72,12 +74,41 @@ const createValidations = (context, helpers) => {
     body('password').isString().notEmpty().withMessage('Password is required.')
   ];
 
+  const passwordResetRequestValidation = [
+    allowBodyFields(['email', 'returnTo', '_csrf']),
+    commonRules.email(),
+    body('returnTo').optional().isString().isLength({ max: 2000 })
+  ];
+
+  const passwordResetConfirmValidation = [
+    allowBodyFields(['email', 'otp', 'password', 'confirmPassword', 'returnTo', '_csrf']),
+    commonRules.email(),
+    body('otp')
+      .isString()
+      .trim()
+      .isLength({ min: 4, max: 12 })
+      .withMessage('Enter the OTP that was sent to your email.'),
+    commonRules.password(),
+    body('returnTo').optional().isString().isLength({ max: 2000 }),
+    body('confirmPassword')
+      .isString()
+      .custom((value, { req }) => value === req.body.password)
+      .withMessage('Passwords do not match.')
+  ];
+
+  const subscriptionCheckoutValidation = [
+    allowBodyFields(['plan', 'billing_cycle', '_csrf']),
+    body('plan').isIn(['launch', 'scale', 'enterprise']),
+    body('billing_cycle').optional().isIn(['monthly', 'yearly'])
+  ];
+
   const storeCreationValidation = [
-    allowBodyFields(['name', 'subdomain', 'store_type', 'template_key', 'theme_color', 'font_preset', '_csrf']),
+    allowBodyFields(['name', 'subdomain', 'store_type', 'template_key', 'template_picker', 'theme_color', 'font_preset', '_csrf']),
     commonRules.name('name', 150),
     body('subdomain').customSanitizer((value) => sanitizeSlug(value).slice(0, 120)).notEmpty().withMessage('Subdomain is required.'),
     body('store_type').optional().trim().isLength({ max: 50 }),
     body('template_key').optional().trim().isLength({ max: 50 }),
+    body('template_picker').optional().trim().isLength({ max: 50 }),
     body('theme_color').optional().matches(/^#[0-9a-f]{6}$/i).withMessage('Use a valid hex colour.'),
     body('font_preset').optional().trim().isLength({ max: 50 })
   ];
@@ -239,6 +270,9 @@ const createValidations = (context, helpers) => {
     customerRegisterValidation,
     ownerSignupValidation,
     ownerLoginValidation,
+    passwordResetRequestValidation,
+    passwordResetConfirmValidation,
+    subscriptionCheckoutValidation,
     storeCreationValidation,
     storeSettingsValidation,
     domainValidation,

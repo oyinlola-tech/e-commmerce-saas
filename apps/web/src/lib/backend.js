@@ -848,6 +848,48 @@ const getOwnerSubscription = async (req, auth) => {
   };
 };
 
+const getPublicBillingPlans = async (req, options = {}) => {
+  const targetCurrency = String(options.currency || '').trim().toUpperCase();
+  const query = targetCurrency
+    ? `?currency=${encodeURIComponent(targetCurrency)}`
+    : '';
+  const response = await requestPublicJson(req, env.serviceUrls.billing, `/plans${query}`);
+  return Array.isArray(response?.plans) ? response.plans : [];
+};
+
+const createOwnerSubscriptionCheckout = async (req, auth, payload = {}) => {
+  return requestServiceJson(req, env.serviceUrls.billing, '/subscriptions/checkout-session', {
+    method: 'POST',
+    auth: {
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    },
+    body: {
+      plan: payload.plan,
+      billing_cycle: payload.billing_cycle || 'monthly',
+      provider: payload.provider || 'paystack',
+      currency: payload.currency || 'USD',
+      email: payload.email || null,
+      callback_url: payload.callback_url || null
+    }
+  });
+};
+
+const verifyOwnerSubscriptionCheckout = async (req, auth, reference) => {
+  return requestServiceJson(req, env.serviceUrls.billing, '/subscriptions/verify-checkout', {
+    method: 'POST',
+    auth: {
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    },
+    body: {
+      reference
+    }
+  });
+};
+
 const getStoreProductBySlug = async (req, store, slug) => {
   const response = await requestServiceJson(
     req,
@@ -991,6 +1033,28 @@ const registerStorefrontCustomer = async (req, res, store, payload = {}) => {
     customer,
     cart
   };
+};
+
+const requestStorefrontPasswordReset = async (req, store, payload = {}) => {
+  return requestPublicJson(req, env.serviceUrls.customer, '/customers/password-reset/request', {
+    method: 'POST',
+    body: {
+      store_id: Number(store.id),
+      email: String(payload.email || '').trim().toLowerCase()
+    }
+  });
+};
+
+const confirmStorefrontPasswordReset = async (req, store, payload = {}) => {
+  return requestPublicJson(req, env.serviceUrls.customer, '/customers/password-reset/confirm', {
+    method: 'POST',
+    body: {
+      store_id: Number(store.id),
+      email: String(payload.email || '').trim().toLowerCase(),
+      otp: String(payload.otp || '').trim(),
+      password: String(payload.password || '')
+    }
+  });
 };
 
 const loginStorefrontCustomer = async (req, res, store, payload = {}) => {
@@ -1137,6 +1201,26 @@ const loginPlatformUser = async (req, res, payload = {}) => {
   return response;
 };
 
+const requestPlatformPasswordReset = async (req, payload = {}) => {
+  return requestPublicJson(req, env.serviceUrls.user, '/auth/password-reset/request', {
+    method: 'POST',
+    body: {
+      email: String(payload.email || '').trim().toLowerCase()
+    }
+  });
+};
+
+const confirmPlatformPasswordReset = async (req, payload = {}) => {
+  return requestPublicJson(req, env.serviceUrls.user, '/auth/password-reset/confirm', {
+    method: 'POST',
+    body: {
+      email: String(payload.email || '').trim().toLowerCase(),
+      otp: String(payload.otp || '').trim(),
+      password: String(payload.password || '')
+    }
+  });
+};
+
 module.exports = {
   BackendRequestError,
   DEFAULT_PRODUCT_IMAGE,
@@ -1152,6 +1236,7 @@ module.exports = {
   ensureStorefrontSession,
   getAdminStoreOrderById,
   getAdminStoreProductById,
+  getPublicBillingPlans,
   getCartForStore,
   getCurrentCustomer,
   getCurrentPlatformUser,
@@ -1169,6 +1254,12 @@ module.exports = {
   listAdminStoreOrders,
   listPlatformStores,
   listStoreProducts,
+  requestPlatformPasswordReset,
+  confirmPlatformPasswordReset,
+  requestStorefrontPasswordReset,
+  confirmStorefrontPasswordReset,
+  createOwnerSubscriptionCheckout,
+  verifyOwnerSubscriptionCheckout,
   loginPlatformUser,
   loginStorefrontCustomer,
   normalizeCart,

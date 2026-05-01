@@ -5,7 +5,6 @@ const createAppHelpers = (context) => {
     ROOT_DOMAIN,
     PORT,
     isLocalRoot,
-    customerCookieName,
     orderCookieName,
     wishlistCookieName,
     recentlyViewedCookieName,
@@ -560,6 +559,21 @@ const createAppHelpers = (context) => {
     return res;
   };
 
+  const isPlatformAdminUser = (user) => {
+    const role = String(user?.role || '').trim().toLowerCase();
+    return role === PLATFORM_ROLES.PLATFORM_OWNER || role === PLATFORM_ROLES.SUPPORT_AGENT;
+  };
+
+  const requirePlatformAdmin = (req, res, fallback = '/platform-admin') => {
+    if (req.platformAuth && req.currentPlatformUser && isPlatformAdminUser(req.currentPlatformUser)) {
+      return null;
+    }
+
+    const returnTo = resolveSafeLocalRedirect(req, req.originalUrl || fallback, fallback);
+    res.redirect(`/platform-admin/login?returnTo=${encodeURIComponent(returnTo)}`);
+    return res;
+  };
+
   const requireActiveStore = (req, res, fallback = '/dashboard') => {
     if (req.currentStore?.id) {
       return null;
@@ -574,7 +588,7 @@ const createAppHelpers = (context) => {
       storesCount: stores.length,
       liveStores: stores.filter((entry) => entry.is_active).length,
       subscriptionStatus: subscription?.status || 'inactive',
-      subscriptionPlan: subscription?.plan || 'starter',
+      subscriptionPlan: subscription?.plan || 'launch',
       trialEndsAt: subscription?.trial_ends_at || null,
       currentPeriodEnd: subscription?.current_period_end || null
     };
@@ -661,7 +675,9 @@ const createAppHelpers = (context) => {
     buildProductPresentationPayload,
     buildProductDraft,
     filterCatalogProducts,
+    isPlatformAdminUser,
     requirePlatformUser,
+    requirePlatformAdmin,
     requireActiveStore,
     buildOwnerDashboardMetrics,
     buildInternalServiceHeaders,

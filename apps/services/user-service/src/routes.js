@@ -1,19 +1,28 @@
+const crypto = require('crypto');
 const { body } = require('express-validator');
 const {
   hashPassword,
   comparePassword,
   signPlatformToken,
   requireInternalRequest,
+  buildSignedInternalHeaders,
+  requestJson,
   EVENT_NAMES,
   PLATFORM_ROLES,
   asyncHandler,
   createHttpError,
   validate,
   allowBodyFields,
-  commonRules
+  commonRules,
+  sanitizeEmail,
+  sanitizePlainText
 } = require('../../../../packages/shared');
 
 const allowedRoles = Object.values(PLATFORM_ROLES);
+const PASSWORD_RESET_OTP_TTL_MINUTES = Math.max(5, Number(process.env.PASSWORD_RESET_OTP_TTL_MINUTES || 15));
+const PLATFORM_ADMIN_BOOTSTRAP_KEY = 'platform-admin-env';
+const DEFAULT_PLATFORM_ADMIN_NAME = 'Platform Admin';
+const DEFAULT_PLATFORM_ADMIN_PASSWORD = 'ChangeMe123!';
 
 const sanitizeUser = (user) => {
   if (!user) {
@@ -38,21 +47,177 @@ const buildRequireInternal = (config) => {
   });
 };
 
-const registerRoutes = async ({ app, db, bus, config }) => {
+const normalizeEmail = (value = '') => {
+  return sanitizeEmail(value || '');
+};
+
+const normalizeStatus = (value = '') => {
+  return String(value || '').trim().toLowerCase();
+};
+
+const buildGenericPasswordResetResponse = () => ({
+  status: 'accepted',
+  message: 'If that account exists, an OTP has been sent to the email address.'
+});
+
+const generateOtp = () => {
+  return String(crypto.randomInt(100000, 1000000));
+};
+
+const getOtpExpiryDate = () => {
+  return new Date(Date.now() + PASSWORD_RESET_OTP_TTL_MINUTES * 60 * 1000);
+};
+
+const sendPasswordResetOtpEmail = async (config, requestId, payload = {}) => {
+  const subject = 'Your Aisle password reset OTP';
+  const otp = String(payload.otp || '').trim();
+  const displayName = sanitizePlainText(payload.name || 'there', { maxLength: 120 }) || 'there';
+  const resetWindow = `${PASSWORD_RESET_OTP_TTL_MINUTES} minute${PASSWORD_RESET_OTP_TTL_MINUTES === 1 ? '' : 's'}`;
+  const text = [
+    `Hi ${displayName},`,
+    '',
+    `Use this OTP to reset your Aisle password: ${otp}`,
+    '',
+    `This code expires in ${resetWindow}. If you did not request this, you can ignore this email.`
+  ].join('\n');
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+      <p>Hi ${displayName},</p>
+      <p>Use this OTP to reset your Aisle password.</p>
+      <p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0;color:#0f766e">${otp}</p>
+      <p>This code expires in ${resetWindow}.</p>
+      <p>If you did not request this, you can ignore this email.</p>
+    </div>
+  `.trim();
+
+  try {
+    await requestJson(`${config.serviceUrls.notification}/emails/send`, {
+      method: 'POST',
+      headers: buildSignedInternalHeaders({
+        requestId: requestId || crypto.randomUUID(),
+        actorType: 'service',
+        actorRole: 'system',
+        secret: config.internalSharedSecret
+      }),
+      body: {
+        to: normalizeEmail(payload.email),
+        subject,
+        text,
+        html,
+        metadata: {
+          kind: 'password_reset_otp',
+          audience: 'platform_user'
+        }
+      },
+      timeoutMs: config.requestTimeoutMs
+    });
+  } catch (error) {
+    const upstreamMessage = typeof error?.payload === 'object' && error?.payload?.error
+      ? error.payload.error
+      : error.message;
+    throw createHttpError(Number(error.status) || 503, upstreamMessage || 'Unable to send password reset email right now.', null, {
+      expose: true
+    });
+  }
+};
+
+const upsertBootstrappedPlatformAdmin = async ({ db, logger, config }) => {
+  const configuredName = sanitizePlainText(process.env.PLATFORM_ADMIN_NAME || DEFAULT_PLATFORM_ADMIN_NAME, {
+    maxLength: 120
+  }) || DEFAULT_PLATFORM_ADMIN_NAME;
+  const configuredEmail = normalizeEmail(
+    process.env.PLATFORM_ADMIN_EMAIL || `admin@${config.rootDomain || 'localhost'}`
+  );
+  const configuredPassword = String(process.env.PLATFORM_ADMIN_PASSWORD || DEFAULT_PLATFORM_ADMIN_PASSWORD);
+
+  if (!configuredEmail) {
+    throw new Error('PLATFORM_ADMIN_EMAIL must be a valid email address.');
+  }
+
+  if (configuredPassword.length < 8) {
+    throw new Error('PLATFORM_ADMIN_PASSWORD must be at least 8 characters long.');
+  }
+
+  const existingBootstrapUser = (await db.query(
+    'SELECT * FROM platform_users WHERE bootstrap_key = ? LIMIT 1',
+    [PLATFORM_ADMIN_BOOTSTRAP_KEY]
+  ))[0] || null;
+  const existingEmailUser = (await db.query(
+    'SELECT * FROM platform_users WHERE email = ? LIMIT 1',
+    [configuredEmail]
+  ))[0] || null;
+
+  if (
+    existingBootstrapUser
+    && existingEmailUser
+    && String(existingBootstrapUser.id) !== String(existingEmailUser.id)
+  ) {
+    throw new Error(`PLATFORM_ADMIN_EMAIL ${configuredEmail} is already assigned to a different platform user.`);
+  }
+
+  const targetUser = existingBootstrapUser || existingEmailUser;
+  const passwordHash = await hashPassword(configuredPassword);
+
+  if (targetUser) {
+    await db.execute(
+      `
+        UPDATE platform_users
+        SET name = ?, email = ?, password_hash = ?, role = ?, status = ?, bootstrap_key = ?
+        WHERE id = ?
+      `,
+      [
+        configuredName,
+        configuredEmail,
+        passwordHash,
+        PLATFORM_ROLES.PLATFORM_OWNER,
+        'active',
+        PLATFORM_ADMIN_BOOTSTRAP_KEY,
+        targetUser.id
+      ]
+    );
+
+    logger.info('Bootstrapped platform admin user', {
+      userId: targetUser.id,
+      email: configuredEmail
+    });
+    return;
+  }
+
+  const result = await db.execute(
+    `
+      INSERT INTO platform_users (name, email, password_hash, role, bootstrap_key, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    [
+      configuredName,
+      configuredEmail,
+      passwordHash,
+      PLATFORM_ROLES.PLATFORM_OWNER,
+      PLATFORM_ADMIN_BOOTSTRAP_KEY,
+      'active'
+    ]
+  );
+
+  logger.info('Created bootstrapped platform admin user', {
+    userId: result.insertId,
+    email: configuredEmail
+  });
+};
+
+const registerRoutes = async ({ app, db, bus, config, logger }) => {
   const requireInternal = buildRequireInternal(config);
+  await upsertBootstrappedPlatformAdmin({ db, logger, config });
 
   app.post('/auth/register', validate([
-    allowBodyFields(['name', 'email', 'password', 'role']),
+    allowBodyFields(['name', 'email', 'password']),
     commonRules.name('name', 120),
     commonRules.email(),
-    commonRules.password(),
-    body('role').optional().isIn(allowedRoles)
+    commonRules.password()
   ]), asyncHandler(async (req, res) => {
     const name = String(req.body.name || '').trim();
-    const email = String(req.body.email || '').trim().toLowerCase();
+    const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || '');
-    const requestedRole = String(req.body.role || PLATFORM_ROLES.STORE_OWNER).trim().toLowerCase();
-    const role = allowedRoles.includes(requestedRole) ? requestedRole : PLATFORM_ROLES.STORE_OWNER;
+    const role = PLATFORM_ROLES.STORE_OWNER;
 
     const existing = await db.query('SELECT id FROM platform_users WHERE email = ?', [email]);
     if (existing.length) {
@@ -67,14 +232,12 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     const user = (await db.query('SELECT * FROM platform_users WHERE id = ?', [result.insertId]))[0];
     const token = signPlatformToken(user, config.jwtSecret, config.jwtAccessTtl);
 
-    if (user.role === PLATFORM_ROLES.STORE_OWNER) {
-      await bus.publish(EVENT_NAMES.USER_REGISTERED, {
-        user_id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
-      });
-    }
+    await bus.publish(EVENT_NAMES.USER_REGISTERED, {
+      user_id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role
+    });
 
     return res.status(201).json({
       token,
@@ -87,12 +250,16 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     commonRules.email(),
     body('password').isString().notEmpty().withMessage('Password is required.')
   ]), asyncHandler(async (req, res) => {
-    const email = String(req.body.email || '').trim().toLowerCase();
+    const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || '');
     const user = (await db.query('SELECT * FROM platform_users WHERE email = ?', [email]))[0];
 
     if (!user) {
       throw createHttpError(401, 'Invalid email or password.', null, { expose: true });
+    }
+
+    if (normalizeStatus(user.status) !== 'active') {
+      throw createHttpError(403, 'This account is not active.', null, { expose: true });
     }
 
     const passwordMatches = await comparePassword(password, user.password_hash);
@@ -103,6 +270,102 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     return res.json({
       token: signPlatformToken(user, config.jwtSecret, config.jwtAccessTtl),
       user: sanitizeUser(user)
+    });
+  }));
+
+  app.post('/auth/password-reset/request', validate([
+    allowBodyFields(['email']),
+    commonRules.email()
+  ]), asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.body.email);
+    const user = (await db.query('SELECT * FROM platform_users WHERE email = ? LIMIT 1', [email]))[0] || null;
+
+    if (!user || normalizeStatus(user.status) !== 'active') {
+      return res.json(buildGenericPasswordResetResponse());
+    }
+
+    const otp = generateOtp();
+    const otpHash = await hashPassword(otp);
+    const expiresAt = getOtpExpiryDate();
+
+    await db.execute(
+      `
+        UPDATE platform_users
+        SET password_reset_otp_hash = ?, password_reset_otp_expires_at = ?, password_reset_requested_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        otpHash,
+        expiresAt,
+        user.id
+      ]
+    );
+
+    await sendPasswordResetOtpEmail(config, req.requestId, {
+      email: user.email,
+      name: user.name,
+      otp
+    });
+
+    return res.json(buildGenericPasswordResetResponse());
+  }));
+
+  app.post('/auth/password-reset/confirm', validate([
+    allowBodyFields(['email', 'otp', 'password']),
+    commonRules.email(),
+    body('otp')
+      .isString()
+      .trim()
+      .isLength({ min: 4, max: 12 })
+      .withMessage('Enter the OTP that was sent to your email.'),
+    commonRules.password()
+  ]), asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.body.email);
+    const otp = String(req.body.otp || '').trim();
+    const password = String(req.body.password || '');
+    const user = (await db.query('SELECT * FROM platform_users WHERE email = ? LIMIT 1', [email]))[0] || null;
+
+    if (!user || !user.password_reset_otp_hash || !user.password_reset_otp_expires_at) {
+      throw createHttpError(401, 'Invalid or expired OTP.', null, { expose: true });
+    }
+
+    if (normalizeStatus(user.status) !== 'active') {
+      throw createHttpError(403, 'This account is not active.', null, { expose: true });
+    }
+
+    const expiresAt = new Date(user.password_reset_otp_expires_at);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+      await db.execute(
+        `
+          UPDATE platform_users
+          SET password_reset_otp_hash = NULL, password_reset_otp_expires_at = NULL, password_reset_requested_at = NULL
+          WHERE id = ?
+        `,
+        [user.id]
+      );
+      throw createHttpError(401, 'Invalid or expired OTP.', null, { expose: true });
+    }
+
+    const otpMatches = await comparePassword(otp, user.password_reset_otp_hash);
+    if (!otpMatches) {
+      throw createHttpError(401, 'Invalid or expired OTP.', null, { expose: true });
+    }
+
+    const passwordHash = await hashPassword(password);
+    await db.execute(
+      `
+        UPDATE platform_users
+        SET password_hash = ?, password_reset_otp_hash = NULL, password_reset_otp_expires_at = NULL, password_reset_requested_at = NULL
+        WHERE id = ?
+      `,
+      [
+        passwordHash,
+        user.id
+      ]
+    );
+
+    return res.json({
+      status: 'ok'
     });
   }));
 
@@ -134,7 +397,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 
     const role = String(req.body.role || '').trim().toLowerCase();
     const name = String(req.body.name || '').trim();
-    const email = String(req.body.email || '').trim().toLowerCase();
+    const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || '');
 
     const existing = await db.query('SELECT id FROM platform_users WHERE email = ?', [email]);

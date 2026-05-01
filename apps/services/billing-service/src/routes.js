@@ -13,21 +13,25 @@ const {
 } = require('../../../../packages/shared');
 const {
   DEFAULT_CURRENCY,
+  TRIAL_DAYS,
+  TRIAL_AUTHORIZATION_BASE_AMOUNT,
+  normalizePlanCode,
   getBillingPlans,
   getBillingPlan,
   getPlanPrice,
   getPeriodEnd
 } = require('./plans');
+const {
+  normalizeCurrencyCode,
+  convertAmount
+} = require('./currency');
 
-const TRIAL_DAYS = 14;
-
-const createTrialDates = () => {
-  const now = new Date();
+const createTrialDates = (baseDate = new Date()) => {
+  const now = baseDate instanceof Date ? baseDate : new Date(baseDate);
   const trialEnds = new Date(now.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
-  const currentPeriodEnd = getPeriodEnd('monthly', now);
   return {
     trialEnds,
-    currentPeriodEnd
+    currentPeriodEnd: trialEnds
   };
 };
 
@@ -42,6 +46,18 @@ const buildRequireInternal = (config) => {
   });
 };
 
+const parseJsonField = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
 const serializeSubscription = (subscription) => {
   if (!subscription) {
     return null;
@@ -49,8 +65,11 @@ const serializeSubscription = (subscription) => {
 
   return {
     ...subscription,
+    plan: normalizePlanCode(subscription.plan || 'launch'),
     plan_amount: Number(subscription.plan_amount || 0),
-    cancel_at_period_end: Boolean(subscription.cancel_at_period_end)
+    cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+    authorization_reusable: Boolean(subscription.authorization_reusable),
+    authorization_payload: parseJsonField(subscription.authorization_payload)
   };
 };
 
@@ -78,6 +97,10 @@ const getOwnerSubscription = async (db, ownerId) => {
   return (await db.query('SELECT * FROM subscriptions WHERE owner_id = ?', [ownerId]))[0] || null;
 };
 
+const getSubscriptionById = async (db, subscriptionId) => {
+  return (await db.query('SELECT * FROM subscriptions WHERE id = ?', [subscriptionId]))[0] || null;
+};
+
 const getLatestInvoice = async (db, ownerId) => {
   return (await db.query(
     'SELECT * FROM invoices WHERE owner_id = ? ORDER BY created_at DESC LIMIT 1',
@@ -102,17 +125,54 @@ const buildPaymentHeaders = (req, config) => {
   });
 };
 
+const buildServiceHeaders = ({ requestId, ownerId, actorRole, config }) => {
+  return buildSignedInternalHeaders({
+    requestId,
+    userId: ownerId,
+    actorRole: actorRole || PLATFORM_ROLES.STORE_OWNER,
+    actorType: 'platform_user',
+    secret: config.internalSharedSecret
+  });
+};
+
+const buildNormalizedPricing = async (planCode, billingCycle, currency) => {
+  const basePricing = getPlanPrice(planCode, billingCycle);
+  if (!basePricing) {
+    return null;
+  }
+
+  const requestedCurrency = normalizeCurrencyCode(currency) || basePricing.currency || DEFAULT_CURRENCY;
+  const conversion = await convertAmount(basePricing.amount, basePricing.currency || DEFAULT_CURRENCY, requestedCurrency);
+
+  return {
+    ...basePricing,
+    code: normalizePlanCode(basePricing.code),
+    amount: conversion.amount,
+    currency: conversion.currency,
+    base_amount: basePricing.amount,
+    base_currency: basePricing.currency || DEFAULT_CURRENCY,
+    exchange_rate: conversion.exchangeRate,
+    rate_date: conversion.rateDate
+  };
+};
+
+const getTrialAuthorizationAmount = async (currency) => {
+  return convertAmount(TRIAL_AUTHORIZATION_BASE_AMOUNT, DEFAULT_CURRENCY, currency || DEFAULT_CURRENCY);
+};
+
 const createOrUpdateSubscription = async (db, ownerId, pricing, payload = {}, existingSubscription = null) => {
-  const nextStatus = existingSubscription
-    ? (['active', 'trialing'].includes(existingSubscription.status) ? existingSubscription.status : 'pending_payment')
-    : 'pending_payment';
+  const existingStatus = String(existingSubscription?.status || '').toLowerCase();
+  const nextStatus = ['active', 'trialing'].includes(existingStatus)
+    ? existingStatus
+    : 'pending_payment_method';
 
   await db.execute(
     `
       INSERT INTO subscriptions (
         owner_id, plan, status, billing_cycle, currency, plan_amount, billing_email, provider, payment_reference,
-        started_at, cancel_at_period_end, cancelled_at, trial_ends_at, current_period_end
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)
+        authorization_code, authorization_email, authorization_signature, authorization_payload, authorization_reusable,
+        authorization_verified_at, started_at, cancel_at_period_end, cancelled_at, trial_ends_at, current_period_end
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)
       ON DUPLICATE KEY UPDATE
         plan = VALUES(plan),
         status = VALUES(status),
@@ -122,10 +182,10 @@ const createOrUpdateSubscription = async (db, ownerId, pricing, payload = {}, ex
         billing_email = VALUES(billing_email),
         provider = VALUES(provider),
         payment_reference = VALUES(payment_reference),
-        cancel_at_period_end = 0,
-        cancelled_at = NULL,
-        trial_ends_at = IF(status = 'trialing', VALUES(trial_ends_at), trial_ends_at),
-        current_period_end = VALUES(current_period_end)
+        cancel_at_period_end = IF(VALUES(status) IN ('trialing', 'active'), 0, cancel_at_period_end),
+        cancelled_at = IF(VALUES(status) IN ('trialing', 'active'), NULL, cancelled_at),
+        trial_ends_at = IF(VALUES(status) = 'pending_payment_method', NULL, trial_ends_at),
+        current_period_end = IF(VALUES(status) = 'pending_payment_method', NULL, current_period_end)
     `,
     [
       ownerId,
@@ -135,8 +195,14 @@ const createOrUpdateSubscription = async (db, ownerId, pricing, payload = {}, ex
       pricing.currency,
       pricing.amount,
       payload.email || existingSubscription?.billing_email || null,
-      payload.provider || existingSubscription?.provider || null,
+      payload.provider || existingSubscription?.provider || 'paystack',
       existingSubscription?.payment_reference || null,
+      existingSubscription?.authorization_code || null,
+      existingSubscription?.authorization_email || null,
+      existingSubscription?.authorization_signature || null,
+      existingSubscription?.authorization_payload || null,
+      Number(existingSubscription?.authorization_reusable || 0),
+      existingSubscription?.authorization_verified_at || null,
       existingSubscription?.started_at || null,
       existingSubscription?.trial_ends_at || null,
       existingSubscription?.current_period_end || null
@@ -146,12 +212,189 @@ const createOrUpdateSubscription = async (db, ownerId, pricing, payload = {}, ex
   return getOwnerSubscription(db, ownerId);
 };
 
+const applyTrialAuthorizationFailure = async (db, subscription, paymentData = {}) => {
+  if (!subscription?.id) {
+    return null;
+  }
+
+  await db.execute(
+    `
+      UPDATE subscriptions
+      SET status = 'pending_payment_method',
+          payment_reference = ?,
+          billing_email = ?,
+          provider = ?,
+          trial_ends_at = NULL,
+          current_period_end = NULL
+      WHERE id = ?
+    `,
+    [
+      paymentData.reference || subscription.payment_reference || null,
+      paymentData.metadata?.email || subscription.billing_email || null,
+      paymentData.provider || subscription.provider || 'paystack',
+      subscription.id
+    ]
+  );
+
+  return getSubscriptionById(db, subscription.id);
+};
+
+const applyTrialAuthorizationSuccess = async (db, subscription, paymentData = {}, options = {}) => {
+  if (!subscription?.id) {
+    return null;
+  }
+
+  const authorization = paymentData.authorization || paymentData.metadata?.authorization || {};
+  const hasReusableAuthorization = authorization.authorization_code && authorization.reusable !== false;
+  if (!hasReusableAuthorization) {
+    return applyTrialAuthorizationFailure(db, subscription, paymentData);
+  }
+
+  const now = options.now || new Date();
+  const existingTrialEnd = subscription.trial_ends_at ? new Date(subscription.trial_ends_at) : null;
+  const existingCurrentPeriodEnd = subscription.current_period_end ? new Date(subscription.current_period_end) : null;
+  const { trialEnds, currentPeriodEnd } = existingTrialEnd
+    ? {
+        trialEnds: existingTrialEnd,
+        currentPeriodEnd: existingCurrentPeriodEnd || existingTrialEnd
+      }
+    : createTrialDates(now);
+
+  await db.execute(
+    `
+      UPDATE subscriptions
+      SET status = 'trialing',
+          plan = ?,
+          billing_cycle = ?,
+          currency = ?,
+          plan_amount = ?,
+          billing_email = ?,
+          provider = ?,
+          payment_reference = ?,
+          authorization_code = ?,
+          authorization_email = ?,
+          authorization_signature = ?,
+          authorization_payload = ?,
+          authorization_reusable = 1,
+          authorization_verified_at = CURRENT_TIMESTAMP,
+          started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+          trial_ends_at = ?,
+          current_period_end = ?,
+          cancel_at_period_end = 0,
+          cancelled_at = NULL
+      WHERE id = ?
+    `,
+    [
+      normalizePlanCode(paymentData.metadata?.plan || subscription.plan || 'launch'),
+      String(paymentData.metadata?.billing_cycle || subscription.billing_cycle || 'monthly').trim().toLowerCase(),
+      normalizeCurrencyCode(paymentData.metadata?.plan_currency || paymentData.currency || subscription.currency || DEFAULT_CURRENCY) || DEFAULT_CURRENCY,
+      Number(paymentData.metadata?.plan_amount || subscription.plan_amount || 0),
+      paymentData.metadata?.email || subscription.billing_email || null,
+      paymentData.provider || subscription.provider || 'paystack',
+      paymentData.reference || subscription.payment_reference || null,
+      authorization.authorization_code,
+      authorization.authorization_email || paymentData.metadata?.email || subscription.billing_email || null,
+      authorization.signature || null,
+      JSON.stringify(authorization),
+      trialEnds,
+      currentPeriodEnd,
+      subscription.id
+    ]
+  );
+
+  return getSubscriptionById(db, subscription.id);
+};
+
+const applyInvoicePaymentSuccess = async (db, invoice, subscription, paymentData = {}) => {
+  if (!invoice?.id || !subscription?.id) {
+    return null;
+  }
+
+  const metadata = invoice.metadata ? JSON.parse(invoice.metadata) : {};
+  await db.execute(
+    'UPDATE invoices SET status = ?, provider_reference = ?, paid_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ['paid', paymentData.reference || invoice.payment_reference || null, invoice.id]
+  );
+
+  await db.execute(
+    `
+      UPDATE subscriptions
+      SET status = 'active',
+          plan = ?,
+          billing_cycle = ?,
+          currency = ?,
+          plan_amount = ?,
+          provider = ?,
+          payment_reference = ?,
+          started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+          current_period_end = ?,
+          trial_ends_at = NULL,
+          cancel_at_period_end = 0,
+          cancelled_at = NULL
+      WHERE id = ?
+    `,
+    [
+      normalizePlanCode(metadata.plan || subscription.plan || 'launch'),
+      metadata.billing_cycle || subscription.billing_cycle || 'monthly',
+      invoice.currency,
+      Number(invoice.amount || 0),
+      paymentData.provider || subscription.provider || 'paystack',
+      paymentData.reference || invoice.payment_reference || null,
+      invoice.period_end,
+      subscription.id
+    ]
+  );
+
+  return getSubscriptionById(db, subscription.id);
+};
+
+const applyInvoicePaymentFailure = async (db, invoice, subscription, paymentData = {}) => {
+  if (!invoice?.id) {
+    return null;
+  }
+
+  await db.execute(
+    'UPDATE invoices SET status = ?, provider_reference = ?, failed_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ['failed', paymentData.reference || invoice.payment_reference || null, invoice.id]
+  );
+
+  if (subscription?.id && subscription.status !== 'trialing') {
+    await db.execute(
+      'UPDATE subscriptions SET status = ? WHERE id = ?',
+      ['past_due', subscription.id]
+    );
+  }
+
+  return subscription?.id ? getSubscriptionById(db, subscription.id) : null;
+};
+
 const registerRoutes = async ({ app, db, bus, config }) => {
   const requireInternal = buildRequireInternal(config);
 
-  app.get('/plans', asyncHandler(async (req, res) => {
+  app.get('/plans', validate([
+    query('currency').optional().isLength({ min: 3, max: 3 })
+  ]), asyncHandler(async (req, res) => {
+    const requestedCurrency = normalizeCurrencyCode(req.query.currency) || DEFAULT_CURRENCY;
+    const trialAuthorizationAmount = await getTrialAuthorizationAmount(requestedCurrency);
+    const plans = await Promise.all(getBillingPlans().map(async (plan) => {
+      const monthly = await buildNormalizedPricing(plan.code, 'monthly', requestedCurrency);
+      const yearly = await buildNormalizedPricing(plan.code, 'yearly', requestedCurrency);
+
+      return {
+        ...plan,
+        code: normalizePlanCode(plan.code),
+        currency: requestedCurrency,
+        base_currency: DEFAULT_CURRENCY,
+        monthly_amount: monthly.amount,
+        yearly_amount: yearly.amount,
+        trial_days: TRIAL_DAYS,
+        trial_authorization_amount: trialAuthorizationAmount.amount,
+        trial_authorization_currency: trialAuthorizationAmount.currency
+      };
+    }));
+
     return res.json({
-      plans: getBillingPlans()
+      plans
     });
   }));
 
@@ -174,135 +417,165 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/subscriptions/checkout-session', requireInternal, validate([
-    allowBodyFields(['plan', 'billing_cycle', 'provider', 'currency', 'email']),
+    allowBodyFields(['plan', 'billing_cycle', 'provider', 'currency', 'email', 'callback_url']),
     body('plan').isString().notEmpty(),
     body('billing_cycle').isIn(['monthly', 'yearly']),
-    body('provider').optional().isIn(['paystack', 'flutterwave']),
+    body('provider').optional().isIn(['paystack']),
     body('currency').optional().isLength({ min: 3, max: 3 }),
-    body('email').optional().isEmail().customSanitizer((value) => sanitizeEmail(value))
+    body('email').optional().isEmail().customSanitizer((value) => sanitizeEmail(value)),
+    body('callback_url').optional().isString().isLength({ max: 2000 })
   ]), asyncHandler(async (req, res) => {
     const ownerId = resolveOwnerId(req);
     if (!ownerId) {
       throw createHttpError(400, 'owner_id is required.', null, { expose: true });
     }
 
-    const pricing = getPlanPrice(req.body.plan, req.body.billing_cycle);
+    const pricing = await buildNormalizedPricing(req.body.plan, req.body.billing_cycle, req.body.currency);
     if (!pricing) {
       throw createHttpError(400, 'Unsupported subscription plan.', null, { expose: true });
     }
 
+    const provider = String(req.body.provider || 'paystack').trim().toLowerCase();
+    if (provider !== 'paystack') {
+      throw createHttpError(400, 'Paystack is required for subscription trials.', null, { expose: true });
+    }
+
     const existingSubscription = await getOwnerSubscription(db, ownerId);
     const subscription = await createOrUpdateSubscription(db, ownerId, pricing, req.body, existingSubscription);
-    const periodStart = subscription.current_period_end && new Date(subscription.current_period_end) > new Date()
-      ? new Date(subscription.current_period_end)
-      : new Date();
-    const periodEnd = getPeriodEnd(pricing.billing_cycle, periodStart);
-
-    const invoiceResult = await db.execute(
-      `
-        INSERT INTO invoices (
-          owner_id, subscription_id, amount, currency, provider, status, payment_reference, provider_reference,
-          description, period_start, period_end, metadata
-        ) VALUES (?, ?, ?, ?, ?, 'pending', NULL, NULL, ?, ?, ?, ?)
-      `,
-      [
-        ownerId,
-        subscription.id,
-        pricing.amount,
-        req.body.currency || pricing.currency || DEFAULT_CURRENCY,
-        req.body.provider || 'paystack',
-        `${pricing.name} ${pricing.billing_cycle} subscription`,
-        periodStart,
-        periodEnd,
-        JSON.stringify({
-          plan: pricing.code,
-          billing_cycle: pricing.billing_cycle,
-          owner_id: ownerId
-        })
-      ]
-    );
-    const invoice = (await db.query('SELECT * FROM invoices WHERE id = ?', [invoiceResult.insertId]))[0];
-
+    const authorizationAmount = await getTrialAuthorizationAmount(pricing.currency);
     const paymentSession = await requestJson(`${config.serviceUrls.payment}/payments/create-checkout-session`, {
       method: 'POST',
       headers: buildPaymentHeaders(req, config),
       body: {
         owner_id: ownerId,
-        amount: pricing.amount,
-        currency: req.body.currency || pricing.currency || DEFAULT_CURRENCY,
-        provider: req.body.provider || 'paystack',
+        amount: authorizationAmount.amount,
+        currency: authorizationAmount.currency,
+        provider,
         email: req.body.email || subscription.billing_email || null,
         payment_scope: 'subscription',
-        entity_type: 'invoice',
-        entity_id: String(invoice.id),
+        entity_type: 'subscription',
+        entity_id: String(subscription.id),
+        callback_url: req.body.callback_url || null,
         metadata: {
-          invoice_id: invoice.id,
           subscription_id: subscription.id,
           plan: pricing.code,
-          billing_cycle: pricing.billing_cycle
+          billing_cycle: pricing.billing_cycle,
+          plan_amount: pricing.amount,
+          plan_currency: pricing.currency,
+          base_plan_amount: pricing.base_amount,
+          base_plan_currency: pricing.base_currency,
+          stage: 'trial_authorization',
+          trial_days: TRIAL_DAYS,
+          auto_refund_on_success: true
         }
       },
       timeoutMs: config.requestTimeoutMs
     });
 
     await db.execute(
-      'UPDATE invoices SET payment_reference = ? WHERE id = ?',
-      [paymentSession.payment.reference, invoice.id]
-    );
-    await db.execute(
-      'UPDATE subscriptions SET payment_reference = ?, billing_email = ?, provider = ?, currency = ?, plan_amount = ? WHERE id = ?',
+      `
+        UPDATE subscriptions
+        SET payment_reference = ?, billing_email = ?, provider = ?, currency = ?, plan_amount = ?
+        WHERE id = ?
+      `,
       [
         paymentSession.payment.reference,
         req.body.email || subscription.billing_email || null,
-        req.body.provider || 'paystack',
-        req.body.currency || pricing.currency || DEFAULT_CURRENCY,
+        provider,
+        pricing.currency,
         pricing.amount,
         subscription.id
       ]
     );
 
     const freshSubscription = await getOwnerSubscription(db, ownerId);
-    const freshInvoice = (await db.query('SELECT * FROM invoices WHERE id = ?', [invoice.id]))[0];
 
     return res.status(201).json({
       subscription: serializeSubscription(freshSubscription),
-      invoice: serializeInvoice(freshInvoice),
       payment: paymentSession.payment,
-      providers: paymentSession.providers
+      providers: paymentSession.providers,
+      trial_authorization_amount: authorizationAmount.amount,
+      trial_authorization_currency: authorizationAmount.currency
+    });
+  }));
+
+  app.post('/subscriptions/verify-checkout', requireInternal, validate([
+    allowBodyFields(['reference']),
+    body('reference').isString().notEmpty().isLength({ max: 191 })
+  ]), asyncHandler(async (req, res) => {
+    const ownerId = Number(req.authContext.userId);
+    const verification = await requestJson(
+      `${config.serviceUrls.payment}/payments/verify/${encodeURIComponent(req.body.reference)}`,
+      {
+        method: 'GET',
+        headers: buildPaymentHeaders(req, config),
+        timeoutMs: config.requestTimeoutMs
+      }
+    );
+
+    const payment = verification?.payment || null;
+    let subscription = null;
+
+    if (payment?.entity_type === 'subscription' && payment.entity_id) {
+      const targetSubscription = await getSubscriptionById(db, Number(payment.entity_id));
+      if (targetSubscription) {
+        if (payment.status === 'success') {
+          subscription = await applyTrialAuthorizationSuccess(db, targetSubscription, {
+            reference: payment.reference,
+            provider: payment.provider,
+            currency: payment.currency,
+            metadata: payment.metadata || {},
+            authorization: payment.metadata?.authorization || null
+          });
+        } else if (payment.status === 'failed') {
+          subscription = await applyTrialAuthorizationFailure(db, targetSubscription, {
+            reference: payment.reference,
+            provider: payment.provider,
+            metadata: payment.metadata || {}
+          });
+        }
+      }
+    }
+
+    if (!subscription) {
+      subscription = await getOwnerSubscription(db, ownerId);
+    }
+
+    return res.json({
+      subscription: serializeSubscription(subscription),
+      payment
     });
   }));
 
   app.post('/subscriptions', requireInternal, validate([
-    allowBodyFields(['owner_id', 'plan', 'status', 'billing_cycle']),
+    allowBodyFields(['owner_id', 'plan', 'status', 'billing_cycle', 'currency']),
     body('plan').optional().isString(),
     body('status').optional().isString(),
-    body('billing_cycle').optional().isIn(['monthly', 'yearly'])
+    body('billing_cycle').optional().isIn(['monthly', 'yearly']),
+    body('currency').optional().isLength({ min: 3, max: 3 })
   ]), asyncHandler(async (req, res) => {
     const ownerId = Number(req.body.owner_id || req.authContext.userId);
-    const planCode = String(req.body.plan || 'basic').trim().toLowerCase();
+    const planCode = normalizePlanCode(req.body.plan || 'launch');
     const plan = getBillingPlan(planCode);
     if (!plan) {
       throw createHttpError(400, 'Unsupported subscription plan.', null, { expose: true });
     }
 
     const billingCycle = String(req.body.billing_cycle || 'monthly').trim().toLowerCase();
-    const pricing = getPlanPrice(planCode, billingCycle);
-    const { trialEnds, currentPeriodEnd } = createTrialDates();
+    const pricing = await buildNormalizedPricing(planCode, billingCycle, req.body.currency || DEFAULT_CURRENCY);
 
     await db.execute(
       `
         INSERT INTO subscriptions (
           owner_id, plan, status, billing_cycle, currency, plan_amount, trial_ends_at, current_period_end
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
         ON DUPLICATE KEY UPDATE
           plan = VALUES(plan),
           status = VALUES(status),
           billing_cycle = VALUES(billing_cycle),
           currency = VALUES(currency),
-          plan_amount = VALUES(plan_amount),
-          trial_ends_at = VALUES(trial_ends_at),
-          current_period_end = VALUES(current_period_end)
+          plan_amount = VALUES(plan_amount)
       `,
       [
         ownerId,
@@ -310,9 +583,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
         String(req.body.status || 'active').trim().toLowerCase(),
         billingCycle,
         pricing.currency,
-        pricing.amount,
-        trialEnds,
-        currentPeriodEnd
+        pricing.amount
       ]
     );
 
@@ -350,7 +621,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 
     const updatedSubscription = await getOwnerSubscription(db, ownerId);
     await bus.publish(EVENT_NAMES.SUBSCRIPTION_CHANGED, {
-      owner_id: ownerId,
+      owner_id: updatedSubscription?.owner_id || ownerId,
       status: updatedSubscription?.status || 'cancelled',
       plan: updatedSubscription?.plan || null
     });
@@ -389,5 +660,14 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 module.exports = {
   registerRoutes,
   isSubscriptionAllowed,
-  createTrialDates
+  createTrialDates,
+  buildNormalizedPricing,
+  getTrialAuthorizationAmount,
+  getOwnerSubscription,
+  getSubscriptionById,
+  applyTrialAuthorizationSuccess,
+  applyTrialAuthorizationFailure,
+  applyInvoicePaymentSuccess,
+  applyInvoicePaymentFailure,
+  buildServiceHeaders
 };

@@ -296,6 +296,11 @@
 
       const syncTemplateSelection = (templateInput, options = {}) => {
         const { markEdited = false } = options;
+        const source = getControlSource(templateInput);
+        if (!source) {
+          return;
+        }
+
         const container = templateInput.closest('form') || document;
         const templateKeyInput = container.querySelector('[data-template-key-input]');
         const colorInput = container.querySelector('[data-template-color-input]');
@@ -306,36 +311,79 @@
         const fontLabel = container.querySelector('[data-template-font-label]');
 
         if (templateKeyInput) {
-          templateKeyInput.value = templateInput.dataset.templateKey || templateInput.value;
+          templateKeyInput.value = source.dataset.templateKey || source.value || templateInput.value;
           if (markEdited) {
             templateKeyInput.dataset.userEdited = 'true';
           }
         }
 
-        if (colorInput && colorInput.dataset.userEdited !== 'true' && templateInput.dataset.templateDefaultColor) {
-          colorInput.value = templateInput.dataset.templateDefaultColor;
+        if (colorInput && colorInput.dataset.userEdited !== 'true' && source.dataset.templateDefaultColor) {
+          colorInput.value = source.dataset.templateDefaultColor;
         }
 
         if (colorLabel && colorInput) {
           colorLabel.textContent = colorInput.value;
         }
 
-        if (fontInput && fontInput.dataset.userEdited !== 'true' && templateInput.dataset.templateFont) {
-          fontInput.value = templateInput.dataset.templateFont;
+        if (fontInput && fontInput.dataset.userEdited !== 'true' && source.dataset.templateFont) {
+          fontInput.value = source.dataset.templateFont;
         }
 
         if (nameLabel) {
-          nameLabel.textContent = templateInput.dataset.templateLabel || templateInput.value;
+          nameLabel.textContent = source.dataset.templateLabel || source.value || templateInput.value;
         }
 
         if (typeLabel) {
-          typeLabel.textContent = templateInput.dataset.templateTypeLabel || templateInput.value;
+          typeLabel.textContent = source.dataset.templateTypeLabel || source.dataset.templateLabel || source.value || templateInput.value;
         }
 
         if (fontLabel && fontInput) {
           const selectedOption = fontInput.options[fontInput.selectedIndex];
           fontLabel.textContent = selectedOption ? selectedOption.textContent : fontInput.value;
         }
+      };
+
+      const filterTemplateOptionsForStoreType = (control) => {
+        const source = getControlSource(control);
+        if (!source) {
+          return;
+        }
+
+        const container = control.closest('form') || document;
+        const templateSelect = container.querySelector('select[name="template_picker"]');
+        if (!templateSelect) {
+          return;
+        }
+
+        const allowedTemplateKeys = String(source.dataset.templateKeys || source.dataset.recommendedTemplate || '')
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean);
+        const templateOptions = Array.from(templateSelect.querySelectorAll('[data-template-option]'));
+
+        templateOptions.forEach((option) => {
+          const optionKey = option.dataset.templateKey || option.value;
+          const relatedStoreTypes = String(option.dataset.templateStoreTypes || '')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean);
+          const allowed = !allowedTemplateKeys.length
+            || allowedTemplateKeys.includes(optionKey)
+            || relatedStoreTypes.includes(source.value);
+
+          option.hidden = !allowed;
+          option.disabled = !allowed;
+        });
+
+        const activeOption = getControlSource(templateSelect);
+        if (!activeOption || activeOption.disabled || activeOption.hidden) {
+          const firstAvailableOption = templateOptions.find((option) => !option.disabled && !option.hidden);
+          if (firstAvailableOption) {
+            templateSelect.value = firstAvailableOption.value;
+          }
+        }
+
+        syncTemplateSelection(templateSelect);
       };
 
       const syncStoreTypeSelection = (control) => {
@@ -365,11 +413,19 @@
             : 'Recommended starter available after store type selection.';
         }
 
+        filterTemplateOptionsForStoreType(control);
+
         if (canApplyRecommendations && recommendedTemplateKey) {
-          const recommendedTemplateInput = container.querySelector(`[data-template-option][data-template-key="${recommendedTemplateKey}"]`);
+          const recommendedTemplateInput = container.querySelector('select[name="template_picker"]');
           if (recommendedTemplateInput) {
-            recommendedTemplateInput.checked = true;
+            recommendedTemplateInput.value = recommendedTemplateKey;
             syncTemplateSelection(recommendedTemplateInput);
+          } else {
+            const recommendedRadioInput = container.querySelector(`[data-template-option][data-template-key="${recommendedTemplateKey}"]`);
+            if (recommendedRadioInput) {
+              recommendedRadioInput.checked = true;
+              syncTemplateSelection(recommendedRadioInput);
+            }
           }
         }
 
@@ -426,7 +482,9 @@
           });
 
           document.querySelectorAll('[data-billing-copy]').forEach((node) => {
-            node.textContent = mode === 'yearly' ? 'Save 20% with annual billing' : 'Switch to annual billing and save 20%';
+            const yearlyCopy = node.dataset.billingCopyYearly || 'Save 20% with annual billing';
+            const monthlyCopy = node.dataset.billingCopyMonthly || 'Switch to annual billing and save 20%';
+            node.textContent = mode === 'yearly' ? yearlyCopy : monthlyCopy;
           });
         };
 
@@ -437,7 +495,7 @@
         });
       }
 
-      document.querySelectorAll('[data-template-option]').forEach((input) => {
+      document.querySelectorAll('input[data-template-option]').forEach((input) => {
         if (input.checked) {
           syncTemplateSelection(input);
         }
@@ -449,7 +507,14 @@
         });
       });
 
-      document.querySelectorAll('[data-store-type-option], select[name="store_type"]').forEach((control) => {
+      document.querySelectorAll('select[name="template_picker"]').forEach((control) => {
+        syncTemplateSelection(control);
+        control.addEventListener('change', () => {
+          syncTemplateSelection(control, { markEdited: true });
+        });
+      });
+
+      document.querySelectorAll('select[name="store_type"], input[data-store-type-option]').forEach((control) => {
         if (control.matches('select')) {
           syncStoreTypeSelection(control);
           control.addEventListener('change', () => {

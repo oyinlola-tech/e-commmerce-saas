@@ -1,9 +1,12 @@
+const crypto = require('crypto');
 const { body } = require('express-validator');
 const {
   hashPassword,
   comparePassword,
   signCustomerToken,
   requireInternalRequest,
+  buildSignedInternalHeaders,
+  requestJson,
   EVENT_NAMES,
   asyncHandler,
   createHttpError,
@@ -11,8 +14,12 @@ const {
   allowBodyFields,
   commonRules,
   storeIdRule,
-  sanitizeJsonObject
+  sanitizeEmail,
+  sanitizeJsonObject,
+  sanitizePlainText
 } = require('../../../../packages/shared');
+
+const PASSWORD_RESET_OTP_TTL_MINUTES = Math.max(5, Number(process.env.PASSWORD_RESET_OTP_TTL_MINUTES || 15));
 
 const sanitizeCustomer = (customer) => {
   if (!customer) {
@@ -51,6 +58,76 @@ const buildRequireInternal = (config) => {
   });
 };
 
+const normalizeEmail = (value = '') => {
+  return sanitizeEmail(value || '');
+};
+
+const generateOtp = () => {
+  return String(crypto.randomInt(100000, 1000000));
+};
+
+const getOtpExpiryDate = () => {
+  return new Date(Date.now() + PASSWORD_RESET_OTP_TTL_MINUTES * 60 * 1000);
+};
+
+const buildGenericPasswordResetResponse = () => ({
+  status: 'accepted',
+  message: 'If that account exists, an OTP has been sent to the email address.'
+});
+
+const sendPasswordResetOtpEmail = async (config, requestId, payload = {}) => {
+  const subject = 'Your Aisle storefront password reset OTP';
+  const otp = String(payload.otp || '').trim();
+  const displayName = sanitizePlainText(payload.name || 'there', { maxLength: 120 }) || 'there';
+  const resetWindow = `${PASSWORD_RESET_OTP_TTL_MINUTES} minute${PASSWORD_RESET_OTP_TTL_MINUTES === 1 ? '' : 's'}`;
+  const text = [
+    `Hi ${displayName},`,
+    '',
+    `Use this OTP to reset your storefront password: ${otp}`,
+    '',
+    `This code expires in ${resetWindow}. If you did not request this, you can ignore this email.`
+  ].join('\n');
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+      <p>Hi ${displayName},</p>
+      <p>Use this OTP to reset your storefront password.</p>
+      <p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0;color:#0f766e">${otp}</p>
+      <p>This code expires in ${resetWindow}.</p>
+      <p>If you did not request this, you can ignore this email.</p>
+    </div>
+  `.trim();
+
+  try {
+    await requestJson(`${config.serviceUrls.notification}/emails/send`, {
+      method: 'POST',
+      headers: buildSignedInternalHeaders({
+        requestId: requestId || crypto.randomUUID(),
+        actorType: 'service',
+        actorRole: 'system',
+        secret: config.internalSharedSecret
+      }),
+      body: {
+        to: normalizeEmail(payload.email),
+        subject,
+        text,
+        html,
+        metadata: {
+          kind: 'password_reset_otp',
+          audience: 'customer'
+        }
+      },
+      timeoutMs: config.requestTimeoutMs
+    });
+  } catch (error) {
+    const upstreamMessage = typeof error?.payload === 'object' && error?.payload?.error
+      ? error.payload.error
+      : error.message;
+    throw createHttpError(Number(error.status) || 503, upstreamMessage || 'Unable to send password reset email right now.', null, {
+      expose: true
+    });
+  }
+};
+
 const registerRoutes = async ({ app, db, bus, config }) => {
   const requireInternal = buildRequireInternal(config);
 
@@ -66,7 +143,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   ]), asyncHandler(async (req, res) => {
     const storeId = resolveStoreId(req);
     const name = String(req.body.name || '').trim();
-    const email = String(req.body.email || '').trim().toLowerCase();
+    const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || '');
 
     if (!storeId) {
@@ -116,7 +193,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     body('password').isString().notEmpty().withMessage('Password is required.')
   ]), asyncHandler(async (req, res) => {
     const storeId = resolveStoreId(req);
-    const email = String(req.body.email || '').trim().toLowerCase();
+    const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || '');
     if (!storeId) {
       throw createHttpError(400, 'store_id is required.', null, { expose: true });
@@ -139,6 +216,120 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     return res.json({
       token: signCustomerToken(customer, config.jwtSecret, config.jwtAccessTtl),
       customer: sanitizeCustomer(customer)
+    });
+  }));
+
+  app.post('/customers/password-reset/request', validate([
+    allowBodyFields(['store_id', 'email']),
+    ...storeIdRule(),
+    commonRules.email()
+  ]), asyncHandler(async (req, res) => {
+    const storeId = resolveStoreId(req);
+    const email = normalizeEmail(req.body.email);
+
+    if (!storeId) {
+      throw createHttpError(400, 'store_id is required.', null, { expose: true });
+    }
+
+    const customer = (await db.query(
+      'SELECT * FROM customers WHERE store_id = ? AND email = ? LIMIT 1',
+      [storeId, email]
+    ))[0] || null;
+
+    if (!customer) {
+      return res.json(buildGenericPasswordResetResponse());
+    }
+
+    const otp = generateOtp();
+    const otpHash = await hashPassword(otp);
+    const expiresAt = getOtpExpiryDate();
+
+    await db.execute(
+      `
+        UPDATE customers
+        SET password_reset_otp_hash = ?, password_reset_otp_expires_at = ?, password_reset_requested_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND store_id = ?
+      `,
+      [
+        otpHash,
+        expiresAt,
+        customer.id,
+        storeId
+      ]
+    );
+
+    await sendPasswordResetOtpEmail(config, req.requestId, {
+      email: customer.email,
+      name: customer.name,
+      otp
+    });
+
+    return res.json(buildGenericPasswordResetResponse());
+  }));
+
+  app.post('/customers/password-reset/confirm', validate([
+    allowBodyFields(['store_id', 'email', 'otp', 'password']),
+    ...storeIdRule(),
+    commonRules.email(),
+    body('otp')
+      .isString()
+      .trim()
+      .isLength({ min: 4, max: 12 })
+      .withMessage('Enter the OTP that was sent to your email.'),
+    commonRules.password()
+  ]), asyncHandler(async (req, res) => {
+    const storeId = resolveStoreId(req);
+    const email = normalizeEmail(req.body.email);
+    const otp = String(req.body.otp || '').trim();
+    const password = String(req.body.password || '');
+
+    if (!storeId) {
+      throw createHttpError(400, 'store_id is required.', null, { expose: true });
+    }
+
+    const customer = (await db.query(
+      'SELECT * FROM customers WHERE store_id = ? AND email = ? LIMIT 1',
+      [storeId, email]
+    ))[0] || null;
+
+    if (!customer || !customer.password_reset_otp_hash || !customer.password_reset_otp_expires_at) {
+      throw createHttpError(401, 'Invalid or expired OTP.', null, { expose: true });
+    }
+
+    const expiresAt = new Date(customer.password_reset_otp_expires_at);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+      await db.execute(
+        `
+          UPDATE customers
+          SET password_reset_otp_hash = NULL, password_reset_otp_expires_at = NULL, password_reset_requested_at = NULL
+          WHERE id = ? AND store_id = ?
+        `,
+        [customer.id, storeId]
+      );
+      throw createHttpError(401, 'Invalid or expired OTP.', null, { expose: true });
+    }
+
+    const otpMatches = await comparePassword(otp, customer.password_reset_otp_hash);
+    if (!otpMatches) {
+      throw createHttpError(401, 'Invalid or expired OTP.', null, { expose: true });
+    }
+
+    const passwordHash = await hashPassword(password);
+    await db.execute(
+      `
+        UPDATE customers
+        SET password_hash = ?, password_reset_otp_hash = NULL, password_reset_otp_expires_at = NULL, password_reset_requested_at = NULL
+        WHERE id = ? AND store_id = ?
+      `,
+      [
+        passwordHash,
+        customer.id,
+        storeId
+      ]
+    );
+
+    return res.json({
+      status: 'ok'
     });
   }));
 

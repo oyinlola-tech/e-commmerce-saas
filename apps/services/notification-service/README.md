@@ -6,7 +6,7 @@ This package is not free to use.
 
 ## Current Status
 
-`@aisle/notification-service` is currently a placeholder package. The package metadata exists, but runnable service code has not yet been added in this repository snapshot.
+`@aisle/notification-service` is now a runnable SMTP-backed notification microservice.
 
 ## Intended Role
 
@@ -18,4 +18,5 @@ This package is not free to use.
 ## Notes
 
 - Reserved default port: `4112`
-- The shared constants already include `EMAIL_ENQUEUED`, but the service implementation is not present yet.
+- The service exposes `POST /emails/send` for signed internal requests from sibling services.
+- SMTP credentials can be configured with either the generic `SMTP_*` variables or service-specific `NOTIFICATION_SERVICE_SMTP_*` overrides.

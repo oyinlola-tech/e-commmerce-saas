@@ -78,8 +78,8 @@ const createAppContext = (appRoot) => {
   const catalogSortOptions = ['featured', 'newest', 'price-low', 'price-high', 'name'];
   const storePaymentProviders = ['paystack', 'flutterwave'];
   const systemAdminUser = {
-    name: 'Aisle',
-    email: brand.supportEmail || 'support@aisle.so',
+    name: String(process.env.PLATFORM_ADMIN_NAME || 'Platform Admin').trim() || 'Platform Admin',
+    email: String(process.env.PLATFORM_ADMIN_EMAIL || brand.supportEmail || 'support@aisle.so').trim() || brand.supportEmail || 'support@aisle.so',
     role: 'Platform operations'
   };
 

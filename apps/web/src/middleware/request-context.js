@@ -24,6 +24,7 @@ const applyRequestContextMiddleware = (app, context, helpers) => {
     clearTokenCookie,
     requiresStoreContext,
     isStorefrontHost,
+    isPlatformAdminUser,
     resolveRequestedStoreId,
     shouldLoadStorefrontIdentity,
     isStoreScopedPath,
@@ -121,6 +122,7 @@ const applyRequestContextMiddleware = (app, context, helpers) => {
         supportEmail: brand.supportEmail || (ROOT_DOMAIN === 'localhost' ? 'support@localhost' : `support@${ROOT_DOMAIN}`)
       };
       res.locals.platformUser = req.currentPlatformUser;
+      res.locals.platformIsAdmin = isPlatformAdminUser(req.currentPlatformUser);
       res.locals.systemAdminUser = systemAdminUser;
       res.locals.success = req.query.success || null;
       res.locals.error = req.query.error || null;

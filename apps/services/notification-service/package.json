@@ -2,7 +2,7 @@
   "name": "@aisle/notification-service",
   "version": "1.0.0",
   "private": true,
-  "description": "Proprietary placeholder package for the planned Aisle Commerce notification service by Oluwayemi Oyinlola Michael. Not free to use.",
+  "description": "Proprietary Aisle Commerce notification service for SMTP-backed transactional email delivery by Oluwayemi Oyinlola Michael. Not free to use.",
   "author": {
     "name": "Oluwayemi Oyinlola Michael",
     "url": "https://www.oyinlola.site/"
