@@ -1,0 +1,147 @@
+<%
+  const resolvedTitle = pageTitle ? `${pageTitle} | MultiStore` : 'MultiStore';
+  const resolvedDescription = metaDescription || 'Launch, manage, and grow branded storefronts from one modern ecommerce platform.';
+  const resolvedBrandColor = brandColor || '#4F46E5';
+%>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><%= resolvedTitle %></title>
+<meta name="description" content="<%= resolvedDescription %>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          primary: '#4F46E5',
+          'primary-dark': '#4338CA',
+          'primary-light': '#A5B4FC'
+        },
+        boxShadow: {
+          soft: '0 18px 45px -22px rgba(17, 24, 39, 0.28)'
+        },
+        fontFamily: {
+          sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
+        }
+      }
+    }
+  };
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+  :root {
+    --color-primary: <%= resolvedBrandColor %>;
+    --color-primary-dark: color-mix(in srgb, var(--color-primary) 84%, black);
+    --color-primary-soft: color-mix(in srgb, var(--color-primary) 12%, white);
+    --color-primary-border: color-mix(in srgb, var(--color-primary) 24%, white);
+  }
+
+  html {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    scroll-behavior: smooth;
+  }
+
+  [data-cloak] {
+    display: none !important;
+  }
+
+  .bg-primary {
+    background-color: var(--color-primary) !important;
+  }
+
+  .text-primary {
+    color: var(--color-primary) !important;
+  }
+
+  .border-primary {
+    border-color: var(--color-primary) !important;
+  }
+
+  .ring-primary {
+    --tw-ring-color: var(--color-primary) !important;
+  }
+
+  .bg-primary-soft {
+    background-color: var(--color-primary-soft) !important;
+  }
+
+  .border-primary-soft {
+    border-color: var(--color-primary-border) !important;
+  }
+
+  .hover\:bg-primary-dark:hover {
+    background-color: var(--color-primary-dark) !important;
+  }
+
+  .hover\:text-primary:hover:hover {
+    color: var(--color-primary) !important;
+  }
+
+  .from-primary {
+    --tw-gradient-from: var(--color-primary) var(--tw-gradient-from-position) !important;
+    --tw-gradient-to: color-mix(in srgb, var(--color-primary) 0%, transparent) var(--tw-gradient-to-position) !important;
+  }
+
+  .to-primary-light {
+    --tw-gradient-to: color-mix(in srgb, var(--color-primary) 42%, white) var(--tw-gradient-to-position) !important;
+  }
+
+  .focus\:border-primary:focus {
+    border-color: var(--color-primary) !important;
+  }
+
+  .focus\:ring-primary:focus {
+    --tw-ring-color: var(--color-primary) !important;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-primary) 18%, white);
+  }
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translate3d(24px, 0, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes toast-out {
+    from {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      opacity: 0;
+      transform: translate3d(24px, 0, 0);
+    }
+  }
+
+  @keyframes badge-bump {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.14);
+    }
+  }
+
+  .toast-enter {
+    animation: toast-in 180ms ease-out forwards;
+  }
+
+  .toast-exit {
+    animation: toast-out 180ms ease-in forwards;
+  }
+
+  .cart-badge-bump {
+    animation: badge-bump 240ms ease-in-out;
+  }
+<\/style>

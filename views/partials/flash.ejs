@@ -1,0 +1,52 @@
+<%
+  const normalizeMessage = (value) => Array.isArray(value) ? value.join(' ') : value;
+  const flashes = [];
+
+  if (success) {
+    flashes.push({
+      type: 'success',
+      message: normalizeMessage(success),
+      containerClass: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+      iconClass: 'bg-emerald-100 text-emerald-600'
+    });
+  }
+
+  if (error) {
+    flashes.push({
+      type: 'error',
+      message: normalizeMessage(error),
+      containerClass: 'border-red-200 bg-red-50 text-red-900',
+      iconClass: 'bg-red-100 text-red-600'
+    });
+  }
+%>
+<% if (flashes.length) { %>
+  <div class="mx-auto w-full max-w-7xl space-y-3 px-4 pt-6 sm:px-6 lg:px-8">
+    <% flashes.forEach((flash) => { %>
+      <div data-flash class="flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 shadow-sm <%= flash.containerClass %>">
+        <div class="flex items-start gap-3">
+          <span class="inline-flex h-9 w-9 flex-none items-center justify-center rounded-full <%= flash.iconClass %>">
+            <% if (flash.type === 'success') { %>
+              <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.2 7.2a1 1 0 01-1.415 0l-3-3a1 1 0 111.414-1.42l2.293 2.294 6.493-6.494a1 1 0 011.415 0z" clip-rule="evenodd"></path>
+              </svg>
+            <% } else { %>
+              <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M18 10A8 8 0 112 10a8 8 0 0116 0zm-8-4a1 1 0 00-1 1v3a1 1 0 102 0V7a1 1 0 00-1-1zm0 8a1.25 1.25 0 100-2.5A1.25 1.25 0 0010 14z" clip-rule="evenodd"></path>
+              </svg>
+            <% } %>
+          </span>
+          <div class="space-y-1">
+            <p class="text-sm font-semibold"><%= flash.type === 'success' ? 'Success' : 'Something went wrong' %></p>
+            <p class="text-sm leading-6"><%= flash.message %></p>
+          </div>
+        </div>
+        <button type="button" data-dismiss-parent="[data-flash]" class="rounded-full p-1 text-current transition hover:bg-white/70 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary" aria-label="Dismiss message">
+          <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+          </svg>
+        </button>
+      </div>
+    <% }) %>
+  </div>
+<% } %>

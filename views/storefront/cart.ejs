@@ -1,0 +1,111 @@
+<%
+  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+  const cartItems = cart && Array.isArray(cart.items) ? cart.items : [];
+  const cartTotal = cart && typeof cart.total !== 'undefined' ? cart.total : 0;
+%>
+<section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+  <div class="grid gap-10 xl:grid-cols-[1.1fr_0.9fr]">
+    <div>
+      <div class="max-w-2xl">
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Cart</p>
+        <h1 class="mt-2 text-4xl font-semibold tracking-tight text-gray-900">Review your items</h1>
+        <p class="mt-4 text-lg leading-8 text-gray-600">Update quantities, remove products, and keep the order summary in sync before checkout.</p>
+      </div>
+
+      <div data-cart-page-empty class="<%= cartItems.length ? 'hidden' : '' %> mt-10 rounded-[2rem] border border-dashed border-gray-300 bg-gray-50 px-6 py-16 text-center">
+        <h2 class="text-2xl font-semibold text-gray-900">Your cart is empty</h2>
+        <p class="mx-auto mt-3 max-w-xl text-base leading-7 text-gray-600">Nothing is here yet. Browse the catalog and add a few products to start your order.</p>
+        <a href="/products" class="mt-8 inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark">
+          Continue shopping
+        </a>
+      </div>
+
+      <div data-cart-page-items class="mt-10 space-y-5">
+        <% cartItems.forEach((item) => { %>
+          <article data-cart-row="<%= item.product_id %>" class="grid gap-5 rounded-[2rem] border border-gray-200 bg-white p-5 shadow-sm md:grid-cols-[auto_1fr_auto] md:items-center">
+            <img src="<%= item.image || 'https://placehold.co/96x96?text=Item' %>" alt="<%= item.name %>" class="h-24 w-24 rounded-3xl object-cover">
+            <div class="min-w-0">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900"><%= item.name %></h3>
+                  <p class="mt-1 text-sm text-gray-500">Unit price <%= currency.format(item.price || 0) %></p>
+                </div>
+                <button type="button" data-cart-remove data-product-id="<%= item.product_id %>" class="text-left text-sm font-semibold text-red-500 transition hover:text-red-600">Remove</button>
+              </div>
+              <div class="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="inline-flex items-center rounded-full border border-gray-200 bg-white p-1">
+                  <button type="button" data-cart-adjust="-1" data-product-id="<%= item.product_id %>" data-current-qty="<%= item.quantity || 1 %>" class="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition hover:bg-gray-100" aria-label="Decrease quantity">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4 10a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1z" clip-rule="evenodd"></path></svg>
+                  </button>
+                  <input type="number" min="1" value="<%= item.quantity || 1 %>" data-cart-quantity-input data-product-id="<%= item.product_id %>" class="h-10 w-16 border-0 bg-transparent text-center text-sm font-semibold text-gray-900 focus:outline-none focus:ring-0">
+                  <button type="button" data-cart-adjust="1" data-product-id="<%= item.product_id %>" data-current-qty="<%= item.quantity || 1 %>" class="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition hover:bg-gray-100" aria-label="Increase quantity">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" clip-rule="evenodd"></path></svg>
+                  </button>
+                </div>
+                <p class="text-lg font-semibold text-gray-900"><%= currency.format((item.price || 0) * (item.quantity || 1)) %></p>
+              </div>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+    </div>
+
+    <aside class="space-y-6">
+      <section class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
+        <p class="text-sm font-medium text-gray-500">Order summary</p>
+        <div class="mt-6 space-y-4 text-sm text-gray-600">
+          <div class="flex items-center justify-between">
+            <span>Items</span>
+            <span data-cart-item-count class="font-semibold text-gray-900"><%= cartItems.length %></span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span>Subtotal</span>
+            <span data-cart-subtotal class="font-semibold text-gray-900"><%= currency.format(cartTotal || 0) %></span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span>Shipping</span>
+            <span class="font-medium text-gray-500">Calculated at checkout</span>
+          </div>
+        </div>
+        <div class="mt-6 border-t border-gray-200 pt-6">
+          <div class="flex items-center justify-between text-lg font-semibold text-gray-900">
+            <span>Total</span>
+            <span data-cart-total><%= currency.format(cartTotal || 0) %></span>
+          </div>
+        </div>
+        <div class="mt-6">
+          <% if (customer) { %>
+            <a href="/checkout" data-cart-checkout-action class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-5 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark">
+              Proceed to Checkout
+            </a>
+          <% } else { %>
+            <button type="button" data-modal-open="checkout-auth-modal" data-cart-checkout-action class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-5 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark">
+              Proceed to Checkout
+            </button>
+          <% } %>
+        </div>
+      </section>
+    </aside>
+  </div>
+</section>
+
+<div id="checkout-auth-modal" data-modal-backdrop="checkout-auth-modal" aria-hidden="true" class="fixed inset-0 z-[65] hidden items-center justify-center bg-gray-950/60 px-4 py-8 backdrop-blur-sm">
+  <div class="w-full max-w-lg rounded-[2rem] bg-white p-8 shadow-2xl">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Checkout access</p>
+        <h2 class="mt-2 text-2xl font-semibold text-gray-900">Sign in to continue</h2>
+        <p class="mt-3 text-sm leading-6 text-gray-600">Customer accounts are store-specific, so please sign in or create an account on this storefront before checkout.</p>
+      </div>
+      <button type="button" data-modal-close="checkout-auth-modal" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-gray-200 text-gray-600 transition hover:border-primary hover:text-primary" aria-label="Close modal">
+        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="mt-8 grid gap-3 sm:grid-cols-2">
+      <a href="/login?returnTo=/checkout" class="inline-flex items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition hover:border-primary hover:text-primary">Login</a>
+      <a href="/register?returnTo=/checkout" class="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">Register</a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,55 @@
+<%
+  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+  const productList = Array.isArray(products) ? products : [];
+  const categoryList = Array.isArray(categories) ? categories : [];
+  const currentCategory = activeCategory || 'All';
+%>
+<section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+  <div class="max-w-3xl">
+    <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Catalog</p>
+    <h1 class="mt-2 text-4xl font-semibold tracking-tight text-gray-900">Browse products</h1>
+    <p class="mt-4 text-lg leading-8 text-gray-600">Every link stays relative so the same storefront markup works cleanly on subdomains and custom domains alike.</p>
+  </div>
+
+  <div class="mt-8 flex flex-wrap gap-3">
+    <a href="/products" class="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium <%= currentCategory === 'All' ? 'bg-primary text-white' : 'border border-gray-200 bg-white text-gray-700 hover:border-primary hover:text-primary' %>">
+      All
+    </a>
+    <% categoryList.forEach((category) => { %>
+      <a href="/products?category=<%= encodeURIComponent(category.slug || category.name) %>" class="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium <%= currentCategory === (category.name || category.slug) ? 'bg-primary text-white' : 'border border-gray-200 bg-white text-gray-700 hover:border-primary hover:text-primary' %>">
+        <%= category.name || category.slug %>
+      </a>
+    <% }) %>
+  </div>
+
+  <% if (productList.length) { %>
+    <div class="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+      <% productList.forEach((product) => { %>
+        <article class="group overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-soft">
+          <a href="/products/<%= product.slug %>" class="block aspect-square overflow-hidden bg-gray-100">
+            <img src="<%= product.image || 'https://placehold.co/640x640?text=Product' %>" alt="<%= product.name %>" class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
+          </a>
+          <div class="space-y-4 p-4">
+            <div>
+              <a href="/products/<%= product.slug %>" class="line-clamp-2 text-base font-semibold text-gray-900 transition hover:text-primary"><%= product.name %></a>
+              <div class="mt-2 flex items-center gap-2">
+                <span class="text-base font-semibold text-gray-900"><%= currency.format(product.price || 0) %></span>
+                <% if (product.compare_at_price) { %>
+                  <span class="text-sm text-gray-400 line-through"><%= currency.format(product.compare_at_price) %></span>
+                <% } %>
+              </div>
+            </div>
+            <button type="button" data-add-to-cart="<%= product.id %>" data-quantity="1" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">
+              Add to cart
+            </button>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="mt-10 rounded-[2rem] border border-dashed border-gray-300 bg-gray-50 px-6 py-16 text-center">
+      <h2 class="text-2xl font-semibold text-gray-900">No products yet</h2>
+      <p class="mx-auto mt-3 max-w-xl text-base leading-7 text-gray-600">This store is still building out its catalog. Check back soon for fresh products and new drops.</p>
+    </div>
+  <% } %>
+</section>

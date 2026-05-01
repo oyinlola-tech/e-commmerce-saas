@@ -1,0 +1,59 @@
+<%
+  const storeBrandColor = store && store.theme_color ? store.theme_color : '#4F46E5';
+%>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <%- include('../partials/head', { brandColor: storeBrandColor }) %>
+  </head>
+  <body class="min-h-screen bg-white text-gray-900 antialiased">
+    <div class="flex min-h-screen flex-col">
+      <%- include('../partials/store-header') %>
+      <%- include('../partials/flash') %>
+      <main class="flex-1">
+        <%- body %>
+      </main>
+      <%- include('../partials/store-footer') %>
+    </div>
+
+    <div data-cart-overlay class="fixed inset-0 z-50 hidden bg-gray-950/60 backdrop-blur-sm" aria-hidden="true"></div>
+    <aside data-cart-drawer tabindex="-1" class="fixed right-0 top-0 z-[60] flex h-full w-full max-w-md translate-x-full flex-col border-l border-gray-200 bg-white shadow-2xl transition-transform duration-300">
+      <div class="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+        <div>
+          <p class="text-sm font-medium text-gray-500">Shopping cart</p>
+          <h2 class="text-xl font-semibold text-gray-900">Your items</h2>
+        </div>
+        <button type="button" data-cart-close class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-gray-200 text-gray-600 transition hover:border-primary hover:text-primary" aria-label="Close cart">
+          <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto px-6 py-6">
+        <div data-cart-empty class="hidden rounded-3xl border border-dashed border-gray-200 bg-gray-50 px-6 py-10 text-center">
+          <svg class="mx-auto h-12 w-12 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="M6 6h15l-1.5 9h-11z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <circle cx="9" cy="20" r="1.25" stroke-width="1.5"></circle>
+            <circle cx="18" cy="20" r="1.25" stroke-width="1.5"></circle>
+          </svg>
+          <p class="mt-4 text-base font-semibold text-gray-900">Your cart is empty</p>
+          <p class="mt-2 text-sm leading-6 text-gray-500">Add a few products to see them here and move to checkout faster.</p>
+        </div>
+        <div data-cart-items class="space-y-4"></div>
+      </div>
+      <div class="space-y-4 border-t border-gray-100 px-6 py-5">
+        <div class="flex items-center justify-between text-sm text-gray-600">
+          <span>Subtotal</span>
+          <span data-cart-drawer-total class="text-base font-semibold text-gray-900">$0.00</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <a href="/cart" class="inline-flex items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition hover:border-primary hover:text-primary">View cart</a>
+          <a href="/checkout" class="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">Checkout</a>
+        </div>
+      </div>
+    </aside>
+
+    <%- include('../partials/shared-scripts') %>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

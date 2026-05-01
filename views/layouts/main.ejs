@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <%- include('../partials/head', { brandColor: '#4F46E5' }) %>
+  </head>
+  <body class="min-h-screen bg-gray-50 text-gray-900 antialiased">
+    <div class="flex min-h-screen flex-col">
+      <%- include('../partials/platform-navbar') %>
+      <%- include('../partials/flash') %>
+      <main class="flex-1">
+        <%- body %>
+      </main>
+      <%- include('../partials/platform-footer') %>
+    </div>
+    <%- include('../partials/shared-scripts') %>
+  </body>
+</html>

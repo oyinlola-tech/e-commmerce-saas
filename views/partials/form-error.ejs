@@ -1,0 +1,7 @@
+<%
+  const fieldErrors = errors && field ? errors[field] : null;
+  const fieldMessage = Array.isArray(fieldErrors) ? fieldErrors[0] : fieldErrors;
+%>
+<% if (fieldMessage) { %>
+  <p class="mt-1 text-sm text-red-500"><%= fieldMessage %></p>
+<% } %>

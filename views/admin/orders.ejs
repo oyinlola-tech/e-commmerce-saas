@@ -1,0 +1,68 @@
+<%
+  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+  const orderList = Array.isArray(orders) ? orders : [];
+  const orderStatusClass = (status) => {
+    switch ((status || '').toLowerCase()) {
+      case 'delivered':
+        return 'bg-emerald-50 text-emerald-600';
+      case 'shipped':
+        return 'bg-sky-50 text-sky-600';
+      case 'pending':
+      default:
+        return 'bg-amber-50 text-amber-600';
+    }
+  };
+%>
+<section class="space-y-8">
+  <div>
+    <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Operations</p>
+    <h1 class="mt-2 text-3xl font-semibold tracking-tight text-gray-900">Orders</h1>
+    <p class="mt-3 max-w-2xl text-base leading-7 text-gray-600">Track fulfillment status, customer details, and order value from one streamlined queue.</p>
+  </div>
+
+  <% if (orderList.length) { %>
+    <div class="overflow-x-auto rounded-[2rem] border border-gray-200 bg-white shadow-sm">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Order ID</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Customer</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Date</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Total</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Status</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 bg-white">
+          <% orderList.forEach((entry) => { %>
+            <tr class="transition hover:bg-gray-50">
+              <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">#<%= entry.id %></td>
+              <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600"><%= entry.customer_name || (entry.customer && entry.customer.name) || 'Guest customer' %></td>
+              <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600"><%= entry.created_at ? new Date(entry.created_at).toLocaleDateString() : 'Today' %></td>
+              <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900"><%= currency.format(entry.total || 0) %></td>
+              <td class="whitespace-nowrap px-6 py-4">
+                <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold <%= orderStatusClass(entry.status) %>"><%= entry.status || 'Pending' %></span>
+              </td>
+              <td class="whitespace-nowrap px-6 py-4 text-sm">
+                <a href="/admin/orders/<%= entry.id %>" class="font-semibold text-primary transition hover:underline">View</a>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <div class="rounded-[2rem] border border-dashed border-gray-300 bg-white px-6 py-16 text-center shadow-sm">
+      <span class="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-primary-soft text-primary">
+        <svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+          <path d="M5 8h14" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M5 12h14" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M5 16h8" stroke-width="1.5" stroke-linecap="round"></path>
+          <rect x="3.25" y="4.25" width="17.5" height="15.5" rx="2.75" stroke-width="1.5"></rect>
+        </svg>
+      </span>
+      <h2 class="mt-6 text-2xl font-semibold text-gray-900">No orders yet</h2>
+      <p class="mx-auto mt-3 max-w-xl text-base leading-7 text-gray-600">Once customers start checking out, their orders will appear here with fulfillment status and totals.</p>
+    </div>
+  <% } %>
+</section>

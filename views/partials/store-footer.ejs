@@ -1,0 +1,40 @@
+<footer class="border-t border-gray-100 bg-white">
+  <div class="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.3fr_repeat(3,1fr)] lg:px-8">
+    <div class="space-y-3">
+      <p class="text-lg font-semibold text-gray-900"><%= store && store.name ? store.name : 'Your Store' %></p>
+      <p class="max-w-sm text-sm leading-6 text-gray-500">
+        Thoughtfully curated products, secure checkout, and a polished shopping experience from first click to confirmation.
+      </p>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Shop</h2>
+      <ul class="mt-4 space-y-3 text-sm text-gray-600">
+        <li><a href="/" class="transition hover:text-primary">Home</a></li>
+        <li><a href="/products" class="transition hover:text-primary">Products</a></li>
+        <li><a href="/cart" class="transition hover:text-primary">Cart</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Company</h2>
+      <ul class="mt-4 space-y-3 text-sm text-gray-600">
+        <li><a href="/" class="transition hover:text-primary">About</a></li>
+        <li><a href="/" class="transition hover:text-primary">Contact</a></li>
+        <li><a href="/" class="transition hover:text-primary">Privacy</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Support</h2>
+      <ul class="mt-4 space-y-3 text-sm text-gray-600">
+        <li><a href="/" class="transition hover:text-primary">Shipping</a></li>
+        <li><a href="/" class="transition hover:text-primary">Returns</a></li>
+        <li><a href="/" class="transition hover:text-primary">FAQ</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t border-gray-100">
+    <div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+      <p>&copy; <%= new Date().getFullYear() %> <%= store && store.name ? store.name : 'Your Store' %>. All rights reserved.</p>
+      <p>Powered by MultiStore.</p>
+    </div>
+  </div>
+</footer>

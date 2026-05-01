@@ -1,0 +1,38 @@
+<script>
+  (() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const sidebar = document.querySelector('[data-admin-sidebar]');
+      const overlay = document.querySelector('[data-admin-overlay]');
+      const openButtons = document.querySelectorAll('[data-admin-sidebar-toggle]');
+      const closeButtons = document.querySelectorAll('[data-admin-sidebar-close]');
+
+      if (!sidebar || !overlay) {
+        return;
+      }
+
+      const setSidebar = (open) => {
+        sidebar.classList.toggle('-translate-x-full', !open);
+        overlay.classList.toggle('hidden', !open);
+        document.body.classList.toggle('overflow-hidden', open);
+      };
+
+      openButtons.forEach((button) => {
+        button.addEventListener('click', () => setSidebar(true));
+      });
+
+      closeButtons.forEach((button) => {
+        button.addEventListener('click', () => setSidebar(false));
+      });
+
+      overlay.addEventListener('click', () => setSidebar(false));
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          setSidebar(false);
+        }
+      });
+
+      window.toggleAdminSidebar = setSidebar;
+    });
+  })();
+</script>
