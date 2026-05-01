@@ -2618,10 +2618,15 @@
                     "type": "string"
                   },
                   "secret_key": {
-                    "type": "string"
+                    "type": "string",
+                    "writeOnly": true
                   },
                   "status": {
                     "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ],
                     "example": "active"
                   }
                 }
@@ -2638,20 +2643,7 @@
                   "type": "object",
                   "properties": {
                     "config": {
-                      "allOf": [
-                        {
-                          "$ref": "#/components/schemas/PaymentConfig"
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "secret_key_preview": {
-                              "type": "string",
-                              "nullable": true
-                            }
-                          }
-                        }
-                      ]
+                      "$ref": "#/components/schemas/PaymentConfig"
                     }
                   }
                 }
