@@ -15,6 +15,13 @@
   const recommendedFontForType = selectedStoreTypeChoice
     ? (fontChoices.find((preset) => preset.key === selectedStoreTypeChoice.recommendedFontPreset) || null)
     : null;
+  const providerConfigs = typeof paymentProviderConfigs !== 'undefined' && paymentProviderConfigs ? paymentProviderConfigs : {};
+  const providerDrafts = typeof paymentProviderDrafts !== 'undefined' && paymentProviderDrafts ? paymentProviderDrafts : {};
+  const paymentConfigWarningMessage = typeof paymentProviderConfigWarning === 'string' ? paymentProviderConfigWarning : '';
+  const paystackConfig = providerConfigs.paystack || {};
+  const flutterwaveConfig = providerConfigs.flutterwave || {};
+  const paystackDraft = providerDrafts.paystack || {};
+  const flutterwaveDraft = providerDrafts.flutterwave || {};
 %>
 <section class="space-y-8">
   <div>
@@ -134,6 +141,86 @@
           <input id="returnWindow" name="return_window_days" type="number" min="1" step="1" value="<%= store && store.return_window_days ? store.return_window_days : 30 %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
         </div>
       </div>
+
+      <section class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Payments</p>
+            <h2 class="section-title mt-2 text-2xl font-semibold text-slate-950">Store payment provider keys</h2>
+          </div>
+          <p class="max-w-md text-sm leading-6 text-slate-500">Store owners can add Paystack and Flutterwave keys here. Public keys are used for checkout; secret keys stay encrypted on the backend. Platform subscription billing continues to use your platform env keys only.</p>
+        </div>
+
+        <% if (paymentConfigWarningMessage) { %>
+          <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"><%= paymentConfigWarningMessage %></div>
+        <% } %>
+
+        <div class="mt-6 grid gap-5 xl:grid-cols-2">
+          <section class="rounded-[1.5rem] border border-slate-200 bg-white p-5">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h3 class="text-lg font-semibold text-slate-950">Paystack</h3>
+                <p class="mt-1 text-sm leading-6 text-slate-500">Use the store-specific Paystack keys for storefront checkout.</p>
+              </div>
+              <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] <%= (paystackDraft.status || paystackConfig.status || 'inactive') === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600' %>"><%= paystackDraft.status || paystackConfig.status || 'inactive' %></span>
+            </div>
+
+            <div class="mt-5 space-y-4">
+              <div>
+                <label for="paystackPublicKey" class="mb-1 block text-sm font-medium text-slate-700">Public key</label>
+                <input id="paystackPublicKey" name="paystack_public_key" type="text" value="<%= paystackDraft.public_key || paystackConfig.public_key || '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="pk_live_... or pk_test_...">
+                <%- include('../partials/form-error', { field: 'paystack_public_key' }) %>
+              </div>
+              <div>
+                <label for="paystackSecretKey" class="mb-1 block text-sm font-medium text-slate-700">Secret key</label>
+                <input id="paystackSecretKey" name="paystack_secret_key" type="password" value="" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= paystackConfig.has_secret_key ? 'Leave blank to keep the saved secret key' : 'sk_live_... or sk_test_...' %>">
+                <p class="mt-2 text-sm text-slate-500"><%= paystackConfig.has_secret_key ? 'A secret key is already stored securely. Leave this blank to keep it unchanged.' : 'No secret key is stored yet.' %></p>
+                <%- include('../partials/form-error', { field: 'paystack_secret_key' }) %>
+              </div>
+              <div>
+                <label for="paystackStatus" class="mb-1 block text-sm font-medium text-slate-700">Status</label>
+                <select id="paystackStatus" name="paystack_status" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  <option value="inactive" <%= (paystackDraft.status || paystackConfig.status || 'inactive') === 'inactive' ? 'selected' : '' %>>Inactive</option>
+                  <option value="active" <%= (paystackDraft.status || paystackConfig.status || 'inactive') === 'active' ? 'selected' : '' %>>Active</option>
+                </select>
+                <%- include('../partials/form-error', { field: 'paystack_status' }) %>
+              </div>
+            </div>
+          </section>
+
+          <section class="rounded-[1.5rem] border border-slate-200 bg-white p-5">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h3 class="text-lg font-semibold text-slate-950">Flutterwave</h3>
+                <p class="mt-1 text-sm leading-6 text-slate-500">Use the store-specific Flutterwave keys for storefront checkout.</p>
+              </div>
+              <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] <%= (flutterwaveDraft.status || flutterwaveConfig.status || 'inactive') === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600' %>"><%= flutterwaveDraft.status || flutterwaveConfig.status || 'inactive' %></span>
+            </div>
+
+            <div class="mt-5 space-y-4">
+              <div>
+                <label for="flutterwavePublicKey" class="mb-1 block text-sm font-medium text-slate-700">Public key</label>
+                <input id="flutterwavePublicKey" name="flutterwave_public_key" type="text" value="<%= flutterwaveDraft.public_key || flutterwaveConfig.public_key || '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="FLWPUBK_...">
+                <%- include('../partials/form-error', { field: 'flutterwave_public_key' }) %>
+              </div>
+              <div>
+                <label for="flutterwaveSecretKey" class="mb-1 block text-sm font-medium text-slate-700">Secret key</label>
+                <input id="flutterwaveSecretKey" name="flutterwave_secret_key" type="password" value="" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="<%= flutterwaveConfig.has_secret_key ? 'Leave blank to keep the saved secret key' : 'FLWSECK_...' %>">
+                <p class="mt-2 text-sm text-slate-500"><%= flutterwaveConfig.has_secret_key ? 'A secret key is already stored securely. Leave this blank to keep it unchanged.' : 'No secret key is stored yet.' %></p>
+                <%- include('../partials/form-error', { field: 'flutterwave_secret_key' }) %>
+              </div>
+              <div>
+                <label for="flutterwaveStatus" class="mb-1 block text-sm font-medium text-slate-700">Status</label>
+                <select id="flutterwaveStatus" name="flutterwave_status" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  <option value="inactive" <%= (flutterwaveDraft.status || flutterwaveConfig.status || 'inactive') === 'inactive' ? 'selected' : '' %>>Inactive</option>
+                  <option value="active" <%= (flutterwaveDraft.status || flutterwaveConfig.status || 'inactive') === 'active' ? 'selected' : '' %>>Active</option>
+                </select>
+                <%- include('../partials/form-error', { field: 'flutterwave_status' }) %>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
     </section>
 
     <aside class="space-y-6">

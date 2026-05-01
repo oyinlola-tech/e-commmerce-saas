@@ -1640,8 +1640,8 @@ const createGatewayOpenApiSpec = (config) => {
                   properties: {
                     provider: { type: 'string', enum: ['paystack', 'flutterwave'] },
                     public_key: { type: 'string' },
-                    secret_key: { type: 'string' },
-                    status: { type: 'string', example: 'active' }
+                    secret_key: { type: 'string', writeOnly: true },
+                    status: { type: 'string', enum: ['active', 'inactive'], example: 'active' }
                   }
                 }
               }
@@ -1655,17 +1655,7 @@ const createGatewayOpenApiSpec = (config) => {
                   schema: {
                     type: 'object',
                     properties: {
-                      config: {
-                        allOf: [
-                          { $ref: '#/components/schemas/PaymentConfig' },
-                          {
-                            type: 'object',
-                            properties: {
-                              secret_key_preview: { type: 'string', nullable: true }
-                            }
-                          }
-                        ]
-                      }
+                      config: { $ref: '#/components/schemas/PaymentConfig' }
                     }
                   }
                 }

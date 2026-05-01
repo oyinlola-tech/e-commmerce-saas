@@ -32,9 +32,34 @@ const asList = (value = '') => {
     .filter(Boolean);
 };
 
+const hasEnvValue = (value) => {
+  return value !== undefined && value !== null && value !== '';
+};
+
+const toEnvPrefix = (value = '') => {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+};
+
+const getScopedEnvValue = (prefix, name) => {
+  if (prefix) {
+    const scopedName = `${prefix}_${name}`;
+    if (hasEnvValue(process.env[scopedName])) {
+      return process.env[scopedName];
+    }
+  }
+
+  return hasEnvValue(process.env[name])
+    ? process.env[name]
+    : undefined;
+};
+
 const getEnv = (name, fallback, { requiredInProduction = false, environment = 'development' } = {}) => {
   const value = process.env[name];
-  if (value !== undefined && value !== '') {
+  if (hasEnvValue(value)) {
     return value;
   }
 
@@ -47,12 +72,40 @@ const getEnv = (name, fallback, { requiredInProduction = false, environment = 'd
 
 const getSecretEnv = (name, { environment }) => {
   const value = process.env[name];
-  if (value !== undefined && value !== '') {
+  if (hasEnvValue(value)) {
     return value;
   }
 
   if (environment === 'production') {
     throw new Error(`${name} must be set in production.`);
+  }
+
+  return crypto.randomBytes(32).toString('hex');
+};
+
+const getScopedEnv = (prefix, name, fallback, { requiredInProduction = false, environment = 'development' } = {}) => {
+  const value = getScopedEnvValue(prefix, name);
+  if (value !== undefined) {
+    return value;
+  }
+
+  if (requiredInProduction && environment === 'production') {
+    const displayName = prefix ? `${prefix}_${name}` : name;
+    throw new Error(`${displayName} must be set in production.`);
+  }
+
+  return fallback;
+};
+
+const getScopedSecretEnv = (prefix, name, { environment }) => {
+  const value = getScopedEnvValue(prefix, name);
+  if (value !== undefined) {
+    return value;
+  }
+
+  if (environment === 'production') {
+    const displayName = prefix ? `${prefix}_${name}` : name;
+    throw new Error(`${displayName} must be set in production.`);
   }
 
   return crypto.randomBytes(32).toString('hex');
@@ -116,6 +169,47 @@ const loadEnvFiles = (appRoot) => {
   };
 };
 
+const buildDatabaseUrlFromParts = ({ prefix, defaultDatabase }) => {
+  const hasScopedDatabaseParts = [
+    'DATABASE_HOST',
+    'DATABASE_PORT',
+    'DATABASE_USER',
+    'DATABASE_PASSWORD',
+    'DATABASE_NAME',
+    'DATABASE_CHARSET',
+    'DATABASE_TIMEZONE',
+    'DATABASE_CONNECT_TIMEOUT_MS'
+  ].some((name) => getScopedEnvValue(prefix, name) !== undefined);
+
+  if (!hasScopedDatabaseParts) {
+    return null;
+  }
+
+  const host = getScopedEnv(prefix, 'DATABASE_HOST', '127.0.0.1');
+  const port = asNumber(getScopedEnv(prefix, 'DATABASE_PORT', 3306), 3306);
+  const user = getScopedEnv(prefix, 'DATABASE_USER', 'root');
+  const password = getScopedEnv(prefix, 'DATABASE_PASSWORD', 'password');
+  const database = getScopedEnv(prefix, 'DATABASE_NAME', defaultDatabase);
+  const charset = getScopedEnvValue(prefix, 'DATABASE_CHARSET');
+  const timezone = getScopedEnvValue(prefix, 'DATABASE_TIMEZONE');
+  const connectTimeoutMs = getScopedEnvValue(prefix, 'DATABASE_CONNECT_TIMEOUT_MS');
+  const url = new URL(`mysql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`);
+
+  if (charset) {
+    url.searchParams.set('charset', charset);
+  }
+
+  if (timezone) {
+    url.searchParams.set('timezone', timezone);
+  }
+
+  if (connectTimeoutMs) {
+    url.searchParams.set('connectTimeout', String(asNumber(connectTimeoutMs, 10000)));
+  }
+
+  return url.toString();
+};
+
 const createServiceConfig = ({
   appRoot,
   serviceName,
@@ -124,7 +218,14 @@ const createServiceConfig = ({
 }) => {
   const { workspaceRoot, environment } = loadEnvFiles(appRoot);
   const isProduction = environment === 'production';
+  const servicePrefix = toEnvPrefix(serviceName);
   const rootDomain = normalizeHostname(getEnv('PLATFORM_ROOT_DOMAIN', 'aislecommerce.com'));
+  const databaseUrl = getScopedEnvValue(servicePrefix, 'DATABASE_URL')
+    || buildDatabaseUrlFromParts({
+      prefix: servicePrefix,
+      defaultDatabase
+    })
+    || getEnv('DATABASE_URL', `mysql://root:password@127.0.0.1:3306/${defaultDatabase}`);
 
   if (!rootDomain) {
     throw new Error('PLATFORM_ROOT_DOMAIN must be a valid hostname.');
@@ -136,34 +237,41 @@ const createServiceConfig = ({
     environment,
     isProduction,
     serviceName,
-    port: asNumber(process.env.PORT, defaultPort),
-    databaseUrl: getEnv('DATABASE_URL', `mysql://root:password@127.0.0.1:3306/${defaultDatabase}`),
-    databaseReadUrls: asList(process.env.DATABASE_READ_URLS),
-    databasePoolMin: asNumber(process.env.DB_POOL_MIN, 2),
-    databasePoolMax: asNumber(process.env.DB_POOL_MAX, 12),
-    databaseIdleTimeoutMs: asNumber(process.env.DB_IDLE_TIMEOUT_MS, 60 * 1000),
-    databaseAcquireTimeoutMs: asNumber(process.env.DB_ACQUIRE_TIMEOUT_MS, 10 * 1000),
-    databaseConnectRetries: asNumber(process.env.DB_CONNECT_RETRIES, 5),
-    databaseRetryDelayMs: asNumber(process.env.DB_CONNECT_RETRY_DELAY_MS, 1000),
-    jwtSecret: getSecretEnv('JWT_SECRET', { environment }),
-    jwtAccessTtl: getEnv('JWT_ACCESS_TTL', '1h'),
-    internalSharedSecret: getSecretEnv('INTERNAL_SHARED_SECRET', { environment }),
+    serviceEnvPrefix: servicePrefix,
+    port: asNumber(getScopedEnv(servicePrefix, 'PORT', defaultPort), defaultPort),
+    databaseUrl,
+    databaseReadUrls: asList(getScopedEnv(servicePrefix, 'DATABASE_READ_URLS', '')),
+    databasePoolMin: asNumber(getScopedEnv(servicePrefix, 'DB_POOL_MIN', 2), 2),
+    databasePoolMax: asNumber(getScopedEnv(servicePrefix, 'DB_POOL_MAX', 12), 12),
+    databaseIdleTimeoutMs: asNumber(getScopedEnv(servicePrefix, 'DB_IDLE_TIMEOUT_MS', 60 * 1000), 60 * 1000),
+    databaseAcquireTimeoutMs: asNumber(getScopedEnv(servicePrefix, 'DB_ACQUIRE_TIMEOUT_MS', 10 * 1000), 10 * 1000),
+    databaseConnectRetries: asNumber(getScopedEnv(servicePrefix, 'DB_CONNECT_RETRIES', 5), 5),
+    databaseRetryDelayMs: asNumber(getScopedEnv(servicePrefix, 'DB_CONNECT_RETRY_DELAY_MS', 1000), 1000),
+    jwtSecret: getScopedSecretEnv(servicePrefix, 'JWT_SECRET', { environment }),
+    jwtAccessTtl: getScopedEnv(servicePrefix, 'JWT_ACCESS_TTL', '1h'),
+    internalSharedSecret: getScopedSecretEnv(servicePrefix, 'INTERNAL_SHARED_SECRET', { environment }),
     rabbitmqUrl: getEnv('RABBITMQ_URL', 'amqp://127.0.0.1:5672'),
     redisUrl: getEnv('REDIS_URL', 'redis://127.0.0.1:6379'),
     disableRedis: asBoolean(process.env.DISABLE_REDIS, false),
     rootDomain,
     eventExchange: getEnv('EVENT_EXCHANGE', 'aisle.events'),
-    requestTimeoutMs: asNumber(process.env.REQUEST_TIMEOUT_MS, 5000),
+    requestTimeoutMs: asNumber(getScopedEnv(servicePrefix, 'REQUEST_TIMEOUT_MS', getEnv('REQUEST_TIMEOUT_MS', 5000)), 5000),
     webAppUrl: getEnv('WEB_APP_URL', 'http://127.0.0.1:3000'),
     gatewayUrl: getEnv('GATEWAY_URL', 'http://127.0.0.1:4000'),
     cookieSecure: asBoolean(process.env.COOKIE_SECURE, isProduction),
     cookieDomain: process.env.COOKIE_DOMAIN || '',
     cookieSameSite: normalizeSameSite(getEnv('COOKIE_SAMESITE', 'lax')),
-    redisPrefix: getEnv('REDIS_PREFIX', `aisle:${serviceName}`),
-    internalRequestMaxAgeMs: asNumber(process.env.INTERNAL_REQUEST_MAX_AGE_MS, 5 * 60 * 1000),
-    internalRequestNonceTtlMs: asNumber(process.env.INTERNAL_REQUEST_NONCE_TTL_MS, 5 * 60 * 1000),
-    pageCacheTtlSeconds: asNumber(process.env.PAGE_CACHE_TTL_SECONDS, 60),
-    staticAssetCacheSeconds: asNumber(process.env.STATIC_ASSET_CACHE_SECONDS, 60 * 60),
+    redisPrefix: getScopedEnv(servicePrefix, 'REDIS_PREFIX', `aisle:${serviceName}`),
+    internalRequestMaxAgeMs: asNumber(getScopedEnv(servicePrefix, 'INTERNAL_REQUEST_MAX_AGE_MS', getEnv('INTERNAL_REQUEST_MAX_AGE_MS', 5 * 60 * 1000)), 5 * 60 * 1000),
+    internalRequestNonceTtlMs: asNumber(getScopedEnv(servicePrefix, 'INTERNAL_REQUEST_NONCE_TTL_MS', getEnv('INTERNAL_REQUEST_NONCE_TTL_MS', 5 * 60 * 1000)), 5 * 60 * 1000),
+    pageCacheTtlSeconds: asNumber(getScopedEnv(servicePrefix, 'PAGE_CACHE_TTL_SECONDS', getEnv('PAGE_CACHE_TTL_SECONDS', 60)), 60),
+    staticAssetCacheSeconds: asNumber(getScopedEnv(servicePrefix, 'STATIC_ASSET_CACHE_SECONDS', getEnv('STATIC_ASSET_CACHE_SECONDS', 60 * 60)), 60 * 60),
+    rateLimitWindowMs: asNumber(getScopedEnv(servicePrefix, 'RATE_LIMIT_WINDOW_MS', 60 * 1000), 60 * 1000),
+    rateLimitMax: asNumber(getScopedEnv(servicePrefix, 'RATE_LIMIT_MAX', 120), 120),
+    authRateLimitWindowMs: asNumber(getScopedEnv(servicePrefix, 'AUTH_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000), 15 * 60 * 1000),
+    authRateLimitMax: asNumber(getScopedEnv(servicePrefix, 'AUTH_RATE_LIMIT_MAX', 10), 10),
+    mutationRateLimitWindowMs: asNumber(getScopedEnv(servicePrefix, 'MUTATION_RATE_LIMIT_WINDOW_MS', 10 * 60 * 1000), 10 * 60 * 1000),
+    mutationRateLimitMax: asNumber(getScopedEnv(servicePrefix, 'MUTATION_RATE_LIMIT_MAX', 60), 60),
     serviceUrls: {
       user: getEnv('USER_SERVICE_URL', 'http://127.0.0.1:4101'),
       store: getEnv('STORE_SERVICE_URL', 'http://127.0.0.1:4102'),
@@ -188,5 +296,6 @@ module.exports = {
   normalizeEnvironment,
   loadEnvFiles,
   findWorkspaceRoot,
+  toEnvPrefix,
   createServiceConfig
 };

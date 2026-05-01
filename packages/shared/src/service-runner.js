@@ -1,4 +1,5 @@
 const http = require('http');
+const rateLimit = require('express-rate-limit');
 const {
   createServiceConfig
 } = require('./env');
@@ -18,9 +19,42 @@ const {
   createCache
 } = require('./cache');
 const {
+  createRedisRateLimitStore
+} = require('./rate-limit');
+const {
   errorHandler,
   notFoundHandler
 } = require('./errors');
+
+const buildRateLimitKey = (req) => {
+  const scopedIdentity = [
+    req.headers['x-store-id'] || '',
+    req.headers['x-user-id'] || '',
+    req.headers['x-customer-id'] || '',
+    req.headers['x-forwarded-host'] || ''
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join(':');
+
+  return scopedIdentity || req.ip;
+};
+
+const createServiceRateLimiter = ({ windowMs, limit, store }) => {
+  const options = {
+    windowMs,
+    limit,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: buildRateLimitKey
+  };
+
+  if (store) {
+    options.store = store;
+  }
+
+  return rateLimit(options);
+};
 
 const startService = async ({
   appRoot,
@@ -88,6 +122,40 @@ const startService = async ({
         error: error.message
       });
     }
+  });
+
+  const globalRateLimitStore = cache.redis
+    ? createRedisRateLimitStore({
+      redis: cache.redis,
+      prefix: `${config.redisPrefix}:ratelimit:global`,
+      windowMs: config.rateLimitWindowMs
+    })
+    : null;
+  const mutationRateLimitStore = cache.redis
+    ? createRedisRateLimitStore({
+      redis: cache.redis,
+      prefix: `${config.redisPrefix}:ratelimit:mutation`,
+      windowMs: config.mutationRateLimitWindowMs
+    })
+    : null;
+  const globalRateLimiter = createServiceRateLimiter({
+    windowMs: config.rateLimitWindowMs,
+    limit: config.rateLimitMax,
+    store: globalRateLimitStore
+  });
+  const mutationRateLimiter = createServiceRateLimiter({
+    windowMs: config.mutationRateLimitWindowMs,
+    limit: config.mutationRateLimitMax,
+    store: mutationRateLimitStore
+  });
+
+  app.use(globalRateLimiter);
+  app.use((req, res, next) => {
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      return next();
+    }
+
+    return mutationRateLimiter(req, res, next);
   });
 
   await registerRoutes(context);

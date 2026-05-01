@@ -11,43 +11,46 @@ This system is not free to use.
 - The SSR web app uses `apps/web/src/lib/load-env.js` and reads `.env*` files from both the workspace root and `apps/web`.
 - `PLATFORM_ROOT_DOMAIN` must resolve to a valid hostname. Invalid host values are rejected at startup.
 
-## Shared Service Variables
+## Shared Variables
+
+These variables are read globally by `createServiceConfig()` and, unless overridden by a service-specific prefix, apply to every backend service.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `NODE_ENV` | `development` | Runtime mode |
-| `PORT` | Service-specific | Listener port |
-| `DATABASE_URL` | `mysql://root:password@127.0.0.1:3306/<service_db>` | MySQL connection string |
-| `DATABASE_READ_URLS` | empty | Comma-separated read replica MySQL URLs |
+| `PLATFORM_ROOT_DOMAIN` | `aislecommerce.com` | Main platform host/root domain |
+| `WEB_APP_URL` | `http://127.0.0.1:3000` | Web app base URL |
+| `GATEWAY_URL` | `http://127.0.0.1:4000` | Gateway base URL |
+| `JWT_SECRET` | Generated in development, required in production | JWT signing secret |
+| `JWT_ACCESS_TTL` | `1h` | Access-token lifetime for platform and customer JWTs |
+| `INTERNAL_SHARED_SECRET` | Generated in development, required in production | HMAC secret for internal request headers |
+| `COOKIE_SECRET` | Generated in development, required in production | SSR signed-cookie secret |
+| `CSRF_SECRET` | Generated in development, required in production | CSRF secret for the SSR app |
+| `COOKIE_SECURE` | `NODE_ENV === production` | Enables `Secure` cookies |
+| `COOKIE_DOMAIN` | empty | Optional cookie domain override |
+| `COOKIE_SAMESITE` | `lax` | SameSite mode for auth cookies |
+| `INTERNAL_REQUEST_MAX_AGE_MS` | `300000` | Maximum accepted age for signed internal requests |
+| `INTERNAL_REQUEST_NONCE_TTL_MS` | `300000` | Replay-protection nonce retention window |
+| `RABBITMQ_URL` | `amqp://127.0.0.1:5672` | RabbitMQ connection |
+| `REDIS_URL` | `redis://127.0.0.1:6379` | Redis connection |
+| `DISABLE_REDIS` | `false` | Forces in-memory cache/rate-limit fallback |
+| `EVENT_EXCHANGE` | `aisle.events` | RabbitMQ topic exchange name |
+| `DATABASE_READ_URLS` | empty | Global comma-separated read replica URLs fallback |
 | `DB_POOL_MIN` | `2` | Minimum idle MySQL connections |
 | `DB_POOL_MAX` | `12` | Maximum pooled MySQL connections |
 | `DB_IDLE_TIMEOUT_MS` | `60000` | MySQL idle timeout |
 | `DB_ACQUIRE_TIMEOUT_MS` | `10000` | MySQL acquire timeout |
 | `DB_CONNECT_RETRIES` | `5` | Bootstrap retry count for MySQL |
 | `DB_CONNECT_RETRY_DELAY_MS` | `1000` | Delay between MySQL bootstrap retries |
-| `JWT_SECRET` | Generated in development, required in production | JWT signing secret |
-| `JWT_ACCESS_TTL` | `1h` | Access-token lifetime for platform and customer JWTs |
-| `INTERNAL_SHARED_SECRET` | Generated in development, required in production | HMAC secret for internal headers |
-| `INTERNAL_REQUEST_MAX_AGE_MS` | `300000` | Maximum accepted age for signed internal requests |
-| `INTERNAL_REQUEST_NONCE_TTL_MS` | `300000` | Replay-protection nonce retention window |
-| `RABBITMQ_URL` | `amqp://127.0.0.1:5672` | RabbitMQ connection |
-| `REDIS_URL` | `redis://127.0.0.1:6379` | Redis connection |
-| `DISABLE_REDIS` | `false` | Forces in-memory cache/rate-limit fallback |
-| `REDIS_PREFIX` | `aisle:<serviceName>` | Shared cache and rate-limit key prefix |
-| `PLATFORM_ROOT_DOMAIN` | `aislecommerce.com` | Main platform host/root domain |
-| `EVENT_EXCHANGE` | `aisle.events` | RabbitMQ topic exchange name |
 | `REQUEST_TIMEOUT_MS` | `5000` | Internal HTTP timeout |
-| `WEB_APP_URL` | `http://127.0.0.1:3000` | Web app base URL |
-| `GATEWAY_URL` | `http://127.0.0.1:4000` | Gateway base URL |
-| `COOKIE_SECURE` | `NODE_ENV === production` | Enables `Secure` cookies |
-| `COOKIE_DOMAIN` | empty | Optional cookie domain override |
-| `COOKIE_SAMESITE` | `lax` | SameSite mode for auth cookies |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Default global rate-limit window for services |
+| `RATE_LIMIT_MAX` | `120` | Default global request cap for services |
+| `MUTATION_RATE_LIMIT_WINDOW_MS` | `600000` | Default write-request limiter window |
+| `MUTATION_RATE_LIMIT_MAX` | `60` | Default write-request limiter cap |
+| `PAGE_CACHE_TTL_SECONDS` | `60` | Default cache TTL for short-lived page data |
+| `STATIC_ASSET_CACHE_SECONDS` | `3600` | Cache TTL for non-versioned static assets |
 | `STORE_LOGO_UPLOAD_DIR` | `<workspace>/uploads/logos` | Shared logo upload directory used by store-service and the SSR app |
 | `SWAGGER_PORT` | `4015` | Port used by the standalone Swagger preview started with `npm run swagger` |
-| `GATEWAY_RATE_LIMIT_MAX` | `300` | Global per-minute gateway request limit |
-| `GATEWAY_AUTH_RATE_LIMIT_MAX` | `20` | Auth-route rate limit window cap |
-| `PAGE_CACHE_TTL_SECONDS` | `60` | Default cache TTL for short-lived gateway/service page data |
-| `STATIC_ASSET_CACHE_SECONDS` | `3600` | Cache TTL for non-versioned static assets |
 | `USER_SERVICE_URL` | `http://127.0.0.1:4101` | User service base URL |
 | `STORE_SERVICE_URL` | `http://127.0.0.1:4102` | Store service base URL |
 | `COMPLIANCE_SERVICE_URL` | `http://127.0.0.1:4103` | Compliance service base URL |
@@ -62,14 +65,49 @@ This system is not free to use.
 | `NOTIFICATION_SERVICE_URL` | `http://127.0.0.1:4112` | Reserved notification service URL |
 | `SUBSCRIPTION_DEFAULT_CURRENCY` | `NGN` | Default billing currency for owner plans |
 | `PAYSTACK_PLATFORM_PUBLIC_KEY` | empty | Public key used for platform subscription checkout |
+| `PAYSTACK_PLATFORM_SECRET_KEY` | empty | Secret key used for platform subscription checkout |
 | `FLUTTERWAVE_PLATFORM_PUBLIC_KEY` | empty | Public key used for platform subscription checkout |
+| `FLUTTERWAVE_PLATFORM_SECRET_KEY` | empty | Secret key used for platform subscription checkout |
+
+## Service-Scoped Variables
+
+`packages/shared/src/env.js` resolves service-specific variables before global ones. Supported prefixes in this repo include `GATEWAY`, `USER_SERVICE`, `STORE_SERVICE`, `COMPLIANCE_SERVICE`, `CUSTOMER_SERVICE`, `PRODUCT_SERVICE`, `CART_SERVICE`, `ORDER_SERVICE`, `PAYMENT_SERVICE`, and `BILLING_SERVICE`.
+
+| Variable Pattern | Purpose |
+| --- | --- |
+| `<PREFIX>_PORT` | Listener port for that service |
+| `<PREFIX>_DATABASE_URL` | Full MySQL URL override for that service |
+| `<PREFIX>_DATABASE_HOST` | MySQL host when building the URL from parts |
+| `<PREFIX>_DATABASE_PORT` | MySQL port when building the URL from parts |
+| `<PREFIX>_DATABASE_USER` | MySQL username when building the URL from parts |
+| `<PREFIX>_DATABASE_PASSWORD` | MySQL password when building the URL from parts |
+| `<PREFIX>_DATABASE_NAME` | MySQL database name when building the URL from parts |
+| `<PREFIX>_DATABASE_CHARSET` | Optional MySQL charset query parameter |
+| `<PREFIX>_DATABASE_TIMEZONE` | Optional MySQL timezone query parameter |
+| `<PREFIX>_DATABASE_CONNECT_TIMEOUT_MS` | Optional MySQL connect timeout query parameter |
+| `<PREFIX>_DATABASE_READ_URLS` | Read-replica URLs override for that service |
+| `<PREFIX>_DB_POOL_MIN` / `<PREFIX>_DB_POOL_MAX` | Pool sizing override for that service |
+| `<PREFIX>_DB_IDLE_TIMEOUT_MS` / `<PREFIX>_DB_ACQUIRE_TIMEOUT_MS` | Pool timeout overrides for that service |
+| `<PREFIX>_DB_CONNECT_RETRIES` / `<PREFIX>_DB_CONNECT_RETRY_DELAY_MS` | Connection bootstrap retry overrides |
+| `<PREFIX>_JWT_SECRET` / `<PREFIX>_JWT_ACCESS_TTL` | JWT override for a specific service |
+| `<PREFIX>_INTERNAL_SHARED_SECRET` | Internal HMAC secret override for a specific service |
+| `<PREFIX>_REQUEST_TIMEOUT_MS` | Internal HTTP timeout override |
+| `<PREFIX>_REDIS_PREFIX` | Redis namespace override |
+| `<PREFIX>_INTERNAL_REQUEST_MAX_AGE_MS` / `<PREFIX>_INTERNAL_REQUEST_NONCE_TTL_MS` | Signed-request validation override |
+| `<PREFIX>_PAGE_CACHE_TTL_SECONDS` / `<PREFIX>_STATIC_ASSET_CACHE_SECONDS` | Cache TTL override |
+| `<PREFIX>_RATE_LIMIT_WINDOW_MS` / `<PREFIX>_RATE_LIMIT_MAX` | Global request limiter override |
+| `<PREFIX>_AUTH_RATE_LIMIT_WINDOW_MS` / `<PREFIX>_AUTH_RATE_LIMIT_MAX` | Auth-route limiter override |
+| `<PREFIX>_MUTATION_RATE_LIMIT_WINDOW_MS` / `<PREFIX>_MUTATION_RATE_LIMIT_MAX` | Write-route limiter override |
+
+If `<PREFIX>_DATABASE_URL` is omitted but any of the `<PREFIX>_DATABASE_*` parts are present, the service builds the MySQL URL automatically. This lets you inject the host, port, username, password, and database name directly from `.env`.
 
 ## Web App Variables
 
+The SSR app reads `WEB_*` first, then `WEB_APP_*`, then falls back to unscoped shared variables when appropriate.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NODE_ENV` | `development` | Runtime mode |
-| `PORT` | `3000` | Web app port |
+| `WEB_PORT` | `3000` | Web app port |
 | `PLATFORM_ROOT_DOMAIN` or `APP_ROOT_DOMAIN` | `localhost` | Hostname used to distinguish platform versus storefront routes |
 | `STATE_SEED_ON_BOOT` | `false` | Toggles demo state seeding |
 | `JWT_SECRET` | Generated in development, required in production | SSR demo token secret |
@@ -83,6 +121,10 @@ This system is not free to use.
 | `FX_RATES_API_BASE` | `https://api.frankfurter.dev/v1` | Currency conversion API base URL |
 | `EXTERNAL_API_TIMEOUT_MS` | `2500` | Outbound request timeout |
 | `BACKEND_REQUEST_TIMEOUT_MS` | `REQUEST_TIMEOUT_MS` fallback | Timeout for SSR-to-service HTTP requests |
+| `WEB_RATE_LIMIT_WINDOW_MS` / `WEB_RATE_LIMIT_MAX` | `60000` / `180` in the example file | Page request limiter |
+| `WEB_AUTH_RATE_LIMIT_WINDOW_MS` / `WEB_AUTH_RATE_LIMIT_MAX` | `900000` / `5` in the example file | Login and auth action limiter |
+| `WEB_AUTH_PAGE_RATE_LIMIT_WINDOW_MS` / `WEB_AUTH_PAGE_RATE_LIMIT_MAX` | `900000` / `20` in the example file | Login page render limiter |
+| `WEB_MUTATION_RATE_LIMIT_WINDOW_MS` / `WEB_MUTATION_RATE_LIMIT_MAX` | `600000` / `45` in the example file | Write-request limiter |
 | `STATIC_ASSET_CACHE_SECONDS` | `3600` | Cache lifetime for non-versioned assets |
 | `STORE_LOGO_UPLOAD_DIR` | `<workspace>/uploads/logos` | Local logo upload directory |
 | `USER_SERVICE_URL` | `http://127.0.0.1:4101` | Direct service URL for web-only flows |
@@ -91,7 +133,14 @@ This system is not free to use.
 | `PRODUCT_SERVICE_URL` | `http://127.0.0.1:4105` | Direct service URL for web-only flows |
 | `CART_SERVICE_URL` | `http://127.0.0.1:4106` | Direct service URL for web-only flows |
 | `ORDER_SERVICE_URL` | `http://127.0.0.1:4107` | Direct service URL for web-only flows |
+| `PAYMENT_SERVICE_URL` | `http://127.0.0.1:4108` | Direct service URL for store payment-config flows |
 | `BILLING_SERVICE_URL` | `http://127.0.0.1:4109` | Direct service URL for web-only flows |
+
+## Payment Key Notes
+
+- `PAYSTACK_PLATFORM_*` and `FLUTTERWAVE_PLATFORM_*` are only for platform subscription billing.
+- Store owners should configure storefront provider keys in the store admin settings page.
+- Storefront public keys can be rendered client-side for checkout, but storefront secret keys are stored server-side and never returned by the payment configuration endpoints.
 
 ## Security Notes
 

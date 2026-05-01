@@ -3,7 +3,6 @@ const { randomUUID } = require('crypto');
 const {
   requireInternalRequest,
   encryptText,
-  decryptText,
   EVENT_NAMES,
   PAYMENT_PROVIDERS,
   asyncHandler,
@@ -16,10 +15,7 @@ const {
   sanitizePlainText
 } = require('../../../../packages/shared');
 
-const PLATFORM_PUBLIC_KEYS = {
-  paystack: process.env.PAYSTACK_PLATFORM_PUBLIC_KEY || null,
-  flutterwave: process.env.FLUTTERWAVE_PLATFORM_PUBLIC_KEY || null
-};
+const PAYMENT_PROVIDER_STATUSES = ['active', 'inactive'];
 
 const buildRequireInternal = (config) => {
   return requireInternalRequest(config.internalSharedSecret, {
@@ -28,12 +24,59 @@ const buildRequireInternal = (config) => {
   });
 };
 
+const getPlatformProviderConfigs = () => ({
+  paystack: {
+    publicKey: String(process.env.PAYSTACK_PLATFORM_PUBLIC_KEY || '').trim() || null,
+    secretKey: String(process.env.PAYSTACK_PLATFORM_SECRET_KEY || '').trim() || null
+  },
+  flutterwave: {
+    publicKey: String(process.env.FLUTTERWAVE_PLATFORM_PUBLIC_KEY || '').trim() || null,
+    secretKey: String(process.env.FLUTTERWAVE_PLATFORM_SECRET_KEY || '').trim() || null
+  }
+});
+
+const normalizeProviderStatus = (value = '') => {
+  const normalized = sanitizePlainText(value, { maxLength: 40 }).toLowerCase();
+  return PAYMENT_PROVIDER_STATUSES.includes(normalized)
+    ? normalized
+    : 'inactive';
+};
+
+const hasConfiguredStoreSecret = (config) => Boolean(config?.secret_key_encrypted);
+const hasConfiguredStorePublicKey = (config) => Boolean(String(config?.public_key || '').trim());
+const hasConfiguredPlatformProvider = (config) => Boolean(config?.publicKey && config?.secretKey);
+
+const isActiveStoreProviderConfig = (config) => {
+  return normalizeProviderStatus(config?.status) === 'active'
+    && hasConfiguredStorePublicKey(config)
+    && hasConfiguredStoreSecret(config);
+};
+
+const serializeProviderConfig = (row) => ({
+  id: row.id,
+  store_id: row.store_id,
+  provider: row.provider,
+  public_key: row.public_key,
+  status: normalizeProviderStatus(row.status),
+  has_secret_key: hasConfiguredStoreSecret(row)
+});
+
 const buildProviderPayloads = ({ amount, currency, reference, storeId, configs, gatewayUrl, paymentScope }) => {
-  return PAYMENT_PROVIDERS.map((provider) => {
-    const config = configs.find((entry) => entry.provider === provider);
+  const platformProviderConfigs = getPlatformProviderConfigs();
+
+  return PAYMENT_PROVIDERS.flatMap((provider) => {
+    const storeConfig = configs.find((entry) => entry.provider === provider);
+    const platformConfig = platformProviderConfigs[provider];
     const publicKey = paymentScope === 'subscription'
-      ? PLATFORM_PUBLIC_KEYS[provider]
-      : (config?.public_key || null);
+      ? platformConfig?.publicKey || null
+      : (storeConfig?.public_key || null);
+    const isAvailable = paymentScope === 'subscription'
+      ? hasConfiguredPlatformProvider(platformConfig)
+      : isActiveStoreProviderConfig(storeConfig);
+
+    if (!isAvailable || !publicKey) {
+      return [];
+    }
 
     return {
       provider,
@@ -153,6 +196,23 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     const configs = storeId
       ? await db.query('SELECT * FROM payment_provider_configs WHERE store_id = ?', [storeId])
       : [];
+    const availableProviders = buildProviderPayloads({
+      amount,
+      currency,
+      reference,
+      storeId,
+      configs,
+      gatewayUrl: config.gatewayUrl,
+      paymentScope
+    });
+
+    if (!availableProviders.some((entry) => entry.provider === provider)) {
+      const message = paymentScope === 'subscription'
+        ? 'The selected subscription payment provider is not configured in platform env.'
+        : 'The selected store payment provider is not fully configured or active.';
+      throw createHttpError(400, message, null, { expose: true });
+    }
+
     const result = await db.execute(
       `
         INSERT INTO payments (
@@ -184,15 +244,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 
     return res.status(201).json({
       payment: serializePayment(payment),
-      providers: buildProviderPayloads({
-        amount,
-        currency,
-        reference,
-        storeId,
-        configs,
-        gatewayUrl: config.gatewayUrl,
-        paymentScope
-      })
+      providers: availableProviders
     });
   }));
 
@@ -203,14 +255,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 
     const rows = await db.query('SELECT * FROM payment_provider_configs WHERE store_id = ?', [req.authContext.storeId]);
     return res.json({
-      configs: rows.map((row) => ({
-        id: row.id,
-        store_id: row.store_id,
-        provider: row.provider,
-        public_key: row.public_key,
-        status: row.status,
-        has_secret_key: Boolean(row.secret_key_encrypted)
-      }))
+      configs: rows.map(serializeProviderConfig)
     });
   }));
 
@@ -219,12 +264,31 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     body('provider').isIn(PAYMENT_PROVIDERS),
     commonRules.optionalPlainText('public_key', 255),
     commonRules.optionalPlainText('secret_key', 255),
-    commonRules.optionalPlainText('status', 40)
+    body('status').optional().isIn(PAYMENT_PROVIDER_STATUSES)
   ]), asyncHandler(async (req, res) => {
     const storeId = Number(req.authContext.storeId);
     const provider = normalizeProvider(req.body.provider);
     if (!storeId) {
       throw createHttpError(400, 'Store context is required.', null, { expose: true });
+    }
+
+    const existingRow = (await db.query(
+      'SELECT * FROM payment_provider_configs WHERE store_id = ? AND provider = ?',
+      [storeId, provider]
+    ))[0] || null;
+    const nextPublicKey = String(req.body.public_key || '').trim() || existingRow?.public_key || null;
+    const nextSecretEncrypted = String(req.body.secret_key || '').trim()
+      ? encryptText(req.body.secret_key, config.internalSharedSecret)
+      : (existingRow?.secret_key_encrypted || null);
+    const nextStatus = normalizeProviderStatus(req.body.status || existingRow?.status || 'inactive');
+
+    if (nextStatus === 'active' && (!nextPublicKey || !nextSecretEncrypted)) {
+      throw createHttpError(400, 'Active payment providers require both a public key and a secret key.', {
+        fields: [
+          !nextPublicKey ? { field: 'public_key', message: 'Public key is required for active providers.' } : null,
+          !nextSecretEncrypted ? { field: 'secret_key', message: 'Secret key is required for active providers.' } : null
+        ].filter(Boolean)
+      }, { expose: true });
     }
 
     await db.execute(
@@ -239,9 +303,9 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       [
         storeId,
         provider,
-        req.body.public_key || null,
-        req.body.secret_key ? encryptText(req.body.secret_key, config.internalSharedSecret) : null,
-        req.body.status || 'active'
+        nextPublicKey,
+        nextSecretEncrypted,
+        nextStatus
       ]
     );
 
@@ -250,13 +314,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       [storeId, provider]
     ))[0];
     return res.status(201).json({
-      config: {
-        ...row,
-        secret_key_encrypted: undefined,
-        secret_key_preview: row.secret_key_encrypted
-          ? decryptText(row.secret_key_encrypted, config.internalSharedSecret).slice(0, 6)
-          : null
-      }
+      config: serializeProviderConfig(row)
     });
   }));
 

@@ -64,15 +64,18 @@ const {
 } = require('./src/lib/state');
 const {
   createLogger,
+  buildSignedInternalHeaders,
   normalizeHostname,
   isSecureRequest,
   sanitizePlainText,
   sanitizeEmail,
   sanitizeSlug,
   sanitizeUrl,
+  requestJson,
   validate,
   allowBodyFields,
   allowQueryFields,
+  PLATFORM_ROLES,
   commonRules,
   createHttpError
 } = require('../../packages/shared');
@@ -109,6 +112,7 @@ const orderCookieName = (storeId) => `last_order_${storeId}`;
 const wishlistCookieName = (storeId) => `wishlist_${storeId}`;
 const recentlyViewedCookieName = (storeId) => `recently_viewed_${storeId}`;
 const catalogSortOptions = ['featured', 'newest', 'price-low', 'price-high', 'name'];
+const storePaymentProviders = ['paystack', 'flutterwave'];
 
 const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
   getSecret: () => env.csrfSecret,
@@ -129,16 +133,30 @@ const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsr
   }
 });
 
+const pageRateLimiter = rateLimit({
+  windowMs: env.rateLimitWindowMs,
+  limit: env.rateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
+  windowMs: env.authRateLimitWindowMs,
+  limit: env.authRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false
 });
 
 const authPageRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 60,
+  windowMs: env.authPageRateLimitWindowMs,
+  limit: env.authPageRateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const mutationRateLimiter = rateLimit({
+  windowMs: env.mutationRateLimitWindowMs,
+  limit: env.mutationRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -257,6 +275,131 @@ const buildStoreAdminUrl = (store) => {
   }
 
   return `${buildStorefrontUrl(store)}/admin`;
+};
+
+const createEmptyPaymentProviderConfigs = () => {
+  return storePaymentProviders.reduce((accumulator, provider) => {
+    accumulator[provider] = {
+      provider,
+      public_key: '',
+      status: 'inactive',
+      has_secret_key: false
+    };
+    return accumulator;
+  }, {});
+};
+
+const mapPaymentProviderConfigs = (configs = []) => {
+  const mapped = createEmptyPaymentProviderConfigs();
+
+  configs.forEach((config) => {
+    const provider = sanitizePlainText(config?.provider || '', { maxLength: 40 }).toLowerCase();
+    if (!mapped[provider]) {
+      return;
+    }
+
+    mapped[provider] = {
+      provider,
+      public_key: String(config?.public_key || '').trim(),
+      status: String(config?.status || 'inactive').trim().toLowerCase() || 'inactive',
+      has_secret_key: Boolean(config?.has_secret_key)
+    };
+  });
+
+  return mapped;
+};
+
+const buildPaymentProviderDrafts = (req) => {
+  return storePaymentProviders.reduce((accumulator, provider) => {
+    accumulator[provider] = {
+      public_key: sanitizePlainText(req.body?.[`${provider}_public_key`] || '', { maxLength: 255 }),
+      secret_key: sanitizePlainText(req.body?.[`${provider}_secret_key`] || '', { maxLength: 255 }),
+      status: sanitizePlainText(req.body?.[`${provider}_status`] || '', { maxLength: 40 }).toLowerCase()
+    };
+    return accumulator;
+  }, {});
+};
+
+const buildInternalServiceHeaders = (req, storeId = '') => {
+  return buildSignedInternalHeaders({
+    requestId: req.requestId || crypto.randomUUID(),
+    forwardedHost: req.headers.host || req.hostname || '',
+    storeId,
+    userId: platformUser.id,
+    actorRole: PLATFORM_ROLES.STORE_OWNER,
+    actorType: 'platform_user',
+    secret: env.internalSharedSecret
+  });
+};
+
+const listStorePaymentProviderConfigs = async (req, store) => {
+  if (!store?.id) {
+    return createEmptyPaymentProviderConfigs();
+  }
+
+  const response = await requestJson(`${env.serviceUrls.payment}/payments/config`, {
+    headers: buildInternalServiceHeaders(req, store.id),
+    timeoutMs: env.backendRequestTimeoutMs
+  });
+
+  return mapPaymentProviderConfigs(response?.configs || []);
+};
+
+const shouldPersistPaymentProviderConfig = (existingConfig, draft = {}) => {
+  return Boolean(
+    existingConfig?.public_key
+    || existingConfig?.has_secret_key
+    || String(existingConfig?.status || '').trim().toLowerCase() === 'active'
+    || String(draft.public_key || '').trim()
+    || String(draft.secret_key || '').trim()
+    || String(draft.status || '').trim().toLowerCase() === 'active'
+  );
+};
+
+const upsertStorePaymentProviderConfig = async (req, store, provider, draft = {}) => {
+  const body = {
+    provider,
+    status: String(draft.status || '').trim().toLowerCase() === 'active'
+      ? 'active'
+      : 'inactive'
+  };
+
+  if (String(draft.public_key || '').trim()) {
+    body.public_key = draft.public_key.trim();
+  }
+
+  if (String(draft.secret_key || '').trim()) {
+    body.secret_key = draft.secret_key.trim();
+  }
+
+  return requestJson(`${env.serviceUrls.payment}/payments/config`, {
+    method: 'POST',
+    headers: buildInternalServiceHeaders(req, store.id),
+    body,
+    timeoutMs: env.backendRequestTimeoutMs
+  });
+};
+
+const loadStorePaymentProviderConfigs = async (req, res, next) => {
+  const store = resolveStore(req);
+  req.storePaymentProviderConfigs = createEmptyPaymentProviderConfigs();
+  req.storePaymentProviderConfigWarning = '';
+
+  if (!store?.id) {
+    return next();
+  }
+
+  try {
+    req.storePaymentProviderConfigs = await listStorePaymentProviderConfigs(req, store);
+  } catch (error) {
+    req.storePaymentProviderConfigWarning = 'Payment provider settings are temporarily unavailable.';
+    req.log?.warn('payment_provider_config_load_failed', {
+      storeId: store.id,
+      error: error.message
+    });
+  }
+
+  return next();
 };
 
 const getCurrentCustomer = (req, storeId) => {
@@ -449,7 +592,10 @@ const renderSettingsPage = (req, res, errors = {}, status = 200) => {
   res.status(status);
   return renderStoreAdmin(req, res, 'admin/settings', {
     pageTitle: 'Store settings',
-    errors
+    errors,
+    paymentProviderConfigs: req.storePaymentProviderConfigs || createEmptyPaymentProviderConfigs(),
+    paymentProviderDrafts: buildPaymentProviderDrafts(req),
+    paymentProviderConfigWarning: req.storePaymentProviderConfigWarning || ''
   });
 };
 
@@ -818,6 +964,15 @@ app.use(express.static(publicDir, {
   }
 }));
 
+app.use(pageRateLimiter);
+app.use((req, res, next) => {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return next();
+  }
+
+  return mutationRateLimiter(req, res, next);
+});
+
 app.use((req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     return next();
@@ -959,6 +1114,12 @@ const storeSettingsValidation = [
     'contact_phone',
     'fulfillment_sla',
     'return_window_days',
+    'paystack_public_key',
+    'paystack_secret_key',
+    'paystack_status',
+    'flutterwave_public_key',
+    'flutterwave_secret_key',
+    'flutterwave_status',
     '_csrf'
   ]),
   commonRules.name('name', 150),
@@ -971,7 +1132,13 @@ const storeSettingsValidation = [
   body('support_email').optional({ values: 'falsy' }).isEmail().withMessage('Enter a valid support email.'),
   body('contact_phone').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 50 })),
   body('fulfillment_sla').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })),
-  body('return_window_days').optional().isInt({ min: 1, max: 365 }).withMessage('Return window must be between 1 and 365 days.').toInt()
+  body('return_window_days').optional().isInt({ min: 1, max: 365 }).withMessage('Return window must be between 1 and 365 days.').toInt(),
+  body('paystack_public_key').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
+  body('paystack_secret_key').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
+  body('paystack_status').optional().isIn(['active', 'inactive']).withMessage('Choose a valid Paystack status.'),
+  body('flutterwave_public_key').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
+  body('flutterwave_secret_key').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
+  body('flutterwave_status').optional().isIn(['active', 'inactive']).withMessage('Choose a valid Flutterwave status.')
 ];
 
 const domainValidation = [
@@ -1515,10 +1682,11 @@ app.post('/admin/orders/:id/status', orderStatusValidation, handleFormValidation
   return res.redirect(`/admin/orders/${order.id}?success=Order status updated`);
 });
 
-app.get('/admin/settings', (req, res) => renderSettingsPage(req, res));
+app.get('/admin/settings', loadStorePaymentProviderConfigs, (req, res) => renderSettingsPage(req, res));
 
 app.post(
   '/admin/settings',
+  loadStorePaymentProviderConfigs,
   handleMultipartLogo((req, res, errors, status) => renderSettingsPage(req, res, errors, status)),
   storeSettingsValidation,
   handleFormValidation((req, res, errors) => renderSettingsPage(req, res, errors, 422)),
@@ -1531,6 +1699,20 @@ app.post(
         template_key: req.body.template_key || req.body.template_picker,
         logo: logoUrl || undefined
       });
+
+      const paymentProviderDrafts = buildPaymentProviderDrafts(req);
+      const existingPaymentProviderConfigs = req.storePaymentProviderConfigs || createEmptyPaymentProviderConfigs();
+
+      for (const provider of storePaymentProviders) {
+        const draft = paymentProviderDrafts[provider] || {};
+        const existingConfig = existingPaymentProviderConfigs[provider] || {};
+        if (!shouldPersistPaymentProviderConfig(existingConfig, draft)) {
+          continue;
+        }
+
+        await upsertStorePaymentProviderConfig(req, store, provider, draft);
+      }
+
       return res.redirect('/admin/settings?success=Store settings updated');
     } catch (error) {
       return next(error);

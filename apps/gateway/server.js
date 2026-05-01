@@ -506,7 +506,7 @@ const bootstrap = async () => {
     ? createRedisRateLimitStore({
       redis: cache.redis,
       prefix: `${config.redisPrefix}:ratelimit:global`,
-      windowMs: 60 * 1000
+      windowMs: config.rateLimitWindowMs
     })
     : null;
 
@@ -514,20 +514,41 @@ const bootstrap = async () => {
     ? createRedisRateLimitStore({
       redis: cache.redis,
       prefix: `${config.redisPrefix}:ratelimit:auth`,
-      windowMs: 15 * 60 * 1000
+      windowMs: config.authRateLimitWindowMs
+    })
+    : null;
+
+  const mutationRedisStore = cache.redis
+    ? createRedisRateLimitStore({
+      redis: cache.redis,
+      prefix: `${config.redisPrefix}:ratelimit:mutation`,
+      windowMs: config.mutationRateLimitWindowMs
     })
     : null;
 
   app.use(buildRateLimiter({
-    windowMs: 60 * 1000,
-    limit: Number(process.env.GATEWAY_RATE_LIMIT_MAX || 300),
+    windowMs: config.rateLimitWindowMs,
+    limit: config.rateLimitMax,
     store: redisStore
   }));
 
   const authRateLimiter = buildRateLimiter({
-    windowMs: 15 * 60 * 1000,
-    limit: Number(process.env.GATEWAY_AUTH_RATE_LIMIT_MAX || 20),
+    windowMs: config.authRateLimitWindowMs,
+    limit: config.authRateLimitMax,
     store: authRedisStore
+  });
+  const mutationRateLimiter = buildRateLimiter({
+    windowMs: config.mutationRateLimitWindowMs,
+    limit: config.mutationRateLimitMax,
+    store: mutationRedisStore
+  });
+
+  app.use((req, res, next) => {
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      return next();
+    }
+
+    return mutationRateLimiter(req, res, next);
   });
 
   app.get('/health', async (req, res) => {
