@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
+const csurf = require('csurf');
 const rateLimit = require('express-rate-limit');
 const client = require('prom-client');
 const swaggerUi = require('swagger-ui-express');
@@ -86,6 +87,30 @@ app.use(cors({
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
+
+const csrfProtection = csurf({
+  cookie: {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production'
+  }
+});
+
+const csrfExemptRoutes = new Set([
+  '/api/platform/auth/register',
+  '/api/platform/auth/login',
+  '/api/platform/auth/logout',
+  '/api/customers/register',
+  '/api/customers/login',
+  '/api/customers/logout'
+]);
+
+app.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || csrfExemptRoutes.has(req.path)) {
+    return next();
+  }
+  return csrfProtection(req, res, next);
+});
 
 app.use((req, res, next) => {
   req.requestId = req.headers['x-request-id'] || crypto.randomUUID();
