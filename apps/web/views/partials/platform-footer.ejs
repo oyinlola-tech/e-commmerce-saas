@@ -1,15 +1,18 @@
+<%
+  const isSignedIn = Boolean(platformUser && platformUser.id);
+%>
 <footer class="border-t border-slate-200/70 bg-white/85 backdrop-blur">
   <div class="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.35fr_repeat(3,1fr)] lg:px-8">
     <div class="space-y-4">
       <a href="/" class="flex items-center gap-3">
-        <span class="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-base font-bold text-white shadow-soft">A</span>
+        <img src="/brand/aisle-logo.svg" alt="Aisle" class="h-11 w-auto">
         <div>
-          <p class="section-title text-base font-semibold text-slate-950">Aisle Commerce Cloud</p>
-          <p class="text-sm text-slate-500">Global commerce, cleanly operated.</p>
+          <p class="section-title text-base font-semibold text-slate-950">Aisle</p>
+          <p class="text-sm text-slate-500">Storefronts and operations that feel built, not staged.</p>
         </div>
       </a>
       <p class="max-w-sm text-sm leading-6 text-slate-500">
-        Enterprise infrastructure for storefront launch, international checkout, tenant operations, and support excellence.
+        Aisle gives retail teams real auth, store admin, and storefront tooling without dressing demo data up as finished product.
       </p>
     </div>
 
@@ -18,16 +21,25 @@
       <ul class="mt-4 space-y-3 text-sm text-slate-600">
         <li><a href="/#features" class="transition hover:text-primary">Capabilities</a></li>
         <li><a href="/#pricing" class="transition hover:text-primary">Plans</a></li>
-        <li><a href="/dashboard" class="transition hover:text-primary">Owner dashboard</a></li>
+        <li><a href="/#faq" class="transition hover:text-primary">FAQ</a></li>
       </ul>
     </div>
 
     <div>
-      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Operations</h2>
+      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Account</h2>
       <ul class="mt-4 space-y-3 text-sm text-slate-600">
-        <li><a href="/platform-admin" class="transition hover:text-primary">Control center</a></li>
-        <li><a href="/platform-admin/support" class="transition hover:text-primary">Support ops</a></li>
-        <li><a href="/platform-admin/incidents" class="transition hover:text-primary">Incident center</a></li>
+        <% if (isSignedIn) { %>
+          <li><a href="/dashboard" class="transition hover:text-primary">Owner workspace</a></li>
+          <li>
+            <form action="/logout" method="post">
+              <%- include('./csrf-field') %>
+              <button type="submit" class="transition hover:text-primary">Sign out</button>
+            </form>
+          </li>
+        <% } else { %>
+          <li><a href="/signup" class="transition hover:text-primary">Create account</a></li>
+          <li><a href="/login" class="transition hover:text-primary">Sign in</a></li>
+        <% } %>
       </ul>
     </div>
 
@@ -35,15 +47,15 @@
       <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Company</h2>
       <ul class="mt-4 space-y-3 text-sm text-slate-600">
         <li><a href="/" class="transition hover:text-primary">About</a></li>
-        <li><a href="/" class="transition hover:text-primary">Security</a></li>
-        <li><a href="/" class="transition hover:text-primary">Contact</a></li>
+        <li><a href="mailto:<%= platformBrand && platformBrand.supportEmail ? platformBrand.supportEmail : 'support@aisle.so' %>" class="transition hover:text-primary">Contact</a></li>
+        <li><a href="/#pricing" class="transition hover:text-primary">Pricing</a></li>
       </ul>
     </div>
   </div>
   <div class="border-t border-slate-200/70">
     <div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-      <p>&copy; <%= new Date().getFullYear() %> Aisle Commerce Cloud. All rights reserved.</p>
-      <p>Built for brands operating across regions, teams, and customer expectations.</p>
+      <p>&copy; <%= new Date().getFullYear() %> Aisle. All rights reserved.</p>
+      <p>Built for teams who want the product surface to match the promise.</p>
     </div>
   </div>
 </footer>

@@ -393,6 +393,39 @@ const getPlatformAuth = (req) => {
   };
 };
 
+const getCurrentPlatformUser = async (req) => {
+  const auth = getPlatformAuth(req);
+  if (!auth) {
+    return {
+      user: null,
+      auth: null,
+      shouldClearToken: false
+    };
+  }
+
+  try {
+    const response = await requestServiceJson(req, env.serviceUrls.user, '/auth/me', {
+      auth
+    });
+
+    return {
+      user: response?.user || null,
+      auth,
+      shouldClearToken: false
+    };
+  } catch (error) {
+    if ([401, 404].includes(Number(error.status))) {
+      return {
+        user: null,
+        auth: null,
+        shouldClearToken: true
+      };
+    }
+
+    throw error;
+  }
+};
+
 const getCurrentCustomer = async (req, store) => {
   if (!store?.id) {
     return {
@@ -489,10 +522,29 @@ const mergeCartIntoCustomer = async (req, store, customerId, sessionId) => {
 };
 
 const listStoreProducts = async (req, store, options = {}) => {
-  const response = await requestServiceJson(req, env.serviceUrls.product, `/products?page=1&limit=${Number(options.limit || 100)}`, {
+  const query = new URLSearchParams({
+    page: '1',
+    limit: String(Number(options.limit || 100))
+  });
+
+  if (options.category && options.category !== 'All') {
+    query.set('category', String(options.category));
+  }
+
+  if (String(options.search || '').trim()) {
+    query.set('search', String(options.search).trim());
+  }
+
+  if (String(options.status || '').trim()) {
+    query.set('status', String(options.status).trim().toLowerCase());
+  }
+
+  const response = await requestServiceJson(req, env.serviceUrls.product, `/products?${query.toString()}`, {
     auth: {
       storeId: store.id,
-      actorType: ''
+      userId: options.auth?.userId || '',
+      actorRole: options.auth?.actorRole || '',
+      actorType: options.auth?.actorType || ''
     }
   });
 
@@ -524,6 +576,278 @@ const listStoreProducts = async (req, store, options = {}) => {
   };
 };
 
+const getAdminStoreProductById = async (req, store, auth, productId) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.product,
+    `/products/id/${encodeURIComponent(productId)}`,
+    {
+      auth: {
+        storeId: store.id,
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      }
+    }
+  );
+
+  return normalizeProduct(response?.product || null);
+};
+
+const createAdminStoreProduct = async (req, store, auth, payload = {}) => {
+  const response = await requestServiceJson(req, env.serviceUrls.product, '/products', {
+    method: 'POST',
+    auth: {
+      storeId: store.id,
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    },
+    body: {
+      store_id: Number(store.id),
+      title: String(payload.title || '').trim(),
+      slug: String(payload.slug || '').trim(),
+      category: payload.category || null,
+      description: payload.description || '',
+      price: Number(payload.price || 0),
+      compare_at_price: payload.compare_at_price === '' || payload.compare_at_price === null || payload.compare_at_price === undefined
+        ? null
+        : Number(payload.compare_at_price),
+      sku: payload.sku || '',
+      inventory_count: Number(payload.inventory_count || 0),
+      images: Array.isArray(payload.images) ? payload.images : [],
+      status: String(payload.status || 'draft').trim().toLowerCase()
+    }
+  });
+
+  return normalizeProduct(response?.product || null);
+};
+
+const updateAdminStoreProduct = async (req, store, auth, productId, payload = {}) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.product,
+    `/products/${encodeURIComponent(productId)}`,
+    {
+      method: 'PUT',
+      auth: {
+        storeId: store.id,
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      },
+      body: {
+        store_id: Number(store.id),
+        title: payload.title,
+        slug: payload.slug,
+        category: payload.category,
+        description: payload.description,
+        price: payload.price === undefined ? undefined : Number(payload.price),
+        compare_at_price: payload.compare_at_price === '' || payload.compare_at_price === null
+          ? null
+          : payload.compare_at_price === undefined
+            ? undefined
+            : Number(payload.compare_at_price),
+        sku: payload.sku,
+        inventory_count: payload.inventory_count === undefined ? undefined : Number(payload.inventory_count),
+        images: Array.isArray(payload.images) ? payload.images : undefined,
+        status: payload.status ? String(payload.status).trim().toLowerCase() : undefined
+      }
+    }
+  );
+
+  return normalizeProduct(response?.product || null);
+};
+
+const deleteAdminStoreProduct = async (req, store, auth, productId) => {
+  await requestServiceJson(
+    req,
+    env.serviceUrls.product,
+    `/products/${encodeURIComponent(productId)}`,
+    {
+      method: 'DELETE',
+      auth: {
+        storeId: store.id,
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      },
+      body: {
+        store_id: Number(store.id)
+      }
+    }
+  );
+
+  return true;
+};
+
+const listAdminStoreOrders = async (req, store, auth, options = {}) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.order,
+    `/orders?page=1&limit=${Number(options.limit || 100)}`,
+    {
+      auth: {
+        storeId: store.id,
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      }
+    }
+  );
+
+  return Array.isArray(response?.orders)
+    ? response.orders.map(normalizeOrder)
+    : [];
+};
+
+const getAdminStoreOrderById = async (req, store, auth, orderId) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.order,
+    `/orders/${encodeURIComponent(orderId)}`,
+    {
+      auth: {
+        storeId: store.id,
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      }
+    }
+  );
+
+  return normalizeOrder(response?.order || null);
+};
+
+const updateAdminStoreOrderStatus = async (req, store, auth, orderId, status) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.order,
+    `/orders/${encodeURIComponent(orderId)}/status`,
+    {
+      method: 'PATCH',
+      auth: {
+        storeId: store.id,
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      },
+      body: {
+        status
+      }
+    }
+  );
+
+  return normalizeOrder(response?.order || null);
+};
+
+const listAdminStoreCustomers = async (req, store, auth) => {
+  const response = await requestServiceJson(req, env.serviceUrls.customer, '/customers', {
+    auth: {
+      storeId: store.id,
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    }
+  });
+
+  return Array.isArray(response?.customers)
+    ? response.customers.map(normalizeCustomer)
+    : [];
+};
+
+const listPlatformStores = async (req, auth) => {
+  const response = await requestServiceJson(req, env.serviceUrls.store, '/stores', {
+    auth: {
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    }
+  });
+
+  return Array.isArray(response?.stores)
+    ? response.stores.map(normalizeStore)
+    : [];
+};
+
+const getPlatformStoreById = async (req, auth, storeId) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.store,
+    `/stores/${encodeURIComponent(storeId)}`,
+    {
+      auth: {
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      }
+    }
+  );
+
+  return normalizeStore(response?.store || null);
+};
+
+const createPlatformStore = async (req, auth, payload = {}) => {
+  const response = await requestServiceJson(req, env.serviceUrls.store, '/stores', {
+    method: 'POST',
+    auth: {
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    },
+    body: {
+      name: String(payload.name || '').trim(),
+      subdomain: String(payload.subdomain || '').trim(),
+      custom_domain: payload.custom_domain || null,
+      logo_url: payload.logo_url || null,
+      theme_color: payload.theme_color || '#0F766E',
+      store_type: payload.store_type || 'general',
+      template_key: payload.template_key || 'fashion',
+      font_preset: payload.font_preset || 'jakarta',
+      support_email: payload.support_email || null,
+      contact_phone: payload.contact_phone || null,
+      is_active: payload.is_active === undefined ? true : Boolean(payload.is_active),
+      ssl_status: payload.ssl_status || 'pending'
+    }
+  });
+
+  return normalizeStore(response?.store || null);
+};
+
+const updatePlatformStore = async (req, auth, storeId, payload = {}) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.store,
+    `/stores/${encodeURIComponent(storeId)}`,
+    {
+      method: 'PUT',
+      auth: {
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      },
+      body: payload
+    }
+  );
+
+  return normalizeStore(response?.store || null);
+};
+
+const getOwnerSubscription = async (req, auth) => {
+  const response = await requestServiceJson(req, env.serviceUrls.billing, '/subscriptions/me', {
+    auth: {
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    }
+  });
+
+  return {
+    subscription: response?.subscription || null,
+    latestInvoice: response?.latest_invoice || null
+  };
+};
+
 const getStoreProductBySlug = async (req, store, slug) => {
   const response = await requestServiceJson(
     req,
@@ -533,6 +857,24 @@ const getStoreProductBySlug = async (req, store, slug) => {
       auth: {
         storeId: store.id,
         actorType: ''
+      }
+    }
+  );
+
+  return normalizeProduct(response?.product || null);
+};
+
+const getStoreProductById = async (req, store, productId, options = {}) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.product,
+    `/products/id/${encodeURIComponent(productId)}`,
+    {
+      auth: {
+        storeId: store.id,
+        userId: options.auth?.userId || '',
+        actorRole: options.auth?.actorRole || '',
+        actorType: options.auth?.actorType || ''
       }
     }
   );
@@ -746,6 +1088,29 @@ const checkoutStorefrontCart = async (req, store, auth, payload = {}) => {
   };
 };
 
+const clearStorefrontCart = async (req, store, auth, sessionId) => {
+  const response = await requestServiceJson(req, env.serviceUrls.cart, '/cart/clear', {
+    method: 'POST',
+    auth: {
+      storeId: store.id,
+      customerId: auth?.customerId || '',
+      actorType: auth?.actorType || ''
+    },
+    body: {
+      store_id: Number(store.id)
+    },
+    headers: {
+      'x-session-id': sessionId
+    }
+  });
+
+  return normalizeCart(response?.cart || null, {
+    storeId: store.id,
+    customerId: auth?.customerId || null,
+    sessionId
+  });
+};
+
 const registerPlatformUser = async (req, res, payload = {}) => {
   const response = await requestPublicJson(req, env.serviceUrls.user, '/auth/register', {
     method: 'POST',
@@ -778,18 +1143,31 @@ module.exports = {
   SESSION_COOKIE_NAME,
   buildServiceHeaders,
   clearWebAuthCookies,
+  clearStorefrontCart,
   coerceBackendError,
+  createAdminStoreProduct,
   createEmptyCart,
+  createPlatformStore,
+  deleteAdminStoreProduct,
   ensureStorefrontSession,
+  getAdminStoreOrderById,
+  getAdminStoreProductById,
   getCartForStore,
   getCurrentCustomer,
+  getCurrentPlatformUser,
   getCustomerAuthForStore,
   getCustomerOrderById,
+  getOwnerSubscription,
   getPlatformAuth,
+  getPlatformStoreById,
   getRequestHost,
   getRequestHostname,
   getStoreByHost,
+  getStoreProductById,
   listCustomerOrders,
+  listAdminStoreCustomers,
+  listAdminStoreOrders,
+  listPlatformStores,
   listStoreProducts,
   loginPlatformUser,
   loginStorefrontCustomer,
@@ -803,6 +1181,9 @@ module.exports = {
   requestPublicJson,
   requestServiceJson,
   addToCart,
+  updateAdminStoreOrderStatus,
+  updateAdminStoreProduct,
+  updatePlatformStore,
   updateCartItem,
   removeCartItem,
   getStoreProductBySlug,

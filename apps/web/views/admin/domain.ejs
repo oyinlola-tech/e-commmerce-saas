@@ -1,5 +1,5 @@
 <%
-  const currentSubdomain = store && store.subdomain ? `${store.subdomain}.${platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com'}` : 'store.aislecommerce.com';
+  const currentSubdomain = store && store.subdomain ? `${store.subdomain}.${platformBrand && platformBrand.website ? platformBrand.website : 'aisle.so'}` : 'store.aisle.so';
   const sslStatus = (store && store.ssl_status ? store.ssl_status : 'pending').toLowerCase();
   const sslBadgeClass = sslStatus === 'issued' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
 %>
@@ -48,11 +48,11 @@
         <p class="text-sm font-medium text-slate-500">DNS instructions</p>
         <div class="mt-5 rounded-3xl bg-slate-50 p-5">
           <p class="text-sm font-semibold text-slate-900">Add a CNAME record</p>
-          <p class="mt-2 text-sm text-slate-600">Point the custom host to <span class="font-semibold text-slate-900">stores.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></span>.</p>
+          <p class="mt-2 text-sm text-slate-600">Point the custom host to <span class="font-semibold text-slate-900">stores.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aisle.so' %></span>.</p>
           <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
             Host: <span class="font-semibold">@ or www</span><br>
             Type: <span class="font-semibold">CNAME</span><br>
-            Value: <span class="font-semibold">stores.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></span>
+            Value: <span class="font-semibold">stores.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aisle.so' %></span>
           </div>
         </div>
       </section>

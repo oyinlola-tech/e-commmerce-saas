@@ -780,9 +780,12 @@ const createDefaultMessaging = (template, storeType, storeName) => {
 };
 
 const getStoreTheme = (store = {}) => {
-  const storeType = getStoreType(store.store_type, inferStoreTypeKey(store));
-  const template = getTemplate(store.template_key, store);
-  const fontPreset = getFontPreset(store.font_preset, template.fontPreset);
+  const safeStore = store && typeof store === 'object'
+    ? store
+    : {};
+  const storeType = getStoreType(safeStore.store_type, inferStoreTypeKey(safeStore));
+  const template = getTemplate(safeStore.template_key, safeStore);
+  const fontPreset = getFontPreset(safeStore.font_preset, template.fontPreset);
 
   return {
     ...template,
@@ -793,9 +796,9 @@ const getStoreTheme = (store = {}) => {
     storeTypeLabel: storeType.label,
     templateTypeLabel: template.typeLabel,
     typeLabel: storeType.label,
-    accentColor: isValidHexColor(store.theme_color) ? String(store.theme_color) : template.defaultColor,
+    accentColor: isValidHexColor(safeStore.theme_color) ? String(safeStore.theme_color) : template.defaultColor,
     fonts: fontPreset,
-    themeColor: isValidHexColor(store.theme_color) ? String(store.theme_color) : template.defaultColor
+    themeColor: isValidHexColor(safeStore.theme_color) ? String(safeStore.theme_color) : template.defaultColor
   };
 };
 

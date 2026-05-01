@@ -1,0 +1,30 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="aisle-bg" x1="32" y1="24" x2="216" y2="228" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#13252F"/>
+      <stop offset="1" stop-color="#091319"/>
+    </linearGradient>
+    <linearGradient id="aisle-arch" x1="82" y1="56" x2="174" y2="198" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#29C4B4"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+    <linearGradient id="aisle-path" x1="128" y1="76" x2="128" y2="198" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F6E6B8"/>
+      <stop offset="1" stop-color="#D9B66A"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="64" fill="url(#aisle-bg)"/>
+  <path
+    d="M74 194V120C74 80 97 56 128 56C159 56 182 80 182 120V194"
+    stroke="url(#aisle-arch)"
+    stroke-width="24"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+  <path
+    d="M128 84L157 194H99L128 84Z"
+    fill="url(#aisle-path)"/>
+  <path
+    d="M128 102L144 168H112L128 102Z"
+    fill="#FFF8E6"
+    fill-opacity="0.72"/>
+</svg>

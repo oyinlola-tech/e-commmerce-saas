@@ -1,84 +1,83 @@
 <%
+  const signedIn = Boolean(platformUser && platformUser.id);
+  const primaryCtaHref = signedIn ? '/dashboard' : '/signup';
+  const primaryCtaLabel = signedIn ? 'Open owner workspace' : 'Create your account';
+  const secondaryCtaHref = signedIn ? '/#pricing' : '/login';
+  const secondaryCtaLabel = signedIn ? 'View plans' : 'Sign in';
   const pricingTiers = [
     {
       name: 'Launch',
-      description: 'For teams opening a single flagship store with clean operations from day one.',
+      description: 'For teams opening one serious storefront with real admin tools from day one.',
       monthly: '$79',
       yearly: '$759',
-      features: ['1 live storefront', 'International checkout setup', 'Domain management', 'Email support'],
+      features: ['1 live storefront', 'Owner workspace', 'Domain management', 'Email support'],
       featured: false
     },
     {
       name: 'Scale',
-      description: 'For growing operators who need deeper tooling, better service workflows, and multi-region confidence.',
+      description: 'For operators managing multiple stores who want clean workflows and room to expand.',
       monthly: '$249',
       yearly: '$2,390',
-      features: ['Up to 5 storefronts', 'Support operations console', 'Cross-team workflows', 'Priority service'],
+      features: ['Up to 5 storefronts', 'Shared owner workspace', 'Priority support', 'Expanded operations tooling'],
       featured: true
     },
     {
       name: 'Enterprise',
-      description: 'For multi-brand organizations that require centralized governance, reliability, and hands-on enablement.',
+      description: 'For multi-brand teams planning custom workflows, governance, and white-glove rollout.',
       monthly: '$799',
       yearly: '$7,670',
-      features: ['Unlimited storefronts', 'Dedicated onboarding', 'Incident management', 'Custom integrations'],
+      features: ['Unlimited storefronts', 'Custom onboarding', 'Integration planning', 'Dedicated enablement'],
       featured: false
     }
   ];
-  const overview = metrics || {};
-  const featuredStores = Array.isArray(stores) ? stores : [];
-  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
-  const proofItems = [
+  const buildStatusCards = [
     {
-      label: 'Live stores',
-      value: overview.liveStores || 0,
-      note: `${overview.storesCount || 0} total tenants tracked`
+      label: 'Owner auth',
+      value: 'Live',
+      note: 'Sign-up, sign-in, and store access are backed by real services.'
     },
     {
-      label: 'GMV in 30 days',
-      value: money(overview.gmv30d || 0),
-      note: 'Platform-wide commercial activity'
+      label: 'Store admin',
+      value: 'Live',
+      note: 'Products, orders, settings, and domains use live service data.'
     },
     {
-      label: 'Markets served',
-      value: overview.activeMarkets || 0,
-      note: 'Regions currently supported in the mix'
+      label: 'Storefront',
+      value: 'Live',
+      note: 'Catalog, account, cart, wishlist, and checkout reflect the active store.'
     },
     {
-      label: 'Open tickets',
-      value: overview.openTickets || 0,
-      note: 'Support items still awaiting closure'
+      label: 'Platform ops',
+      value: 'Preview',
+      note: 'Multi-tenant support and incident tooling stay honestly disabled for now.'
     }
   ];
-  const platformLayers = [
+  const capabilityCards = [
     {
-      title: 'Storefronts with presence',
-      body: 'Launch premium storefronts with stronger visual identity, better mobile rhythm, and content that feels ready for international audiences.',
-      icon: 'storefront'
+      title: 'Storefronts with intention',
+      body: 'Aisle is built to help stores feel calm, premium, and real instead of looking like a theme preview wrapped in filler copy.'
     },
     {
       title: 'Operations that stay clear',
-      body: 'Product, order, settings, and domain workflows stay fast for teams that need clean execution instead of scattered admin tooling.',
-      icon: 'operations'
+      body: 'Merchandising, orders, settings, and domain setup live in one owner workspace with the depth and clarity serious teams expect.'
     },
     {
-      title: 'Control above the store',
-      body: 'Platform admins can manage tenants, respond as support, and track incidents from a dedicated control center built for real operations.',
-      icon: 'control'
+      title: 'Honest product boundaries',
+      body: 'When a platform-wide surface is not ready yet, Aisle says so plainly instead of inventing tenants, incidents, or support data.'
     }
   ];
   const faqItems = [
     {
-      question: 'Can I manage multiple brands from one platform?',
-      answer: 'Yes. The owner workspace manages brand-level stores, while the control center watches the wider platform across tenants.'
+      question: 'Can I create and manage real stores from this build?',
+      answer: 'Yes. Owner accounts, store creation, store admin, storefront auth, and customer checkout flows are all wired to services.'
     },
     {
-      question: 'Is there a dedicated support and incident layer?',
-      answer: 'Yes. Support conversations and incident workflows are surfaced in platform admin so teams can respond and coordinate from one place.'
+      question: 'Why is the platform operations area a placeholder?',
+      answer: 'Because platform-wide support, incident handling, and staff operations will only appear once they are backed by real permissions and workflows.'
     },
     {
-      question: 'Does the storefront support international operations?',
-      answer: 'The data model, content, and page structure are prepared for multi-market selling, domain management, and region-aware service messaging.'
+      question: 'Does this support custom storefront identity?',
+      answer: 'Yes. Each store can carry its own theme color, typography, content, catalog, domain, and support details.'
     }
   ];
 %>
@@ -87,44 +86,44 @@
   <div class="hero-orb hero-orb-sky right-0 top-16 h-72 w-72"></div>
   <div class="platform-hero-panel surface-card relative overflow-hidden rounded-[2.5rem] p-6 sm:p-8 lg:p-10">
     <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent"></div>
-    <div class="relative grid gap-8 xl:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] xl:items-stretch">
+    <div class="relative grid gap-8 xl:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] xl:items-stretch">
       <div class="flex h-full flex-col justify-between gap-8">
         <div class="space-y-6">
           <div class="flex flex-wrap items-center gap-3">
-            <span class="eyebrow">Enterprise Commerce Operating System</span>
+            <span class="eyebrow">Aisle</span>
             <span class="signal-chip">
               <span class="signal-dot"></span>
-              Built for active retail teams
+              Real auth and store workflows
             </span>
           </div>
 
           <div class="space-y-5">
             <h1 class="section-title max-w-4xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
-              Launch faster, operate tighter, and grow stores globally with <span class="gradient-text">Aisle</span>.
+              Commerce software that feels built, not staged.
             </h1>
             <p class="max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
-              Aisle Commerce Cloud gives modern retail teams a polished storefront, dependable admin workflows, and a real platform control layer for support and reliability.
+              Aisle gives retail teams a sharper storefront, a real owner workspace, and an honest product surface that refuses to fake platform tooling before it exists.
             </p>
           </div>
 
           <ul class="grid gap-3 sm:grid-cols-2">
             <li class="platform-proof-card rounded-[1.6rem] px-4 py-4">
-              <p class="text-sm font-semibold text-slate-900">Design-led storefront delivery</p>
-              <p class="mt-1 text-sm leading-6 text-slate-600">A premium homepage, strong catalog pacing, and cleaner mobile presentation from day one.</p>
+              <p class="text-sm font-semibold text-slate-900">No fabricated tenant dashboards</p>
+              <p class="mt-1 text-sm leading-6 text-slate-600">Aisle now reserves unfinished platform features instead of filling them with made-up data.</p>
             </li>
             <li class="platform-proof-card rounded-[1.6rem] px-4 py-4">
-              <p class="text-sm font-semibold text-slate-900">Operations and governance in one stack</p>
-              <p class="mt-1 text-sm leading-6 text-slate-600">Store owners get everyday admin tools while platform admins keep support and incident control.</p>
+              <p class="text-sm font-semibold text-slate-900">Store operations on live services</p>
+              <p class="mt-1 text-sm leading-6 text-slate-600">Products, orders, settings, auth, and customer journeys reflect the real store in context.</p>
             </li>
           </ul>
         </div>
 
         <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-          <a href="/dashboard" class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark">
-            Enter owner dashboard
+          <a href="<%= primaryCtaHref %>" class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+            <%= primaryCtaLabel %>
           </a>
-          <a href="/platform-admin" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-base font-semibold text-slate-700 transition hover:border-primary hover:text-primary">
-            Explore control center
+          <a href="<%= secondaryCtaHref %>" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-base font-semibold text-slate-700 transition hover:border-primary hover:text-primary">
+            <%= secondaryCtaLabel %>
           </a>
         </div>
       </div>
@@ -133,53 +132,50 @@
         <div class="surface-card-dark flex h-full flex-col rounded-[2rem] p-6 text-white sm:p-7">
           <div class="flex items-start justify-between gap-4">
             <div>
-              <p class="text-sm font-medium text-slate-300">Operations snapshot</p>
-              <h2 class="section-title mt-2 text-3xl font-semibold">Platform pulse</h2>
+              <p class="text-sm font-medium text-slate-300">What ships today</p>
+              <h2 class="section-title mt-2 text-3xl font-semibold">A product surface you can trust</h2>
               <p class="mt-2 max-w-md text-sm leading-6 text-slate-300">
-                Watch tenant health, incident pressure, and revenue concentration from a single control plane.
+                The public product, owner workspace, and storefront experience are real. The platform-wide operations area stays in preview until it deserves to be trusted.
               </p>
             </div>
             <span class="signal-chip border-white/10 bg-white/10 text-white">
               <span class="signal-dot"></span>
-              Stable
+              Honest by default
             </span>
           </div>
 
-          <div class="mt-6 grid gap-4 sm:grid-cols-2">
+          <div class="mt-6 grid gap-4">
             <div class="platform-mini-stat rounded-[1.5rem] bg-white/5 p-5">
-              <p class="text-sm text-slate-300">Tenant health</p>
-              <p class="metric-value mt-3 text-3xl font-semibold"><%= overview.liveStores || 0 %>/<%= overview.storesCount || 0 %></p>
-              <p class="mt-2 text-sm text-emerald-300">Live stores operating across active markets</p>
+              <p class="text-sm text-slate-300">Owner workspace</p>
+              <p class="metric-value mt-3 text-3xl font-semibold">Stores, products, orders, settings</p>
+              <p class="mt-2 text-sm text-slate-300">The day-to-day retail workspace is live and grounded in service data.</p>
             </div>
             <div class="platform-mini-stat rounded-[1.5rem] bg-white/5 p-5">
-              <p class="text-sm text-slate-300">Reliability watch</p>
-              <p class="metric-value mt-3 text-3xl font-semibold"><%= overview.unresolvedIncidents || 0 %></p>
-              <p class="mt-2 text-sm text-slate-300">Issues still requiring coordinated attention</p>
+              <p class="text-sm text-slate-300">Platform operations</p>
+              <p class="metric-value mt-3 text-3xl font-semibold">Preview only</p>
+              <p class="mt-2 text-sm text-slate-300">No fake incidents, support queues, or tenant analytics masquerading as production.</p>
             </div>
           </div>
 
           <div class="mt-6 rounded-[1.7rem] bg-white p-5 text-slate-900">
             <div class="flex items-center justify-between gap-3">
-              <p class="text-sm font-medium text-slate-500">Featured tenants</p>
-              <span class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Live sample</span>
+              <p class="text-sm font-medium text-slate-500">Current product boundaries</p>
+              <span class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Transparent</span>
             </div>
 
             <div class="mt-4 space-y-3">
-              <% if (featuredStores.length) { %>
-                <% featuredStores.forEach((store) => { %>
-                  <div class="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
-                    <div class="min-w-0">
-                      <p class="truncate text-sm font-semibold text-slate-950"><%= store.name %></p>
-                      <p class="truncate text-xs text-slate-500"><%= store.markets ? store.markets.join(', ') : 'Global' %></p>
-                    </div>
-                    <span class="text-sm font-semibold text-primary"><%= money(store.monthly_revenue || 0) %></span>
-                  </div>
-                <% }) %>
-              <% } else { %>
-                <div class="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm leading-6 text-slate-500">
-                  Launch a store to start surfacing live tenant highlights here.
-                </div>
-              <% } %>
+              <div class="rounded-2xl bg-slate-50 px-4 py-3">
+                <p class="text-sm font-semibold text-slate-950">Customer auth and checkout are real</p>
+                <p class="mt-1 text-xs leading-5 text-slate-500">Customers create store-specific accounts and place real orders tied to the active store.</p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 px-4 py-3">
+                <p class="text-sm font-semibold text-slate-950">Store admin is real</p>
+                <p class="mt-1 text-xs leading-5 text-slate-500">Catalog, orders, settings, and domain management are no longer backed by seeded state.</p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 px-4 py-3">
+                <p class="text-sm font-semibold text-slate-950">Platform-wide ops are reserved</p>
+                <p class="mt-1 text-xs leading-5 text-slate-500">You see a placeholder until the cross-tenant layer is implemented properly.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -188,7 +184,7 @@
   </div>
 
   <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-    <% proofItems.forEach((item) => { %>
+    <% buildStatusCards.forEach((item) => { %>
       <article class="platform-proof-card h-full rounded-[1.6rem] p-5">
         <p class="text-sm font-medium text-slate-500"><%= item.label %></p>
         <p class="metric-value mt-3 text-3xl font-semibold text-slate-950"><%= item.value %></p>
@@ -202,40 +198,24 @@
   <div class="grid gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-start">
     <div class="space-y-5">
       <span class="eyebrow">Why Aisle</span>
-      <h2 class="section-title text-4xl font-semibold tracking-tight text-slate-950">Everything a serious commerce team expects, without the operational drag.</h2>
+      <h2 class="section-title text-4xl font-semibold tracking-tight text-slate-950">The frontend should earn trust before it asks for it.</h2>
       <p class="max-w-xl text-lg leading-8 text-slate-600">
-        Built for operators who care about design, conversion, support responsiveness, and platform control in equal measure.
+        Aisle is being shaped around a simple rule: if a workflow looks real, it should be real.
       </p>
     </div>
 
     <div class="grid gap-6 md:grid-cols-3">
-      <% platformLayers.forEach((layer) => { %>
+      <% capabilityCards.forEach((card) => { %>
         <article class="surface-card lift-on-hover flex h-full flex-col rounded-[2rem] p-8">
           <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-            <% if (layer.icon === 'storefront') { %>
-              <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                <path d="M4 4h16v16H4z" stroke-width="1.5"></path>
-                <path d="M8 8h8v8H8z" stroke-width="1.5"></path>
-              </svg>
-            <% } %>
-            <% if (layer.icon === 'operations') { %>
-              <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                <path d="M4 7h16" stroke-width="1.5"></path>
-                <path d="M6 12h12" stroke-width="1.5"></path>
-                <path d="M8 17h8" stroke-width="1.5"></path>
-                <rect x="3.25" y="4.25" width="17.5" height="15.5" rx="2.75" stroke-width="1.5"></rect>
-              </svg>
-            <% } %>
-            <% if (layer.icon === 'control') { %>
-              <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                <path d="M7 10V8a5 5 0 0110 0v2" stroke-width="1.5"></path>
-                <rect x="5" y="10" width="14" height="10" rx="2" stroke-width="1.5"></rect>
-                <path d="M12 14v2" stroke-width="1.5"></path>
-              </svg>
-            <% } %>
+            <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <path d="M5 12h14" stroke-width="1.5" stroke-linecap="round"></path>
+              <path d="M12 5v14" stroke-width="1.5" stroke-linecap="round"></path>
+              <rect x="3.25" y="3.25" width="17.5" height="17.5" rx="3.75" stroke-width="1.5"></rect>
+            </svg>
           </span>
-          <h3 class="section-title mt-6 text-2xl font-semibold text-slate-950"><%= layer.title %></h3>
-          <p class="mt-3 flex-1 text-base leading-7 text-slate-600"><%= layer.body %></p>
+          <h3 class="section-title mt-6 text-2xl font-semibold text-slate-950"><%= card.title %></h3>
+          <p class="mt-3 flex-1 text-base leading-7 text-slate-600"><%= card.body %></p>
         </article>
       <% }) %>
     </div>
@@ -246,7 +226,7 @@
   <div class="platform-section-shell py-12 sm:py-14 lg:py-20">
     <div class="mx-auto max-w-2xl text-center">
       <span class="eyebrow">Pricing</span>
-      <h2 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950">Plans designed for teams with ambition, not hobby overhead.</h2>
+      <h2 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950">Plans for teams who want the product to feel as serious as the price tag.</h2>
       <p data-billing-copy class="mt-4 text-lg text-slate-600">Switch to annual billing and save 20%</p>
     </div>
 
@@ -290,8 +270,8 @@
               </li>
             <% }) %>
           </ul>
-          <a href="/dashboard" class="mt-8 inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition <%= tier.featured ? 'bg-primary text-white hover:bg-primary-dark' : 'border border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary' %>">
-            Choose <%= tier.name %>
+          <a href="<%= primaryCtaHref %>" class="mt-8 inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition <%= tier.featured ? 'bg-primary text-white hover:bg-primary-dark' : 'border border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary' %>">
+            <%= signedIn ? 'Open workspace' : `Choose ${tier.name}` %>
           </a>
         </article>
       <% }) %>
@@ -303,18 +283,20 @@
   <div class="grid gap-8 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
     <div class="space-y-5">
       <span class="eyebrow">FAQ</span>
-      <h2 class="section-title text-4xl font-semibold tracking-tight text-slate-950">Answers for operators building beyond one market.</h2>
+      <h2 class="section-title text-4xl font-semibold tracking-tight text-slate-950">What matters most right now</h2>
       <p class="text-lg leading-8 text-slate-600">
-        Aisle is designed for teams that need strong storefront UX and serious day-two operations in the same system.
+        Aisle is focusing on the product surfaces that should already feel trustworthy: auth, storefronts, and owner operations.
       </p>
       <div class="surface-card rounded-[2rem] p-6">
-        <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Need a closer look?</p>
+        <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Next step</p>
         <p class="mt-3 text-base leading-7 text-slate-600">
-          Open the owner workspace for storefront operations or step into the control center to review support and reliability tooling.
+          <%= signedIn
+            ? 'Return to your owner workspace to manage stores, products, and orders.'
+            : 'Create an account to start your first store with real workflows from day one.' %>
         </p>
         <div class="mt-5 flex flex-col gap-3 sm:flex-row">
-          <a href="/dashboard" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">Open owner workspace</a>
-          <a href="/platform-admin" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary">Visit control center</a>
+          <a href="<%= primaryCtaHref %>" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark"><%= primaryCtaLabel %></a>
+          <a href="<%= secondaryCtaHref %>" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary"><%= secondaryCtaLabel %></a>
         </div>
       </div>
     </div>

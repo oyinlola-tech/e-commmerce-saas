@@ -21,7 +21,7 @@
       <span class="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200">Start operating</span>
       <h1 class="section-title mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">Create your Aisle owner account</h1>
       <p class="mt-4 text-base leading-7 text-slate-300">
-        Launch your first tenant with guided design defaults, then fine-tune category, template layout, and typography independently from the same setup flow.
+        Launch your first store with guided design defaults, then refine structure, typography, and merchandising from one serious setup flow.
       </p>
       <div class="mt-10 space-y-4">
         <div class="rounded-2xl bg-white/5 p-4">
@@ -53,7 +53,7 @@
             </div>
             <div>
               <label for="email" class="mb-1 block text-sm font-medium text-slate-700">Email</label>
-              <input id="email" name="email" type="email" value="<%= formData && formData.email ? formData.email : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="owner@aislecommerce.com">
+              <input id="email" name="email" type="email" value="<%= formData && formData.email ? formData.email : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="owner@aisle.so">
               <%- include('../partials/form-error', { field: 'email' }) %>
             </div>
           </div>
@@ -89,7 +89,7 @@
               <label for="storeSubdomain" class="mb-1 block text-sm font-medium text-slate-700">Subdomain</label>
               <div class="flex overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
                 <input id="storeSubdomain" name="store_subdomain" type="text" class="min-w-0 flex-1 border-0 px-4 py-3 text-slate-900 focus:outline-none focus:ring-0" placeholder="aisle-signature">
-                <span class="inline-flex items-center border-l border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-500">.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></span>
+                <span class="inline-flex items-center border-l border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-500">.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aisle.so' %></span>
               </div>
             </div>
           </div>

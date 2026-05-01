@@ -8,6 +8,9 @@
 
     <form action="/register" method="post" class="mt-8 space-y-5">
       <%- include('../partials/csrf-field') %>
+      <% if (typeof returnTo !== 'undefined' && returnTo) { %>
+        <input type="hidden" name="returnTo" value="<%= returnTo %>">
+      <% } %>
       <div>
         <label for="name" class="mb-1 block text-sm font-medium text-slate-700">Name</label>
         <input id="name" name="name" type="text" value="<%= formData && formData.name ? formData.name : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Jane Doe">
@@ -37,7 +40,7 @@
 
     <p class="mt-6 text-center text-sm text-slate-600">
       Already have an account?
-      <a href="/login" class="font-semibold text-primary transition hover:underline">Sign in</a>
+      <a href="<%= returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : '/login' %>" class="font-semibold text-primary transition hover:underline">Sign in</a>
     </p>
   </div>
 </section>

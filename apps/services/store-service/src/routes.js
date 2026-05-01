@@ -123,6 +123,21 @@ const sanitizeLogoFilename = (storeId, mimeType) => {
   return `store-${storeId}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${extension}`;
 };
 
+const resolveLogoUploadPath = (config, filename) => {
+  const uploadDir = path.resolve(getLogoUploadDirectory(config));
+  const safeFilename = path.basename(String(filename || ''));
+  const absolutePath = path.resolve(uploadDir, safeFilename);
+  const directoryPrefix = uploadDir.endsWith(path.sep)
+    ? uploadDir
+    : `${uploadDir}${path.sep}`;
+
+  if (!safeFilename || !absolutePath.startsWith(directoryPrefix)) {
+    throw createHttpError(400, 'Invalid logo filename.', null, { expose: true });
+  }
+
+  return absolutePath;
+};
+
 const uploadLogoMiddleware = (req, res, next) => {
   return logoUpload.single('logo')(req, res, (error) => {
     if (!error) {
@@ -517,7 +532,8 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     }
 
     const filename = sanitizeLogoFilename(req.params.id, mimeType);
-    const absolutePath = path.join(getLogoUploadDirectory(config), filename);
+    // Security: Resolve the final logo path inside the upload directory so crafted names cannot escape it.
+    const absolutePath = resolveLogoUploadPath(config, filename);
     await fs.writeFile(absolutePath, req.file.buffer);
 
     const logoUrl = buildLogoUrl(filename);

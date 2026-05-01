@@ -145,7 +145,7 @@ The SSR app reads `WEB_*` first, then `WEB_APP_*`, then falls back to unscoped s
 ## Security Notes
 
 - Development defaults now generate random JWT, internal HMAC, cookie, and CSRF secrets when those variables are omitted. Production must set `JWT_SECRET`, `INTERNAL_SHARED_SECRET`, `COOKIE_SECRET`, and `CSRF_SECRET` explicitly, and should set the platform payment secrets before enabling subscription billing.
-- SSR forms include a `_csrf` field, while browser API clients should fetch `GET /api/csrf-token` from the gateway and send the returned token in `X-CSRF-Token`.
+- SSR forms include a `_csrf` field, while browser API clients should fetch `GET /api/csrf-token` from the gateway and send the returned token in `X-CSRF-Token`. The same gateway token is now required for browser-driven state-changing `/payments/*` requests except webhook callbacks and signed internal service calls.
 - Sensitive cookies are only written on secure requests in production. Make sure TLS termination forwards `X-Forwarded-Proto=https` and that `trust proxy` remains enabled.
 - `STORE_LOGO_UPLOAD_DIR` should point at persistent storage in shared or production deployments. Local disk is the development fallback only.
 

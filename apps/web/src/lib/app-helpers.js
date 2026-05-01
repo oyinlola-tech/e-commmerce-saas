@@ -1,0 +1,679 @@
+const createAppHelpers = (context) => {
+  const {
+    crypto,
+    env,
+    ROOT_DOMAIN,
+    PORT,
+    isLocalRoot,
+    customerCookieName,
+    orderCookieName,
+    wishlistCookieName,
+    recentlyViewedCookieName,
+    catalogSortOptions,
+    mergeProductPresentation,
+    logoUpload,
+    buildCookieOptions,
+    buildSignedInternalHeaders,
+    normalizeHostname,
+    sanitizePlainText,
+    sanitizeEmail,
+    sanitizeSlug,
+    sanitizeUrl,
+    readSignedCookie,
+    setSignedCookie,
+    safeRedirect,
+    isPlatformRequestHost,
+    PLATFORM_ROLES,
+    commonRules,
+    createHttpError,
+    getStoreProductById,
+    listPlatformStores,
+    getOwnerSubscription
+  } = context;
+
+  const buildFormData = (req, keys = []) => {
+    return keys.reduce((accumulator, key) => {
+      if (req.body?.[key] !== undefined) {
+        accumulator[key] = req.body[key];
+      }
+      return accumulator;
+    }, {});
+  };
+
+  const safeDecodeURIComponent = (value = '') => {
+    try {
+      return decodeURIComponent(String(value || ''));
+    } catch {
+      return String(value || '');
+    }
+  };
+
+  const handleMultipartLogo = (renderer) => {
+    return (req, res, next) => {
+      return logoUpload.single('logo')(req, res, (error) => {
+        if (!error) {
+          return next();
+        }
+
+        return renderer(req, res, {
+          logo: [error.message]
+        }, 422);
+      });
+    };
+  };
+
+  const parseCheckbox = (value) => {
+    return ['1', 'true', 'on', 'yes', 'published'].includes(String(value || '').trim().toLowerCase());
+  };
+
+  const isStorefrontHost = (req) => {
+    return !isPlatformRequestHost(normalizeHostname(req.hostname || req.headers.host || ''));
+  };
+
+  const isStoreScopedPath = (pathname = '') => {
+    return pathname === '/register'
+      || pathname === '/products'
+      || pathname === '/wishlist'
+      || pathname.startsWith('/products/')
+      || pathname === '/cart'
+      || pathname === '/account'
+      || pathname === '/orders'
+      || pathname === '/checkout'
+      || pathname === '/order-confirmation'
+      || pathname.startsWith('/cart/')
+      || pathname.startsWith('/wishlist/');
+  };
+
+  const resolveStore = (req) => {
+    return req.currentStore || null;
+  };
+
+  const buildStorefrontUrl = (store) => {
+    if (!store) {
+      return '/';
+    }
+
+    const customDomain = normalizeHostname(store.custom_domain);
+    if (customDomain) {
+      return `https://${customDomain}`;
+    }
+
+    const subdomain = sanitizeSlug(store.subdomain || '');
+    if (!subdomain) {
+      return '/';
+    }
+
+    if (isLocalRoot) {
+      return `http://${subdomain}.localhost:${PORT}`;
+    }
+
+    return `https://${subdomain}.${ROOT_DOMAIN}`;
+  };
+
+  const buildStoreAdminUrl = (store) => {
+    if (!store) {
+      return '/dashboard';
+    }
+
+    if (isLocalRoot) {
+      return `http://localhost:${PORT}/admin?store=${encodeURIComponent(store.id)}`;
+    }
+
+    return `https://${ROOT_DOMAIN}/admin?store=${encodeURIComponent(store.id)}`;
+  };
+
+  const buildStorefrontAbsoluteUrl = (store, pathname = '/') => {
+    const baseUrl = buildStorefrontUrl(store);
+    try {
+      return new URL(pathname, baseUrl).toString();
+    } catch {
+      const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+      if (baseUrl.startsWith('http://') || baseUrl.startsWith('https://')) {
+        return `${baseUrl}${normalizedPath}`;
+      }
+      return normalizedPath;
+    }
+  };
+
+  const buildStorefrontAssetUrl = (store, value = '') => {
+    const raw = String(value || '').trim();
+    if (!raw) {
+      return '';
+    }
+
+    if (/^https?:\/\//i.test(raw)) {
+      return raw;
+    }
+
+    if (raw.startsWith('/')) {
+      return buildStorefrontAbsoluteUrl(store, raw);
+    }
+
+    return buildStorefrontAbsoluteUrl(store, `/${raw.replace(/^\/+/, '')}`);
+  };
+
+  const resolveSafeLocalRedirect = (req, target, fallback = '/', store = null) => {
+    const normalizedFallback = safeRedirect(req, fallback, '/', store);
+    const fallbackPath = normalizedFallback.startsWith('/')
+      ? normalizedFallback
+      : '/';
+
+    const redirectTarget = safeRedirect(req, target, fallbackPath, store);
+    return redirectTarget.startsWith('/')
+      ? redirectTarget
+      : fallbackPath;
+  };
+
+  const resolveFormReturnTo = (req, fallback = '/', store = null) => {
+    const candidate = req.body?.returnTo
+      || req.query?.returnTo
+      || req.query?.next
+      || req.query?.redirect
+      || '';
+    return resolveSafeLocalRedirect(req, candidate, fallback, store);
+  };
+
+  const joinKeywordList = (...groups) => {
+    return Array.from(new Set(groups
+      .flat()
+      .map((entry) => sanitizePlainText(entry || '', { maxLength: 80 }).toLowerCase())
+      .filter(Boolean)))
+      .slice(0, 18)
+      .join(', ');
+  };
+
+  const buildStoreSeoDescription = (store) => {
+    return sanitizePlainText(
+      store?.seo_description
+      || store?.description
+      || `${store?.name || 'This store'} offers a carefully merchandised shopping experience with dependable checkout and clear operations.`,
+      { maxLength: 320 }
+    );
+  };
+
+  const buildStoreSeoKeywords = (store, additionalKeywords = []) => {
+    return joinKeywordList(
+      store?.seo_keywords ? String(store.seo_keywords).split(',') : [],
+      [store?.name, store?.store_type, store?.subdomain],
+      Array.isArray(store?.markets) ? store.markets : [],
+      additionalKeywords
+    );
+  };
+
+  const resolveStorefrontMetaRobots = (req, payload = {}) => {
+    if (payload.metaRobots) {
+      return payload.metaRobots;
+    }
+
+    const disallowedPaths = ['/account', '/orders', '/checkout', '/cart', '/wishlist', '/order-confirmation'];
+    if (disallowedPaths.some((entry) => req.path === entry || req.path.startsWith(`${entry}/`))) {
+      return 'noindex, nofollow';
+    }
+
+    return 'index, follow';
+  };
+
+  const buildStorefrontMeta = (req, store, payload = {}) => {
+    return {
+      pageTitle: payload.pageTitle || '',
+      metaTitle: payload.metaTitle || payload.pageTitle || store?.name || '',
+      metaDescription: payload.metaDescription || buildStoreSeoDescription(store),
+      metaKeywords: payload.metaKeywords || buildStoreSeoKeywords(store),
+      canonicalUrl: payload.canonicalPath ? buildStorefrontAbsoluteUrl(store, payload.canonicalPath) : '',
+      socialImage: payload.socialImage || buildStorefrontAssetUrl(store, store?.logo || ''),
+      metaType: payload.metaType || 'website',
+      metaRobots: resolveStorefrontMetaRobots(req, payload)
+    };
+  };
+
+  const getCurrentCustomer = (req) => req.currentCustomer || null;
+
+  const getWishlistProductIds = (req, storeId) => {
+    const raw = readSignedCookie(req, wishlistCookieName(storeId));
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.map((entry) => String(entry)).slice(0, 50);
+    } catch {
+      return [];
+    }
+  };
+
+  const persistWishlist = (req, res, storeId, productIds) => {
+    setSignedCookie(req, res, wishlistCookieName(storeId), JSON.stringify(productIds.slice(0, 50)), {
+      maxAge: 30 * 24 * 60 * 60 * 1000
+    });
+  };
+
+  const getRecentlyViewedProductIds = (req, storeId) => {
+    const raw = readSignedCookie(req, recentlyViewedCookieName(storeId));
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.map((entry) => String(entry)).slice(0, 12);
+    } catch {
+      return [];
+    }
+  };
+
+  const persistRecentlyViewed = (req, res, storeId, productId) => {
+    const nextIds = [
+      String(productId),
+      ...getRecentlyViewedProductIds(req, storeId).filter((entry) => entry !== String(productId))
+    ].slice(0, 12);
+
+    setSignedCookie(req, res, recentlyViewedCookieName(storeId), JSON.stringify(nextIds), {
+      maxAge: 14 * 24 * 60 * 60 * 1000
+    });
+  };
+
+  const loadProductsByIds = async (req, store, productIds = [], options = {}) => {
+    if (!store?.id) {
+      return [];
+    }
+
+    const uniqueIds = Array.from(new Set(
+      productIds
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean)
+    ));
+
+    if (!uniqueIds.length) {
+      return [];
+    }
+
+    const auth = options.auth || null;
+    const resolved = await Promise.all(uniqueIds.map(async (productId) => {
+      try {
+        return await getStoreProductById(req, store, productId, auth ? { auth } : {});
+      } catch (error) {
+        if ([404, 403].includes(Number(error.status))) {
+          return null;
+        }
+
+        throw error;
+      }
+    }));
+
+    return resolved
+      .filter(Boolean)
+      .map(mergeProductPresentation);
+  };
+
+  const getRecentlyViewedProducts = async (req, store, options = {}) => {
+    const storeId = store?.id;
+    if (!storeId) {
+      return [];
+    }
+
+    const excludeId = options.excludeId ? String(options.excludeId) : null;
+    const limit = Math.max(1, Number(options.limit || 4));
+
+    const ids = getRecentlyViewedProductIds(req, storeId)
+      .filter((entry) => !excludeId || entry !== excludeId)
+      .slice(0, limit);
+
+    return loadProductsByIds(req, store, ids);
+  };
+
+  const requiresStoreContext = (req) => {
+    return isStorefrontHost(req)
+      || req.path.startsWith('/admin')
+      || req.path.startsWith('/stores/')
+      || isStoreScopedPath(req.path);
+  };
+
+  const shouldLoadStorefrontIdentity = (req) => {
+    return isStorefrontHost(req) || isStoreScopedPath(req.path);
+  };
+
+  const sortProducts = (products = [], sort = 'featured') => {
+    const list = [...products];
+
+    switch (String(sort || 'featured').toLowerCase()) {
+      case 'price-low':
+        return list.sort((left, right) => Number(left.price || 0) - Number(right.price || 0));
+      case 'price-high':
+        return list.sort((left, right) => Number(right.price || 0) - Number(left.price || 0));
+      case 'name':
+        return list.sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')));
+      case 'newest':
+        return list.sort((left, right) => {
+          return new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime();
+        });
+      case 'featured':
+      default:
+        return list.sort((left, right) => {
+          if (Boolean(left.featured) !== Boolean(right.featured)) {
+            return left.featured ? -1 : 1;
+          }
+
+          return new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime();
+        });
+    }
+  };
+
+  const buildProductDiscovery = (products = []) => {
+    const categories = new Map();
+    const tags = new Map();
+
+    products.forEach((product) => {
+      const categoryName = sanitizePlainText(product.category || '', { maxLength: 120 });
+      if (categoryName) {
+        const slug = sanitizeSlug(categoryName);
+        if (slug && !categories.has(slug)) {
+          categories.set(slug, {
+            name: categoryName,
+            slug
+          });
+        }
+      }
+
+      (Array.isArray(product.tags) ? product.tags : []).forEach((tag) => {
+        const tagName = sanitizePlainText(tag || '', { maxLength: 80 });
+        const slug = sanitizeSlug(tagName);
+        if (tagName && slug && !tags.has(slug)) {
+          tags.set(slug, {
+            name: tagName,
+            slug
+          });
+        }
+      });
+    });
+
+    return {
+      categories: Array.from(categories.values()),
+      tags: Array.from(tags.values())
+    };
+  };
+
+  const buildStoreStats = ({ store = null, products = [], orders = [], customers = [] } = {}) => {
+    const revenue30d = orders.reduce((sum, order) => {
+      return sum + Number(order.total || 0);
+    }, 0);
+
+    return {
+      totalProducts: products.length,
+      publishedProducts: products.filter((entry) => String(entry.status || '').toLowerCase() === 'published').length,
+      totalOrders: orders.length,
+      revenue30d,
+      customersCount: customers.length,
+      openSupportTickets: 0,
+      marketsCount: Array.isArray(store?.markets) ? store.markets.length : 0
+    };
+  };
+
+  const resolveRequestedStoreId = (req) => {
+    return sanitizePlainText(req.query.store || readSignedCookie(req, 'activeStoreId') || '', {
+      maxLength: 120
+    });
+  };
+
+  const parseLineList = (value = '', maxItems = 12, maxLength = 180) => {
+    return String(value || '')
+      .split(/\r?\n/)
+      .map((entry) => sanitizePlainText(entry, { maxLength }))
+      .filter(Boolean)
+      .slice(0, maxItems);
+  };
+
+  const decorateProducts = (products = []) => {
+    return products.map((product) => mergeProductPresentation(product));
+  };
+
+  const buildStoreContentPayload = (req) => {
+    return {
+      tagline: sanitizePlainText(req.body.tagline || '', { maxLength: 180 }),
+      description: sanitizePlainText(req.body.description || '', { maxLength: 1500 }),
+      fulfillment_sla: sanitizePlainText(req.body.fulfillment_sla || '', { maxLength: 120 }),
+      return_window_days: Number(req.body.return_window_days || 30) || 30,
+      seo_title: sanitizePlainText(req.body.seo_title || '', { maxLength: 120 }),
+      seo_description: sanitizePlainText(req.body.seo_description || '', { maxLength: 320 }),
+      seo_keywords: sanitizePlainText(req.body.seo_keywords || '', { maxLength: 255 }),
+      announcement_text: sanitizePlainText(req.body.announcement_text || '', { maxLength: 180 }),
+      hero_eyebrow: sanitizePlainText(req.body.hero_eyebrow || '', { maxLength: 80 }),
+      hero_title: sanitizePlainText(req.body.hero_title || '', { maxLength: 180 }),
+      hero_description: sanitizePlainText(req.body.hero_description || '', { maxLength: 500 }),
+      hero_support: sanitizePlainText(req.body.hero_support || '', { maxLength: 160 }),
+      primary_cta_text: sanitizePlainText(req.body.primary_cta_text || '', { maxLength: 50 }),
+      secondary_cta_text: sanitizePlainText(req.body.secondary_cta_text || '', { maxLength: 50 }),
+      featured_collection_title: sanitizePlainText(req.body.featured_collection_title || '', { maxLength: 160 }),
+      featured_collection_description: sanitizePlainText(req.body.featured_collection_description || '', { maxLength: 320 }),
+      footer_blurb: sanitizePlainText(req.body.footer_blurb || '', { maxLength: 400 })
+    };
+  };
+
+  const buildStoreServicePayload = (req, options = {}) => {
+    const payload = {
+      name: sanitizePlainText(req.body.name || '', { maxLength: 150 }),
+      custom_domain: normalizeHostname(req.body.custom_domain || '') || null,
+      theme_color: sanitizePlainText(req.body.theme_color || '#0F766E', { maxLength: 20 }) || '#0F766E',
+      store_type: sanitizePlainText(req.body.store_type || 'general', { maxLength: 50 }) || 'general',
+      template_key: sanitizePlainText(req.body.template_key || req.body.template_picker || 'fashion', { maxLength: 50 }) || 'fashion',
+      font_preset: sanitizePlainText(req.body.font_preset || 'jakarta', { maxLength: 50 }) || 'jakarta',
+      support_email: sanitizeEmail(req.body.support_email || ''),
+      contact_phone: sanitizePlainText(req.body.contact_phone || '', { maxLength: 50 }),
+      ssl_status: options.ssl_status || 'pending',
+      is_active: options.is_active === undefined ? true : Boolean(options.is_active)
+    };
+
+    if (options.logoUrl !== undefined) {
+      payload.logo_url = options.logoUrl || null;
+    }
+
+    return payload;
+  };
+
+  const buildProductServicePayload = (req) => {
+    const primaryImage = sanitizeUrl(req.body.image || '');
+    const galleryImages = parseLineList(req.body.gallery || '', 12, 500).map((entry) => sanitizeUrl(entry)).filter(Boolean);
+    const mergedImages = Array.from(new Set([primaryImage, ...galleryImages].filter(Boolean))).slice(0, 12);
+
+    return {
+      title: sanitizePlainText(req.body.name || '', { maxLength: 180 }),
+      category: sanitizePlainText(req.body.category || '', { maxLength: 120 }),
+      sku: sanitizePlainText(req.body.sku || '', { maxLength: 120 }),
+      description: sanitizePlainText(req.body.description || '', { maxLength: 3000 }),
+      price: Number(req.body.price || 0),
+      compare_at_price: req.body.compare_at_price === '' || req.body.compare_at_price === undefined
+        ? null
+        : Number(req.body.compare_at_price),
+      inventory_count: Number(req.body.inventory || 0),
+      images: mergedImages,
+      status: parseCheckbox(req.body.status) ? 'published' : 'draft'
+    };
+  };
+
+  const buildProductPresentationPayload = (req) => {
+    return {
+      highlights: parseLineList(req.body.highlights || '', 12, 180),
+      featured: parseCheckbox(req.body.featured)
+    };
+  };
+
+  const buildProductDraft = (req, productId = null) => {
+    const servicePayload = buildProductServicePayload(req);
+    const presentationPayload = buildProductPresentationPayload(req);
+
+    return {
+      id: productId,
+      name: servicePayload.title,
+      category: servicePayload.category,
+      sku: servicePayload.sku,
+      description: servicePayload.description,
+      price: servicePayload.price,
+      compare_at_price: servicePayload.compare_at_price,
+      inventory: servicePayload.inventory_count,
+      image: servicePayload.images[0] || '',
+      images: servicePayload.images,
+      status: servicePayload.status === 'published' ? 'Published' : 'Draft',
+      ...presentationPayload
+    };
+  };
+
+  const filterCatalogProducts = (products = [], options = {}) => {
+    const normalizedCategory = String(options.category || 'All').trim();
+    const normalizedSearch = String(options.search || '').trim().toLowerCase();
+    const normalizedTag = sanitizeSlug(options.tag || '');
+
+    const filtered = products.filter((product) => {
+      const matchesCategory = normalizedCategory === 'All'
+        || sanitizeSlug(product.category || '') === sanitizeSlug(normalizedCategory)
+        || String(product.category || '') === normalizedCategory;
+
+      const matchesSearch = !normalizedSearch || [
+        product.name,
+        product.description,
+        product.category,
+        ...(Array.isArray(product.tags) ? product.tags : [])
+      ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
+
+      const matchesTag = !normalizedTag || (Array.isArray(product.tags) && product.tags.some((tag) => sanitizeSlug(tag) === normalizedTag));
+
+      return matchesCategory && matchesSearch && matchesTag;
+    });
+
+    return sortProducts(filtered, options.sort || 'featured');
+  };
+
+  const requirePlatformUser = (req, res, fallback = '/dashboard') => {
+    if (req.platformAuth && req.currentPlatformUser) {
+      return null;
+    }
+
+    const returnTo = resolveSafeLocalRedirect(req, req.originalUrl || fallback, fallback);
+    res.redirect(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+    return res;
+  };
+
+  const requireActiveStore = (req, res, fallback = '/dashboard') => {
+    if (req.currentStore?.id) {
+      return null;
+    }
+
+    res.redirect(`${fallback}?error=${encodeURIComponent('Choose a store before opening the admin workspace.')}`);
+    return res;
+  };
+
+  const buildOwnerDashboardMetrics = (stores = [], subscription = null) => {
+    return {
+      storesCount: stores.length,
+      liveStores: stores.filter((entry) => entry.is_active).length,
+      subscriptionStatus: subscription?.status || 'inactive',
+      subscriptionPlan: subscription?.plan || 'starter',
+      trialEndsAt: subscription?.trial_ends_at || null,
+      currentPeriodEnd: subscription?.current_period_end || null
+    };
+  };
+
+  const buildInternalServiceHeaders = (req, storeId = '') => {
+    const platformAuth = req.platformAuth || {};
+    return buildSignedInternalHeaders({
+      requestId: req.requestId || crypto.randomUUID(),
+      forwardedHost: req.headers.host || req.hostname || '',
+      storeId,
+      userId: platformAuth.userId || '',
+      actorRole: platformAuth.actorRole || PLATFORM_ROLES.STORE_OWNER,
+      actorType: 'platform_user',
+      secret: env.internalSharedSecret
+    });
+  };
+
+  const setOrderTrackingCookie = (req, res, storeId, orderId) => {
+    setSignedCookie(req, res, orderCookieName(storeId), String(orderId), {
+      maxAge: 14 * 24 * 60 * 60 * 1000
+    });
+  };
+
+  const setCurrencyPreferenceCookie = (req, res, name, value) => {
+    setSignedCookie(req, res, name, value, {
+      maxAge: 30 * 24 * 60 * 60 * 1000
+    });
+  };
+
+  const clearTokenCookie = (res, name) => {
+    res.clearCookie(name, buildCookieOptions(env, {
+      maxAge: 0
+    }));
+  };
+
+  const wantsJson = (req) => {
+    return req.xhr
+      || String(req.headers.accept || '').includes('application/json')
+      || req.path.startsWith('/cart/')
+      || req.path.startsWith('/wishlist/');
+  };
+
+  return {
+    catalogSortOptions,
+    commonRules,
+    createHttpError,
+    buildFormData,
+    handleMultipartLogo,
+    safeDecodeURIComponent,
+    parseCheckbox,
+    isStorefrontHost,
+    isStoreScopedPath,
+    resolveStore,
+    buildStorefrontUrl,
+    buildStoreAdminUrl,
+    buildStorefrontAbsoluteUrl,
+    buildStorefrontAssetUrl,
+    resolveSafeLocalRedirect,
+    resolveFormReturnTo,
+    joinKeywordList,
+    buildStoreSeoDescription,
+    buildStoreSeoKeywords,
+    resolveStorefrontMetaRobots,
+    buildStorefrontMeta,
+    getCurrentCustomer,
+    getWishlistProductIds,
+    persistWishlist,
+    getRecentlyViewedProductIds,
+    persistRecentlyViewed,
+    loadProductsByIds,
+    getRecentlyViewedProducts,
+    requiresStoreContext,
+    shouldLoadStorefrontIdentity,
+    sortProducts,
+    buildProductDiscovery,
+    buildStoreStats,
+    resolveRequestedStoreId,
+    parseLineList,
+    decorateProducts,
+    buildStoreContentPayload,
+    buildStoreServicePayload,
+    buildProductServicePayload,
+    buildProductPresentationPayload,
+    buildProductDraft,
+    filterCatalogProducts,
+    requirePlatformUser,
+    requireActiveStore,
+    buildOwnerDashboardMetrics,
+    buildInternalServiceHeaders,
+    setOrderTrackingCookie,
+    setCurrencyPreferenceCookie,
+    clearTokenCookie,
+    wantsJson,
+    listPlatformStores,
+    getOwnerSubscription
+  };
+};
+
+module.exports = {
+  createAppHelpers
+};

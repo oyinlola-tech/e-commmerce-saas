@@ -372,13 +372,39 @@ const gatewayCors = (req, res, next) => {
   })(req, res, next);
 };
 
+const getGatewayRequestPath = (req) => `${req.baseUrl || ''}${req.path || ''}`;
+
+const hasTrustedInternalGatewaySignature = (req) => {
+  return Boolean(verifySignedInternalHeaders(req.headers, config.internalSharedSecret, {
+    maxAgeMs: config.internalRequestMaxAgeMs,
+    nonceTtlMs: config.internalRequestNonceTtlMs
+  }));
+};
+
 const shouldEnforceGatewayCsrf = (req) => {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return false;
   }
 
+  if (getGatewayRequestPath(req).startsWith('/payments/webhooks/')) {
+    return false;
+  }
+
+  if (hasTrustedInternalGatewaySignature(req)) {
+    return false;
+  }
+
   const authorization = String(req.headers.authorization || '').trim();
   return !authorization.startsWith('Bearer ');
+};
+
+const gatewayCsrfMiddleware = (req, res, next) => {
+  if (!shouldEnforceGatewayCsrf(req)) {
+    return next();
+  }
+
+  // Security: Browser-facing gateway mutations must present a CSRF token before the request is proxied downstream.
+  return doubleCsrfProtection(req, res, next);
 };
 
 const buildGatewayContext = (req, auth = null) => {
@@ -594,13 +620,8 @@ const bootstrap = async () => {
     });
   });
 
-  app.use('/api', (req, res, next) => {
-    if (!shouldEnforceGatewayCsrf(req)) {
-      return next();
-    }
-
-    return doubleCsrfProtection(req, res, next);
-  });
+  app.use('/api', gatewayCsrfMiddleware);
+  app.use('/payments', gatewayCsrfMiddleware);
 
   app.get('/api/platform/billing/plans', createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' }));
 

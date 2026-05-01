@@ -2,14 +2,14 @@
   const brandLabel = pageBrandLabel
     || (platformBrand && platformBrand.platformName ? platformBrand.platformName : 'Aisle');
   const resolvedTitle = metaTitle || (pageTitle ? `${pageTitle} | ${brandLabel}` : brandLabel);
-  const resolvedDescription = metaDescription || 'Launch, manage, and scale international storefronts from one enterprise commerce operating system.';
+  const resolvedDescription = metaDescription || 'Launch, manage, and grow storefronts from one serious commerce workspace.';
   const resolvedKeywords = metaKeywords || '';
   const resolvedCanonicalUrl = canonicalUrl || '';
   const resolvedSocialImage = socialImage || '';
   const resolvedMetaType = metaType || 'website';
   const resolvedMetaRobots = metaRobots || 'index, follow';
   const resolvedCsrfToken = typeof csrfToken !== 'undefined' ? csrfToken : '';
-  const resolvedBrandColor = brandColor || '#4F46E5';
+  const resolvedBrandColor = brandColor || '#0F766E';
   const resolvedStoreTheme = typeof storeTheme !== 'undefined' ? storeTheme : null;
   const resolvedBodyFont = resolvedStoreTheme && resolvedStoreTheme.fonts ? resolvedStoreTheme.fonts.bodyFamily : "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const resolvedDisplayFont = resolvedStoreTheme && resolvedStoreTheme.fonts ? resolvedStoreTheme.fonts.displayFamily : "'Space Grotesk', 'Plus Jakarta Sans', sans-serif";
@@ -19,6 +19,9 @@
 <title><%= resolvedTitle %></title>
 <meta name="description" content="<%= resolvedDescription %>">
 <meta name="robots" content="<%= resolvedMetaRobots %>">
+<link rel="icon" type="image/svg+xml" href="/brand/favicon.svg">
+<link rel="shortcut icon" href="/brand/favicon.svg">
+<meta name="theme-color" content="<%= resolvedBrandColor %>">
 <% if (resolvedKeywords) { %>
 <meta name="keywords" content="<%= resolvedKeywords %>">
 <% } %>

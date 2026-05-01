@@ -14,12 +14,12 @@ const {
   isSecureRequest
 } = require('../../../../packages/shared');
 
-const buildSessionCookieOptions = (config) => {
-  // Security: Ensure session cookies are httpOnly, secure, and sameSite protected
+const buildSessionCookieOptions = (req, config) => {
+  // Security: Tie the Secure flag to HTTPS-aware requests so session identifiers are not sent over clear text in production.
   return buildCookieOptions(config, {
     sameSite: 'lax',
     httpOnly: true,
-    secure: config.cookieSecure || config.isProduction,
+    secure: config.isProduction ? isSecureRequest(req) : Boolean(config.cookieSecure),
     maxAge: 30 * 24 * 60 * 60 * 1000
   });
 };
@@ -30,7 +30,7 @@ const setSessionCookie = (req, res, config, sessionId) => {
     return;
   }
 
-  res.cookie('aisle_session_id', sessionId, buildSessionCookieOptions(config));
+  res.cookie('aisle_session_id', sessionId, buildSessionCookieOptions(req, config));
 };
 
 const resolveIdentity = (req) => {

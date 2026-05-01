@@ -17,9 +17,9 @@
 <aside data-admin-sidebar class="fixed inset-y-0 left-0 z-50 flex w-80 -translate-x-full flex-col border-r border-white/10 bg-slate-950 px-5 py-6 text-white transition-transform duration-200 lg:translate-x-0">
   <div class="flex items-center justify-between gap-3">
     <a href="/platform-admin" class="flex min-w-0 items-center gap-3">
-      <span class="inline-flex h-12 w-12 flex-none items-center justify-center rounded-2xl bg-primary text-lg font-bold text-white shadow-glow">A</span>
+      <img src="/brand/aisle-mark.svg" alt="Aisle" class="h-12 w-12 flex-none rounded-2xl shadow-glow">
       <span class="min-w-0">
-        <span class="block truncate text-xs uppercase tracking-[0.3em] text-slate-400">Control Center</span>
+        <span class="block truncate text-xs uppercase tracking-[0.3em] text-slate-400">Operations Preview</span>
         <span class="block truncate text-base font-semibold text-white"><%= platformBrand && platformBrand.platformName ? platformBrand.platformName : 'Aisle' %></span>
       </span>
     </a>
@@ -35,11 +35,11 @@
       <span class="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold text-white"><%= controlInitials || 'AA' %></span>
       <div>
         <p class="text-sm font-semibold text-white"><%= controlUser.name || 'Platform Admin' %></p>
-        <p class="text-xs text-slate-400"><%= controlUser.role || 'Operations' %></p>
+        <p class="text-xs text-slate-400"><%= controlUser.role || 'Operations preview' %></p>
       </div>
     </div>
     <p class="mt-4 text-sm leading-6 text-slate-300">
-      Monitor tenants, resolve incidents, and respond to support from one global operations layer.
+      This shell is intentionally honest: it stays in preview mode until real platform-wide permissions, support workflows, and incident tooling are ready.
     </p>
   </div>
 

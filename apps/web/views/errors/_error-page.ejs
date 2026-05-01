@@ -6,10 +6,10 @@
   const detailItems = Array.isArray(state.detailItems) ? state.detailItems : [];
   const supportContact = store && store.support_email
     ? store.support_email
-    : (platformBrand && platformBrand.supportEmail ? platformBrand.supportEmail : 'support@aislecommerce.com');
+    : (platformBrand && platformBrand.supportEmail ? platformBrand.supportEmail : 'support@aisle.so');
   const experienceLabel = store && store.name
     ? store.name
-    : (platformBrand && platformBrand.platformName ? platformBrand.platformName : 'Aisle Commerce');
+    : (platformBrand && platformBrand.platformName ? platformBrand.platformName : 'Aisle');
 %>
 <section class="relative overflow-hidden px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
   <div class="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-hidden">
