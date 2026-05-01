@@ -97,10 +97,13 @@ const PORT = env.port;
 const ROOT_DOMAIN = env.rootDomain;
 const publicDir = path.join(__dirname, 'public');
 const logoDir = env.logoUploadDir;
+const appStylesPath = path.join(publicDir, 'styles', 'app.css');
 const themeStylesPath = path.join(publicDir, 'styles', 'theme.css');
-const themeAssetVersion = fs.existsSync(themeStylesPath)
-  ? String(fs.statSync(themeStylesPath).mtimeMs)
-  : '1';
+const themeAssetVersion = [appStylesPath, themeStylesPath]
+  .filter((filePath) => fs.existsSync(filePath))
+  .map((filePath) => fs.statSync(filePath).mtimeMs)
+  .reduce((latestVersion, fileTimestamp) => Math.max(latestVersion, fileTimestamp), 1)
+  .toString();
 const isLocalRoot = ROOT_DOMAIN === 'localhost' || ROOT_DOMAIN === '127.0.0.1';
 
 ensureLogoUploadDir().catch((error) => {
@@ -114,7 +117,7 @@ const recentlyViewedCookieName = (storeId) => `recently_viewed_${storeId}`;
 const catalogSortOptions = ['featured', 'newest', 'price-low', 'price-high', 'name'];
 const storePaymentProviders = ['paystack', 'flutterwave'];
 
-const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
+const { generateCsrfToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
   getSecret: () => env.csrfSecret,
   cookieName: 'aisle.x-csrf-token',
   cookieOptions: {
@@ -128,7 +131,7 @@ const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsr
   getSessionIdentifier: (req) => {
     return readSignedCookie(req, 'aisle_visitor_id') || req.ip || 'anonymous';
   },
-  getTokenFromRequest: (req) => {
+  getCsrfTokenFromRequest: (req) => {
     return req.body?._csrf || req.headers['x-csrf-token'] || req.headers['csrf-token'];
   }
 });
@@ -958,7 +961,8 @@ const csrfProtectedMiddleware = (req, res, next) => {
   return doubleCsrfProtection(req, res, next);
 };
 
-app.set('trust proxy', true);
+// The web app is always reached through the gateway in the supported stack.
+app.set('trust proxy', 1);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(expressLayouts);
@@ -987,9 +991,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: [
         "'self'",
-        (req, res) => `'nonce-${res.locals.cspNonce}'`,
-        'https://cdn.tailwindcss.com',
-        'https://cdn.jsdelivr.net'
+        (req, res) => `'nonce-${res.locals.cspNonce}'`
       ],
       styleSrc: [
         "'self'",
@@ -1009,6 +1011,7 @@ app.use(helmet({
 app.use(compression());
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
+// Security: Cookie parser with secret is required for CSRF protection
 app.use(cookieParser(env.cookieSecret));
 app.use(htmlMinifier);
 app.use((req, res, next) => {
@@ -1143,7 +1146,7 @@ app.use(async (req, res, next) => {
     res.locals.convertMoney = (amount) => currencyContext.convertAmount(amount);
     res.locals.storefrontUrl = buildStorefrontUrl(activeStore);
     res.locals.storeAdminUrl = buildStoreAdminUrl(activeStore);
-    res.locals.csrfToken = generateToken(req, res);
+    res.locals.csrfToken = generateCsrfToken(req, res);
     res.locals.themeAssetVersion = themeAssetVersion;
     next();
   } catch (error) {

@@ -37,13 +37,33 @@ const hasEnvValue = (value) => {
 };
 
 const toEnvPrefix = (value = '') => {
-  // Fixed: Split polynomial regex to prevent ReDoS attacks
-  return String(value || '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+/, '')
-    .replace(/_+$/, '');
+  // Fixed: Use non-backtracking approach to prevent ReDoS attacks
+  const normalized = String(value || '').trim().toUpperCase();
+  
+  // Replace non-alphanumeric characters with underscores
+  let result = '';
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized[i];
+    if ((char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9')) {
+      result += char;
+    } else {
+      result += '_';
+    }
+  }
+  
+  // Remove leading underscores
+  let start = 0;
+  while (start < result.length && result[start] === '_') {
+    start++;
+  }
+  
+  // Remove trailing underscores
+  let end = result.length;
+  while (end > start && result[end - 1] === '_') {
+    end--;
+  }
+  
+  return result.slice(start, end);
 };
 
 const getScopedEnvValue = (prefix, name) => {
@@ -70,19 +90,6 @@ const getEnv = (name, fallback, { requiredInProduction = false, environment = 'd
   }
 
   return fallback;
-};
-
-const getSecretEnv = (name, { environment }) => {
-  const value = process.env[name];
-  if (hasEnvValue(value)) {
-    return value;
-  }
-
-  if (environment === 'production') {
-    throw new Error(`${name} must be set in production.`);
-  }
-
-  return crypto.randomBytes(32).toString('hex');
 };
 
 const getScopedEnv = (prefix, name, fallback, { requiredInProduction = false, environment = 'development' } = {}) => {

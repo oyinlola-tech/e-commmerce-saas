@@ -1,5 +1,7 @@
 <%
-  const fieldErrors = errors && field ? errors[field] : null;
+  const resolvedErrors = typeof errors !== 'undefined' && errors ? errors : null;
+  const resolvedField = typeof field !== 'undefined' ? field : '';
+  const fieldErrors = resolvedErrors && resolvedField ? resolvedErrors[resolvedField] : null;
   const fieldMessage = Array.isArray(fieldErrors) ? fieldErrors[0] : fieldErrors;
 %>
 <% if (fieldMessage) { %>

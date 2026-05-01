@@ -15,14 +15,17 @@ const {
 } = require('../../../../packages/shared');
 
 const buildSessionCookieOptions = (config) => {
+  // Security: Ensure session cookies are httpOnly, secure, and sameSite protected
   return buildCookieOptions(config, {
     sameSite: 'lax',
     httpOnly: true,
+    secure: config.cookieSecure || config.isProduction,
     maxAge: 30 * 24 * 60 * 60 * 1000
   });
 };
 
 const setSessionCookie = (req, res, config, sessionId) => {
+  // Security: Only set secure cookies over HTTPS in production
   if (config.isProduction && !isSecureRequest(req)) {
     return;
   }

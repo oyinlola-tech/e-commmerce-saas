@@ -162,7 +162,9 @@
                     <%= defaultTemplateChoice && template.key === defaultTemplateChoice.key ? 'checked' : '' %>>
                   <span class="theme-preview-tile block rounded-[1.75rem] border border-slate-200 bg-white p-4 transition peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary/20 group-hover:border-primary">
                     <span class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      <span class="h-2.5 w-2.5 rounded-full" data-swatch-color="<%= template.defaultColor %>"></span>
+                      <svg class="h-2.5 w-2.5" viewBox="0 0 10 10" aria-hidden="true">
+                        <circle cx="5" cy="5" r="5" fill="<%= template.defaultColor %>"></circle>
+                      </svg>
                       <%= template.typeLabel %>
                     </span>
                     <strong class="mt-3 block section-title text-xl font-semibold text-slate-950"><%= template.label %></strong>

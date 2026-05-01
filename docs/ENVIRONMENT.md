@@ -171,4 +171,6 @@ The SSR app reads `WEB_*` first, then `WEB_APP_*`, then falls back to unscoped s
 3. Gateway and implemented services
 4. SSR web app
 
+For the browser-facing layer only, `npm start` and `npm run dev` now start the SSR web app plus gateway together.
+
 If you only need interface previews, the web app can be run by itself because it uses local state helpers instead of the service mesh.

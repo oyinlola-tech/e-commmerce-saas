@@ -95,18 +95,34 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 
 | Command | Behavior |
 | --- | --- |
-| `npm start` | Starts the gateway |
+| `npm start` | Starts the SSR web app and gateway together |
+| `npm run dev` | Starts the SSR web app and gateway together with `nodemon` restarts |
+| `npm run start:frontend` | Starts only the SSR web app through the shared launcher |
+| `npm run dev:frontend` | Starts only the SSR web app through the shared launcher with `nodemon` restarts |
+| `npm run start:backend` | Starts only the gateway through the shared launcher |
+| `npm run dev:backend` | Starts only the gateway through the shared launcher with `nodemon` restarts |
 | `npm run start:web` | Starts the SSR web app |
+| `npm run dev:web` | Starts the SSR web app with `nodemon` |
 | `npm run start:gateway` | Starts the gateway directly |
+| `npm run dev:gateway` | Starts the gateway directly with `nodemon` |
 | `npm run start:user-service` | Starts `user-service` |
+| `npm run dev:user-service` | Starts `user-service` with `nodemon` |
 | `npm run start:store-service` | Starts `store-service` |
+| `npm run dev:store-service` | Starts `store-service` with `nodemon` |
 | `npm run start:compliance-service` | Starts `compliance-service` |
+| `npm run dev:compliance-service` | Starts `compliance-service` with `nodemon` |
 | `npm run start:customer-service` | Starts `customer-service` |
+| `npm run dev:customer-service` | Starts `customer-service` with `nodemon` |
 | `npm run start:product-service` | Starts `product-service` |
+| `npm run dev:product-service` | Starts `product-service` with `nodemon` |
 | `npm run start:cart-service` | Starts `cart-service` |
+| `npm run dev:cart-service` | Starts `cart-service` with `nodemon` |
 | `npm run start:order-service` | Starts `order-service` |
+| `npm run dev:order-service` | Starts `order-service` with `nodemon` |
 | `npm run start:payment-service` | Starts `payment-service` |
+| `npm run dev:payment-service` | Starts `payment-service` with `nodemon` |
 | `npm run start:billing-service` | Starts `billing-service` |
+| `npm run dev:billing-service` | Starts `billing-service` with `nodemon` |
 | `npm run start:support-service` | Reserved for future `support-service` implementation |
 | `npm run start:chat-service` | Reserved for future `chat-service` implementation |
 | `npm run start:notification-service` | Reserved for future `notification-service` implementation |

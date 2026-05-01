@@ -64,14 +64,48 @@ const createMemoryAdapter = (prefix) => {
   };
 };
 
-const createRedisAdapter = async ({ prefix, redisUrl }) => {
+const createRedisAdapter = async ({ prefix, redisUrl, logger }) => {
   const redis = new Redis(redisUrl, {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false
   });
 
-  await redis.connect();
+  let hasConnected = false;
+  let latestErrorMessage = '';
+  let lastLoggedErrorMessage = '';
+  const handleRedisError = (error) => {
+    const message = String(error?.message || error || 'Redis client error');
+    latestErrorMessage = message;
+
+    if (!hasConnected || message === lastLoggedErrorMessage) {
+      return;
+    }
+
+    lastLoggedErrorMessage = message;
+    if (logger) {
+      logger.warn('Redis client error', {
+        prefix,
+        error: message
+      });
+    }
+  };
+
+  redis.on('error', handleRedisError);
+  redis.once('ready', () => {
+    hasConnected = true;
+    lastLoggedErrorMessage = '';
+  });
+
+  try {
+    await redis.connect();
+  } catch (error) {
+    const failureMessage = latestErrorMessage || String(error?.message || 'Redis connection failed');
+    redis.removeListener('error', handleRedisError);
+    redis.disconnect();
+    throw new Error(failureMessage);
+  }
+
   return {
     type: 'redis',
     status: 'ready',
@@ -109,7 +143,10 @@ const createRedisAdapter = async ({ prefix, redisUrl }) => {
       return response === 'PONG' ? 'connected' : response;
     },
     async close() {
-      await redis.quit();
+      redis.removeListener('error', handleRedisError);
+      if (redis.status !== 'end') {
+        redis.disconnect();
+      }
     }
   };
 };
@@ -125,7 +162,8 @@ const createCache = async (config, logger) => {
 
     adapter = await createRedisAdapter({
       prefix,
-      redisUrl: config.redisUrl
+      redisUrl: config.redisUrl,
+      logger
     });
     logger.info('Redis cache connected', { prefix });
   } catch (error) {

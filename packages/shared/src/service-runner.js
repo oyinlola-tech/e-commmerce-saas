@@ -91,7 +91,11 @@ const startService = async ({
   });
   const bus = await createEventBus(config, logger);
   const cache = await createCache(config, logger);
-  const app = createBaseApp({ serviceName, logger });
+  const app = createBaseApp({
+    serviceName,
+    logger,
+    trustProxy: 1
+  });
   const server = http.createServer(app);
   const context = {
     app,
@@ -182,20 +186,54 @@ const startService = async ({
     });
   });
 
-  const shutdown = async () => {
-    logger.info('Shutting down service');
-    server.close(async () => {
-      await Promise.allSettled([
-        bus.close(),
-        cache.close(),
-        db.close()
-      ]);
-      process.exit(0);
-    });
+  let shutdownPromise = null;
+  const shutdown = (signal = 'unknown') => {
+    if (shutdownPromise) {
+      return shutdownPromise;
+    }
+
+    shutdownPromise = (async () => {
+      let exitCode = 0;
+
+      try {
+        logger.info('Shutting down service', {
+          signal,
+          serviceName
+        });
+        await new Promise((resolve) => {
+          if (!server.listening) {
+            resolve();
+            return;
+          }
+
+          server.close(() => resolve());
+        });
+        await Promise.allSettled([
+          bus.close(),
+          cache.close(),
+          db.close()
+        ]);
+      } catch (error) {
+        exitCode = 1;
+        logger.error('Service shutdown failed', {
+          signal,
+          serviceName,
+          error
+        });
+      } finally {
+        process.exit(exitCode);
+      }
+    })();
+
+    return shutdownPromise;
   };
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.once('SIGINT', () => {
+    void shutdown('SIGINT');
+  });
+  process.once('SIGTERM', () => {
+    void shutdown('SIGTERM');
+  });
 
   return context;
 };

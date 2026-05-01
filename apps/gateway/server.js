@@ -90,7 +90,7 @@ const resolveRouteLabel = (req) => {
   return req.path || '/';
 };
 
-app.set('trust proxy', true);
+app.set('trust proxy', config.isProduction ? 1 : false);
 app.use(helmet({
   crossOriginResourcePolicy: false,
   referrerPolicy: {
@@ -208,7 +208,7 @@ const extractToken = (req) => {
   return req.cookies?.platform_token || req.cookies?.customer_token || null;
 };
 
-const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
+const { generateCsrfToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
   getSecret: () => config.internalSharedSecret,
   cookieName: 'aisle.gateway-csrf-token',
   cookieOptions: {
@@ -220,7 +220,7 @@ const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsr
   size: 64,
   ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
   getSessionIdentifier: (req) => extractToken(req) || req.ip || 'anonymous',
-  getTokenFromRequest: (req) => req.body?._csrf || req.headers['x-csrf-token'] || req.headers['csrf-token']
+  getCsrfTokenFromRequest: (req) => req.body?._csrf || req.headers['x-csrf-token'] || req.headers['csrf-token']
 });
 
 const resolveAuthContext = (req) => {
@@ -584,13 +584,13 @@ const bootstrap = async () => {
   app.use(resolveStoreContext);
   app.use(gatewayCors);
   app.use(attachGatewayProxyContext);
-  // Security: Add cookie secret for signed cookies
-  app.use('/api', cookieParser(config.internalSharedSecret));
+  // Security: Add cookie parser with secret for CSRF protection
+  app.use(cookieParser(config.internalSharedSecret));
   app.use('/api', attachGatewayAuthContext);
 
   app.get('/api/csrf-token', (req, res) => {
     return res.json({
-      csrfToken: generateToken(req, res)
+      csrfToken: generateCsrfToken(req, res)
     });
   });
 
@@ -891,16 +891,43 @@ const bootstrap = async () => {
     });
   });
 
-  const shutdown = async () => {
-    logger.info('Shutting down gateway');
-    server.close(async () => {
-      await cache.close();
-      process.exit(0);
-    });
+  let shutdownPromise = null;
+  const shutdown = (signal = 'unknown') => {
+    if (shutdownPromise) {
+      return shutdownPromise;
+    }
+
+    shutdownPromise = (async () => {
+      let exitCode = 0;
+
+      try {
+        logger.info('Shutting down gateway', { signal });
+        await new Promise((resolve) => {
+          if (!server.listening) {
+            resolve();
+            return;
+          }
+
+          server.close(() => resolve());
+        });
+        await cache.close();
+      } catch (error) {
+        exitCode = 1;
+        logger.error('Gateway shutdown failed', { signal, error });
+      } finally {
+        process.exit(exitCode);
+      }
+    })();
+
+    return shutdownPromise;
   };
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.once('SIGINT', () => {
+    void shutdown('SIGINT');
+  });
+  process.once('SIGTERM', () => {
+    void shutdown('SIGTERM');
+  });
 };
 
 bootstrap().catch((error) => {

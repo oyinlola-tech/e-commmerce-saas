@@ -7,7 +7,7 @@ const { createHttpError } = require('./errors');
 
 const createBaseApp = ({
   logger,
-  trustProxy = true,
+  trustProxy = false,
   enableCompression = false,
   bodyLimit = '2mb',
   helmetOptions = {},

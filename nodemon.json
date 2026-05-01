@@ -1,0 +1,19 @@
+{
+  "watch": [
+    "apps/web",
+    "apps/gateway",
+    "packages/shared",
+    "scripts"
+  ],
+  "ext": "js,json,ejs",
+  "ignore": [
+    "**/node_modules/**",
+    "**/uploads/**",
+    "docs/**",
+    "tests/**",
+    "tmp-*.out",
+    "tmp-*.err"
+  ],
+  "signal": "SIGTERM",
+  "delay": "300"
+}

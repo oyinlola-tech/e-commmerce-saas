@@ -65,7 +65,12 @@ const buildRequireInternal = (config) => {
 const buildProductCacheKey = (storeId, suffix) => `product:${storeId}:${suffix}`;
 
 const invalidateProductCache = async (cache, storeId) => {
-  await cache.delByPattern(`product:${storeId}:*`);
+  // Security: Sanitize storeId to prevent path traversal in cache keys
+  const sanitizedStoreId = String(storeId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!sanitizedStoreId) {
+    return;
+  }
+  await cache.delByPattern(`product:${sanitizedStoreId}:*`);
 };
 
 const normalizeProductQuery = (req) => {
