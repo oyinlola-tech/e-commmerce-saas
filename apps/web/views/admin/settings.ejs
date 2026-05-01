@@ -23,7 +23,8 @@
     <p class="mt-3 max-w-2xl text-base leading-7 text-slate-600">Keep identity, template layout, customer-facing promises, and support details aligned across storefront and operations.</p>
   </div>
 
-  <form action="/admin/settings" method="post" class="grid gap-8 xl:grid-cols-[1fr_0.9fr]">
+  <form action="/admin/settings" method="post" enctype="multipart/form-data" class="grid gap-8 xl:grid-cols-[1fr_0.9fr]">
+    <%- include('../partials/csrf-field') %>
     <section class="surface-card space-y-6 rounded-[2rem] p-6">
       <div>
         <label for="storeName" class="mb-1 block text-sm font-medium text-slate-700">Store name</label>
@@ -93,9 +94,17 @@
           <% }) %>
         </div>
       </div>
-      <div>
-        <label for="logo" class="mb-1 block text-sm font-medium text-slate-700">Logo URL</label>
-        <input id="logo" name="logo" type="url" value="<%= store && store.logo ? store.logo : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="https://example.com/logo.png">
+      <div class="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label for="logo" class="mb-1 block text-sm font-medium text-slate-700">Logo upload</label>
+          <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+          <p class="mt-2 text-sm text-slate-500">PNG, JPEG, or WebP up to 2MB.</p>
+          <%- include('../partials/form-error', { field: 'logo' }) %>
+        </div>
+        <div>
+          <label for="logoPreview" class="mb-1 block text-sm font-medium text-slate-700">Current logo URL</label>
+          <input id="logoPreview" name="logoPreview" type="text" value="<%= store && store.logo ? store.logo : '' %>" class="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-500 shadow-sm" readonly>
+        </div>
       </div>
       <div>
         <label for="themeColor" class="mb-1 block text-sm font-medium text-slate-700">Theme colour</label>

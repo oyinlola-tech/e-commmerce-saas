@@ -7,6 +7,7 @@ const {
   asyncHandler,
   createHttpError,
   validate,
+  allowBodyFields,
   commonRules,
   storeIdRule,
   paginationRules,
@@ -263,6 +264,7 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
   }));
 
   app.post('/products', requireInternal, requirePlatformOperator, validate([
+    allowBodyFields(['store_id', 'title', 'slug', 'category', 'description', 'price', 'compare_at_price', 'sku', 'inventory_count', 'images', 'status']),
     commonRules.name('title', 180),
     commonRules.slug('slug'),
     commonRules.optionalPlainText('category', 120),
@@ -313,6 +315,7 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
   }));
 
   app.put('/products/:id', requireInternal, requirePlatformOperator, validate([
+    allowBodyFields(['store_id', 'title', 'slug', 'category', 'description', 'price', 'compare_at_price', 'sku', 'inventory_count', 'images', 'status']),
     commonRules.paramId('id'),
     commonRules.optionalName('title', 180),
     commonRules.slug('slug'),
@@ -393,6 +396,7 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
   }));
 
   app.post('/inventory/reservations', requireInternal, validate([
+    allowBodyFields(['store_id', 'order_id', 'items']),
     body('items').isArray({ min: 1, max: 100 }).withMessage('At least one reservation item is required.'),
     body('items.*.product_id').isInt({ min: 1 }).toInt(),
     body('items.*.quantity').isInt({ min: 1, max: 100000 }).toInt(),

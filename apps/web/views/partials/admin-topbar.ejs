@@ -17,6 +17,7 @@
   <div class="flex flex-wrap items-center gap-3">
     <% if (availableCurrencies.length > 1) { %>
       <form action="/preferences/currency" method="post" class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600 shadow-sm">
+        <%- include('./csrf-field') %>
         <input type="hidden" name="returnTo" value="<%= currentUrl || currentPath || '/admin' %>">
         <input type="hidden" name="scope" value="store">
         <label for="admin-currency" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Currency</label>

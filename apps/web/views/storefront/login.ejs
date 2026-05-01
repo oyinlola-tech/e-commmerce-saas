@@ -7,6 +7,7 @@
     </div>
 
     <form action="/login" method="post" class="mt-8 space-y-5">
+      <%- include('../partials/csrf-field') %>
       <div>
         <label for="email" class="mb-1 block text-sm font-medium text-slate-700">Email</label>
         <input id="email" name="email" type="email" value="<%= formData && formData.email ? formData.email : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="you@example.com">

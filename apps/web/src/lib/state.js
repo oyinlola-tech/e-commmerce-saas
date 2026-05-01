@@ -38,12 +38,31 @@ const persistState = () => {
 const themePalette = ['#0F766E', '#1D4ED8', '#B45309', '#BE123C', '#0B7285', '#4C1D95'];
 
 const slugify = (value = '') => {
-  return String(value)
+  const normalized = String(value || '')
     .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .trim();
+
+  let output = '';
+  let previousWasSeparator = false;
+
+  for (const character of normalized) {
+    const isAlphaNumeric = (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9');
+    if (isAlphaNumeric) {
+      output += character;
+      previousWasSeparator = false;
+      continue;
+    }
+
+    const isSeparator = character === ' ' || character === '_' || character === '-';
+    if (isSeparator && output && !previousWasSeparator) {
+      output += '-';
+      previousWasSeparator = true;
+    }
+  }
+
+  return output.endsWith('-')
+    ? output.slice(0, -1)
+    : output;
 };
 
 const toTitleCase = (value = '') => {
@@ -356,7 +375,7 @@ const createStore = (payload = {}) => {
     name: cleanName,
     subdomain: normalizedSubdomain,
     custom_domain: '',
-    logo: '',
+    logo: String(payload.logo || payload.logo_url || '').trim(),
     store_type: configuration.store_type,
     template_key: configuration.template_key,
     font_preset: configuration.font_preset,
@@ -399,7 +418,7 @@ const updateStoreSettings = (storeId, payload = {}) => {
     : configuration.theme_color;
 
   store.name = String(payload.name || store.name).trim() || store.name;
-  store.logo = String(payload.logo || '').trim();
+  store.logo = String(payload.logo || payload.logo_url || store.logo || '').trim();
   store.store_type = configuration.store_type;
   store.template_key = configuration.template_key;
   store.font_preset = configuration.font_preset;

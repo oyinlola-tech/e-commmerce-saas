@@ -7,6 +7,7 @@ const {
   asyncHandler,
   createHttpError,
   validate,
+  allowBodyFields,
   commonRules,
   storeIdRule,
   buildCookieOptions
@@ -155,6 +156,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/cart/items', validate([
+    allowBodyFields(['store_id', 'customer_id', 'session_id', 'product_id', 'quantity']),
     ...storeIdRule(),
     commonRules.int('product_id', { min: 1 }),
     commonRules.optionalInt('quantity', { min: 1, max: 999 })
@@ -212,6 +214,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.patch('/cart/items/:productId', validate([
+    allowBodyFields(['store_id', 'customer_id', 'session_id', 'quantity']),
     commonRules.paramId('productId'),
     commonRules.int('quantity', { min: 0, max: 999 }),
     ...storeIdRule()
@@ -267,7 +270,10 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     return res.json({ cart: serializeCart(hydrated, identity) });
   }));
 
-  app.post('/cart/clear', asyncHandler(async (req, res) => {
+  app.post('/cart/clear', validate([
+    allowBodyFields(['store_id', 'customer_id', 'session_id']),
+    ...storeIdRule()
+  ]), asyncHandler(async (req, res) => {
     const identity = resolveIdentity(req);
     if (!identity.storeId) {
       throw createHttpError(400, 'store_id is required.', null, { expose: true });

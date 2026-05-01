@@ -159,7 +159,8 @@
       </button>
     </div>
 
-    <form action="/stores" method="post" class="mt-8 grid gap-8 xl:grid-cols-[0.96fr_1.04fr]" data-store-type-autofill="true">
+    <form action="/stores" method="post" enctype="multipart/form-data" class="mt-8 grid gap-8 xl:grid-cols-[0.96fr_1.04fr]" data-store-type-autofill="true">
+      <%- include('../partials/csrf-field') %>
       <section class="space-y-5">
         <div>
           <label for="createStoreName" class="mb-1 block text-sm font-medium text-slate-700">Store name</label>
@@ -171,6 +172,13 @@
             <input id="createStoreSubdomain" name="subdomain" type="text" class="min-w-0 flex-1 border-0 px-4 py-3 text-slate-900 focus:outline-none focus:ring-0" placeholder="aisle-signature">
             <span class="inline-flex items-center border-l border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-500">.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></span>
           </div>
+        </div>
+
+        <div>
+          <label for="createStoreLogo" class="mb-1 block text-sm font-medium text-slate-700">Store logo</label>
+          <input id="createStoreLogo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+          <p class="mt-2 text-sm text-slate-500">PNG, JPEG, or WebP up to 2MB.</p>
+          <%- include('../partials/form-error', { field: 'logo' }) %>
         </div>
 
         <div>

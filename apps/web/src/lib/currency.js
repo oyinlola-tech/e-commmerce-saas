@@ -132,7 +132,7 @@ const getCurrencyLabel = (currencyCode, locale = 'en-US') => {
     return label && label !== currencyCode
       ? `${label} (${currencyCode})`
       : currencyCode;
-  } catch (error) {
+  } catch {
     return currencyCode;
   }
 };
@@ -218,7 +218,7 @@ const getGeoData = async (req) => {
     }
 
     return resolved;
-  } catch (error) {
+  } catch {
     return null;
   }
 };
@@ -235,7 +235,7 @@ const buildCurrencyContext = async (req, store = null) => {
   if (candidateCurrencies.some((code) => code !== baseCurrency)) {
     try {
       ratePayload = await getRatesForBase(baseCurrency);
-    } catch (error) {
+    } catch {
       ratePayload = null;
     }
   }
@@ -274,7 +274,7 @@ const buildCurrencyContext = async (req, store = null) => {
         exchangeRate = nextRate;
         rateDate = activeRates.date;
       }
-    } catch (error) {
+    } catch {
       selectedCurrency = baseCurrency;
       source = 'store-default';
     }

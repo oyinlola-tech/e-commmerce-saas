@@ -8,6 +8,7 @@ const {
   asyncHandler,
   createHttpError,
   validate,
+  allowBodyFields,
   commonRules,
   storeIdRule,
   sanitizeJsonObject
@@ -54,6 +55,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   const requireInternal = buildRequireInternal(config);
 
   app.post('/customers/register', validate([
+    allowBodyFields(['store_id', 'name', 'email', 'password', 'phone', 'addresses', 'metadata']),
     ...storeIdRule(),
     commonRules.name('name', 120),
     commonRules.email(),
@@ -108,6 +110,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/customers/login', validate([
+    allowBodyFields(['store_id', 'email', 'password']),
     ...storeIdRule(),
     commonRules.email(),
     body('password').isString().notEmpty().withMessage('Password is required.')
@@ -158,6 +161,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.put('/customers/me', requireInternal, validate([
+    allowBodyFields(['name', 'phone', 'addresses', 'metadata']),
     commonRules.optionalName('name', 120),
     commonRules.phone(),
     body('addresses').optional().isArray({ max: 10 }),

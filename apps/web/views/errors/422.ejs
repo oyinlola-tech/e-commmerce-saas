@@ -1,0 +1,8 @@
+<%
+  const state = Object.assign({
+    statusCode: 422,
+    title: 'Request could not be processed',
+    message: 'We understood the request, but some submitted values still need attention.'
+  }, errorState || {});
+%>
+<%- include('./_error-page', { errorState: state }) %>

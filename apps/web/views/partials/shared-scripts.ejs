@@ -1,4 +1,4 @@
-<script>
+<script nonce="<%= cspNonce %>">
   (() => {
     const focusableSelector = [
       'a[href]',
@@ -166,6 +166,16 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
+      try {
+        const key = 'aisle.currencyContext';
+        const payload = <%- JSON.stringify((currencyContext && currencyContext.client) || null).replace(/</g, '\\u003c') %>;
+        if (payload) {
+          sessionStorage.setItem(key, JSON.stringify(payload));
+        }
+      } catch (error) {
+        // Ignore storage access failures in private browsing modes.
+      }
+
       const getControlSource = (control) => {
         if (!control) {
           return null;

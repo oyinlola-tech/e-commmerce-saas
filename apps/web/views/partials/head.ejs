@@ -11,10 +11,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><%= resolvedTitle %></title>
 <meta name="description" content="<%= resolvedDescription %>">
+<meta name="csrf-token" content="<%= csrfToken %>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&family=DM+Sans:wght@400;500;700&family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=Fraunces:wght@500;600;700&family=Outfit:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Syne:wght@500;700&display=swap" rel="stylesheet">
-<script>
+<script nonce="<%= cspNonce %>">
   tailwind.config = {
     theme: {
       extend: {
@@ -35,10 +36,10 @@
     }
   };
 </script>
-<script src="https://cdn.tailwindcss.com"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-<link rel="stylesheet" href="/styles/theme.css">
-<style>
+<script nonce="<%= cspNonce %>" src="https://cdn.tailwindcss.com"></script>
+<script nonce="<%= cspNonce %>" defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<link rel="stylesheet" href="/styles/theme.css?v=<%= themeAssetVersion %>">
+<style nonce="<%= cspNonce %>">
   :root {
     --color-primary: <%= resolvedBrandColor %>;
     --color-primary-dark: color-mix(in srgb, var(--color-primary) 84%, black);

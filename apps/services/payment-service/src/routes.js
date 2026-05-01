@@ -9,6 +9,7 @@ const {
   asyncHandler,
   createHttpError,
   validate,
+  allowBodyFields,
   commonRules,
   sanitizeJsonObject,
   sanitizeEmail,
@@ -114,6 +115,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   const requireInternal = buildRequireInternal(config);
 
   app.post('/payments/create-checkout-session', requireInternal, validate([
+    allowBodyFields(['provider', 'amount', 'currency', 'payment_scope', 'store_id', 'owner_id', 'customer_id', 'order_id', 'entity_type', 'entity_id', 'email', 'metadata']),
     body('provider').optional().isIn(PAYMENT_PROVIDERS),
     body('amount').isFloat({ min: 0.5 }).toFloat(),
     body('currency').optional().isLength({ min: 3, max: 3 }).customSanitizer((value) => String(value).trim().toUpperCase()),
@@ -213,6 +215,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/payments/config', requireInternal, validate([
+    allowBodyFields(['provider', 'public_key', 'secret_key', 'status']),
     body('provider').isIn(PAYMENT_PROVIDERS),
     commonRules.optionalPlainText('public_key', 255),
     commonRules.optionalPlainText('secret_key', 255),

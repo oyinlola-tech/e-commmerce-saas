@@ -1,5 +1,6 @@
 const { body, header, param, query, validationResult } = require('express-validator');
 const { createHttpError } = require('./errors');
+const { handleValidationErrors } = require('./express');
 const {
   sanitizeEmail,
   sanitizePhone,
@@ -26,15 +27,49 @@ const collectValidationErrors = (req) => {
 const validate = (chains) => {
   return [
     ...chains,
-    (req, res, next) => {
-      const errors = collectValidationErrors(req);
-      if (!errors) {
-        return next();
-      }
-
-      return next(createHttpError(422, 'Validation failed.', { fields: errors }, { expose: true }));
-    }
+    handleValidationErrors
   ];
+};
+
+const allowBodyFields = (allowedFields = []) => {
+  const allowed = new Set(allowedFields);
+
+  return (req, res, next) => {
+    const bodyValue = req.body;
+    if (!bodyValue || typeof bodyValue !== 'object' || Array.isArray(bodyValue)) {
+      return next();
+    }
+
+    const unexpected = Object.keys(bodyValue).filter((key) => !allowed.has(key));
+    if (!unexpected.length) {
+      return next();
+    }
+
+    return next(createHttpError(422, 'Validation failed.', {
+      fields: unexpected.map((field) => ({
+        field,
+        message: 'This field is not allowed.'
+      }))
+    }, { expose: true }));
+  };
+};
+
+const allowQueryFields = (allowedFields = []) => {
+  const allowed = new Set(allowedFields);
+
+  return (req, res, next) => {
+    const unexpected = Object.keys(req.query || {}).filter((key) => !allowed.has(key));
+    if (!unexpected.length) {
+      return next();
+    }
+
+    return next(createHttpError(422, 'Validation failed.', {
+      fields: unexpected.map((field) => ({
+        field,
+        message: 'This query parameter is not allowed.'
+      }))
+    }, { expose: true }));
+  };
 };
 
 const storeIdRule = (locations = ['body', 'query', 'headers']) => {
@@ -128,6 +163,15 @@ const commonRules = {
   jsonObject: (field) => body(field)
     .optional()
     .customSanitizer((value) => sanitizeJsonObject(value)),
+  boolean: (field) => body(field)
+    .isBoolean()
+    .withMessage(`${field} must be a boolean value.`)
+    .toBoolean(),
+  optionalBoolean: (field) => body(field)
+    .optional()
+    .isBoolean()
+    .withMessage(`${field} must be a boolean value.`)
+    .toBoolean(),
   paramId: (field = 'id') => param(field).isInt({ min: 1 }).withMessage(`${field} must be a numeric identifier.`).toInt(),
   querySearch: (field = 'search') => query(field)
     .optional()
@@ -141,6 +185,8 @@ const commonRules = {
 module.exports = {
   validate,
   collectValidationErrors,
+  allowBodyFields,
+  allowQueryFields,
   storeIdRule,
   paginationRules,
   commonRules

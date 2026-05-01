@@ -7,6 +7,7 @@ const {
   asyncHandler,
   createHttpError,
   validate,
+  allowBodyFields,
   commonRules,
   paginationRules,
   sanitizeJsonObject,
@@ -60,6 +61,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   const requireInternal = buildRequireInternal(config);
 
   app.post('/checkout', requireInternal, validate([
+    allowBodyFields(['shipping_address', 'customer', 'currency', 'email']),
     body('shipping_address').optional().isObject(),
     body('customer').optional().isObject(),
     body('currency').optional().isLength({ min: 3, max: 3 }),
@@ -226,6 +228,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.patch('/orders/:id/status', requireInternal, validate([
+    allowBodyFields(['status']),
     commonRules.paramId('id'),
     commonRules.plainText('status', 40)
   ]), asyncHandler(async (req, res) => {

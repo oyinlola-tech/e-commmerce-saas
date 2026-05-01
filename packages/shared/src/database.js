@@ -2,12 +2,18 @@ const mysql = require('mysql2/promise');
 
 const parseDatabaseUrl = (databaseUrl) => {
   const url = new URL(databaseUrl);
+  const charset = url.searchParams.get('charset') || undefined;
+  const timezone = url.searchParams.get('timezone') || undefined;
+  const connectTimeout = Number(url.searchParams.get('connectTimeout') || 0) || undefined;
   return {
     host: url.hostname,
     port: Number(url.port || 3306),
     user: decodeURIComponent(url.username || 'root'),
     password: decodeURIComponent(url.password || ''),
-    database: url.pathname.replace(/^\//, '')
+    database: url.pathname.replace(/^\//, ''),
+    charset,
+    timezone,
+    connectTimeout
   };
 };
 
@@ -18,11 +24,14 @@ const createPoolOptions = (databaseConfig, poolConfig = {}) => {
     user: databaseConfig.user,
     password: databaseConfig.password,
     database: databaseConfig.database,
+    charset: databaseConfig.charset,
+    timezone: databaseConfig.timezone,
     waitForConnections: true,
     namedPlaceholders: true,
     decimalNumbers: true,
     enableKeepAlive: true,
     keepAliveInitialDelay: 0,
+    connectTimeout: Number(poolConfig.acquireTimeoutMs || databaseConfig.connectTimeout || 10 * 1000),
     connectionLimit: Number(poolConfig.max || 12),
     maxIdle: Number(poolConfig.min || 2),
     idleTimeout: Number(poolConfig.idleTimeoutMs || 60 * 1000),
@@ -91,7 +100,13 @@ const bootstrapDatabase = async ({
 
   const pool = await withRetry(async () => {
     const connectionPool = mysql.createPool(createPoolOptions(parsed, poolConfig));
-    await connectionPool.query('SELECT 1 AS ok');
+    const connection = await connectionPool.getConnection();
+    try {
+      await connection.ping();
+      await connection.query('SELECT 1 AS ok');
+    } finally {
+      connection.release();
+    }
     return connectionPool;
   }, {
     retries: retryConfig.retries,
@@ -105,7 +120,13 @@ const bootstrapDatabase = async ({
     const readParsed = parseDatabaseUrl(readDatabaseUrl);
     const readPool = await withRetry(async () => {
       const connectionPool = mysql.createPool(createPoolOptions(readParsed, poolConfig));
-      await connectionPool.query('SELECT 1 AS ok');
+      const connection = await connectionPool.getConnection();
+      try {
+        await connection.ping();
+        await connection.query('SELECT 1 AS ok');
+      } finally {
+        connection.release();
+      }
       return connectionPool;
     }, {
       retries: retryConfig.retries,
@@ -154,10 +175,22 @@ const bootstrapDatabase = async ({
       }
     },
     healthCheck: async () => {
-      await pool.query('SELECT 1 AS ok');
-      if (readPools.length) {
-        await readPools[0].query('SELECT 1 AS ok');
+      const connection = await pool.getConnection();
+      try {
+        await connection.ping();
+      } finally {
+        connection.release();
       }
+
+      if (readPools.length) {
+        const replicaConnection = await readPools[0].getConnection();
+        try {
+          await replicaConnection.ping();
+        } finally {
+          replicaConnection.release();
+        }
+      }
+
       return {
         write: 'ok',
         read: readPools.length ? 'ok' : 'not-configured'

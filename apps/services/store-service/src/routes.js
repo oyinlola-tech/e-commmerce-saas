@@ -1,4 +1,10 @@
-const { param, query, body } = require('express-validator');
+const crypto = require('crypto');
+const fs = require('fs/promises');
+const path = require('path');
+const express = require('express');
+const multer = require('multer');
+const { fileTypeFromBuffer } = require('file-type');
+const { query, body } = require('express-validator');
 const {
   requireInternalRequest,
   normalizeThemeContract,
@@ -9,12 +15,24 @@ const {
   asyncHandler,
   createHttpError,
   validate,
+  allowBodyFields,
+  allowQueryFields,
   commonRules,
   sanitizePlainText,
   sanitizeSlug
 } = require('../../../../packages/shared');
 
 const STORE_CACHE_TTL_SECONDS = 5 * 60;
+const LOGO_UPLOAD_LIMIT_BYTES = 2 * 1024 * 1024;
+const ALLOWED_LOGO_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: LOGO_UPLOAD_LIMIT_BYTES,
+    files: 1
+  }
+});
 
 const sanitizeStore = (store) => {
   if (!store) {
@@ -82,6 +100,44 @@ const normalizeSubdomain = (value = '') => {
   return sanitizeSlug(value).slice(0, 120);
 };
 
+const getLogoUploadDirectory = (config) => {
+  return process.env.STORE_LOGO_UPLOAD_DIR
+    ? path.resolve(process.env.STORE_LOGO_UPLOAD_DIR)
+    : path.join(config.workspaceRoot, 'uploads', 'logos');
+};
+
+const ensureLogoDirectory = async (config) => {
+  await fs.mkdir(getLogoUploadDirectory(config), { recursive: true });
+};
+
+const buildLogoUrl = (filename) => `/logos/${filename}`;
+
+const sanitizeLogoFilename = (storeId, mimeType) => {
+  const extensionMap = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp'
+  };
+
+  const extension = extensionMap[mimeType] || 'bin';
+  return `store-${storeId}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${extension}`;
+};
+
+const uploadLogoMiddleware = (req, res, next) => {
+  return logoUpload.single('logo')(req, res, (error) => {
+    if (!error) {
+      return next();
+    }
+
+    return next(createHttpError(422, error.message, {
+      fields: [{
+        field: 'logo',
+        message: error.message
+      }]
+    }, { expose: true }));
+  });
+};
+
 const updateStoreRecord = async ({ db, cache, bus, storeId, existingStore, payload }) => {
   const theme = normalizeThemeContract({
     store_type: payload.store_type || existingStore.store_type,
@@ -123,10 +179,20 @@ const updateStoreRecord = async ({ db, cache, bus, storeId, existingStore, paylo
   return store;
 };
 
-const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
+const registerRoutes = async ({ app, db, bus, config, cache }) => {
   const requireInternal = buildRequireInternal(config);
+  await ensureLogoDirectory(config);
+
+  app.use('/logos', express.static(getLogoUploadDirectory(config), {
+    immutable: true,
+    maxAge: '1y',
+    setHeaders(res) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }));
 
   app.get('/resolve', validate([
+    allowQueryFields(['host']),
     query('host').trim().notEmpty().customSanitizer((value) => normalizeDomain(value))
   ]), asyncHandler(async (req, res) => {
     const host = String(req.query.host || '').trim().toLowerCase();
@@ -153,6 +219,7 @@ const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
   }));
 
   app.get('/stores/:id/access-check', requireInternal, validate([
+    allowQueryFields(['user_id']),
     commonRules.paramId('id'),
     query('user_id').optional().isInt({ min: 1 }).toInt()
   ]), asyncHandler(async (req, res) => {
@@ -170,6 +237,21 @@ const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
   }));
 
   app.post('/stores', requireInternal, validate([
+    allowBodyFields([
+      'name',
+      'subdomain',
+      'custom_domain',
+      'logo_url',
+      'theme_color',
+      'store_type',
+      'template_key',
+      'font_preset',
+      'support_email',
+      'contact_phone',
+      'is_active',
+      'ssl_status',
+      'owner_id'
+    ]),
     commonRules.plainText('name', 150),
     body('subdomain').trim().notEmpty().customSanitizer((value) => normalizeSubdomain(value)),
     body('custom_domain').optional().customSanitizer((value) => normalizeDomain(value)),
@@ -279,6 +361,7 @@ const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
   }));
 
   app.get('/stores/:id', requireInternal, validate([
+    allowQueryFields([]),
     commonRules.paramId('id')
   ]), asyncHandler(async (req, res) => {
     const result = await ensureStoreAccess(db, req.params.id, req.authContext.userId, req.authContext.actorRole);
@@ -296,6 +379,19 @@ const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
   }));
 
   app.put('/stores/:id', requireInternal, validate([
+    allowBodyFields([
+      'name',
+      'custom_domain',
+      'logo_url',
+      'theme_color',
+      'store_type',
+      'template_key',
+      'font_preset',
+      'support_email',
+      'contact_phone',
+      'is_active',
+      'ssl_status'
+    ]),
     commonRules.paramId('id'),
     commonRules.optionalPlainText('name', 150),
     body('custom_domain').optional().customSanitizer((value) => normalizeDomain(value)),
@@ -345,6 +441,19 @@ const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
   }));
 
   app.put('/settings', requireInternal, validate([
+    allowBodyFields([
+      'name',
+      'custom_domain',
+      'logo_url',
+      'theme_color',
+      'store_type',
+      'template_key',
+      'font_preset',
+      'support_email',
+      'contact_phone',
+      'is_active',
+      'ssl_status'
+    ]),
     commonRules.optionalPlainText('name', 150),
     body('custom_domain').optional().customSanitizer((value) => normalizeDomain(value)),
     commonRules.url('logo_url'),
@@ -370,6 +479,61 @@ const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
     });
 
     return res.json({
+      store: sanitizeStore(store)
+    });
+  }));
+
+  app.post('/stores/:id/logo', requireInternal, validate([
+    allowBodyFields([]),
+    commonRules.paramId('id')
+  ]), uploadLogoMiddleware, asyncHandler(async (req, res) => {
+    const result = await ensureStoreAccess(db, req.params.id, req.authContext.userId, req.authContext.actorRole);
+    if (!result.store) {
+      throw createHttpError(404, 'Store not found.', null, { expose: true });
+    }
+
+    if (!result.allowed) {
+      throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
+    }
+
+    if (!req.file || !req.file.buffer?.length) {
+      throw createHttpError(422, 'A logo image is required.', {
+        fields: [{
+          field: 'logo',
+          message: 'Upload a PNG, JPEG, or WebP image up to 2MB.'
+        }]
+      }, { expose: true });
+    }
+
+    const detectedFileType = await fileTypeFromBuffer(req.file.buffer);
+    const mimeType = detectedFileType?.mime || req.file.mimetype;
+    if (!ALLOWED_LOGO_MIME_TYPES.has(mimeType)) {
+      throw createHttpError(422, 'Unsupported logo format.', {
+        fields: [{
+          field: 'logo',
+          message: 'Only PNG, JPEG, and WebP logos are supported.'
+        }]
+      }, { expose: true });
+    }
+
+    const filename = sanitizeLogoFilename(req.params.id, mimeType);
+    const absolutePath = path.join(getLogoUploadDirectory(config), filename);
+    await fs.writeFile(absolutePath, req.file.buffer);
+
+    const logoUrl = buildLogoUrl(filename);
+    const store = await updateStoreRecord({
+      db,
+      cache,
+      bus,
+      storeId: req.params.id,
+      existingStore: result.store,
+      payload: {
+        logo_url: logoUrl
+      }
+    });
+
+    return res.status(201).json({
+      logo_url: logoUrl,
       store: sanitizeStore(store)
     });
   }));

@@ -1,10 +1,8 @@
-<section class="mx-auto flex max-w-4xl items-center justify-center px-4 py-20 sm:px-6 lg:px-8">
-  <div class="w-full rounded-[2rem] border border-gray-200 bg-white p-10 text-center shadow-soft">
-    <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">404</p>
-    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-gray-900">Page not found</h1>
-    <p class="mx-auto mt-4 max-w-2xl text-lg leading-8 text-gray-600">The page you requested could not be found. Double-check the route or head back to a working section of the app.</p>
-    <a href="/" class="mt-8 inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">
-      Go Home
-    </a>
-  </div>
-</section>
+<%
+  const state = Object.assign({
+    statusCode: 404,
+    title: 'Page not found',
+    message: 'The page or resource you requested could not be found.'
+  }, errorState || {});
+%>
+<%- include('./_error-page', { errorState: state }) %>

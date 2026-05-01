@@ -19,7 +19,7 @@
       <% productList.forEach((product) => { %>
         <article class="surface-card rounded-[2rem] p-5">
           <div class="flex gap-4">
-            <img src="<%= product.image %>" alt="<%= product.name %>" class="h-28 w-28 rounded-3xl object-cover">
+            <img src="<%= product.image %>" alt="<%= product.name %>" loading="lazy" class="h-28 w-28 rounded-3xl object-cover">
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-3">
                 <h2 class="text-xl font-semibold text-slate-950"><%= product.name %></h2>
@@ -46,6 +46,7 @@
           <div class="mt-5 flex items-center gap-4">
             <a href="/admin/products/<%= product.id %>/edit" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Edit</a>
             <form action="/admin/products/<%= product.id %>/delete" method="post" class="inline">
+              <%- include('../partials/csrf-field') %>
               <button type="submit" class="inline-flex items-center justify-center rounded-2xl border border-rose-200 px-4 py-2.5 text-sm font-medium text-rose-600 transition hover:bg-rose-50">Delete</button>
             </form>
           </div>

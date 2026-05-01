@@ -26,7 +26,7 @@
           <div class="mt-6 space-y-3">
             <% (order.items || []).forEach((item) => { %>
               <div class="flex items-center gap-4 rounded-2xl bg-slate-50 p-4">
-                <img src="<%= item.image %>" alt="<%= item.name %>" class="h-14 w-14 rounded-2xl object-cover">
+                <img src="<%= item.image %>" alt="<%= item.name %>" loading="lazy" class="h-14 w-14 rounded-2xl object-cover">
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-semibold text-slate-900"><%= item.name %></p>
                   <p class="mt-1 text-sm text-slate-500">Qty <%= item.quantity || 1 %></p>

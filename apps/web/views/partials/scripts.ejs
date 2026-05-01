@@ -1,7 +1,7 @@
-<script>
+<script nonce="<%= cspNonce %>">
   (() => {
     const initialCart = <%- JSON.stringify(cart || { items: [], total: 0 }).replace(/</g, '\\u003c') %>;
-    const initialCurrencyContext = <%- JSON.stringify((currencyContext && currencyContext.client) || {
+    const fallbackCurrencyContext = <%- JSON.stringify((currencyContext && currencyContext.client) || {
       baseCurrency: 'USD',
       selectedCurrency: 'USD',
       locale: 'en-US',
@@ -9,6 +9,17 @@
       options: [],
       source: 'store-default'
     }).replace(/</g, '\\u003c') %>;
+    const initialWishlist = <%- JSON.stringify(Array.isArray(wishlistIds) ? wishlistIds : []).replace(/</g, '\\u003c') %>;
+    let initialCurrencyContext = fallbackCurrencyContext;
+
+    try {
+      const cachedCurrency = JSON.parse(sessionStorage.getItem('aisle.currencyContext') || 'null');
+      if (cachedCurrency && cachedCurrency.selectedCurrency === fallbackCurrencyContext.selectedCurrency) {
+        initialCurrencyContext = cachedCurrency;
+      }
+    } catch (error) {
+      initialCurrencyContext = fallbackCurrencyContext;
+    }
 
     const escapeHtml = (value = '') => {
       return String(value).replace(/[&<>"']/g, (character) => {
@@ -43,6 +54,7 @@
 
     const getCartDrawer = () => document.querySelector('[data-cart-drawer]');
     const getCartOverlay = () => document.querySelector('[data-cart-overlay]');
+    const getCsrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
     const normalizeCart = (cartValue) => {
       const cartObject = cartValue && typeof cartValue === 'object' ? cartValue : {};
@@ -211,6 +223,36 @@
       renderCartPage();
     };
 
+    const syncWishlistViews = () => {
+      const count = window.wishlistState.size;
+      document.querySelectorAll('[data-wishlist-count]').forEach((node) => {
+        node.textContent = String(count);
+      });
+
+      document.querySelectorAll('[data-wishlist-toggle]').forEach((button) => {
+        const isActive = window.wishlistState.has(String(button.dataset.wishlistToggle));
+        button.classList.toggle('text-primary', isActive);
+        button.classList.toggle('border-primary', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+
+      const wishlistGrid = document.querySelector('[data-wishlist-grid]');
+      const wishlistEmpty = document.querySelector('[data-wishlist-empty]');
+      if (!wishlistGrid) {
+        return;
+      }
+
+      const activeIds = Array.from(window.wishlistState);
+      document.querySelectorAll('[data-wishlist-card]').forEach((card) => {
+        card.classList.toggle('hidden', !activeIds.includes(String(card.dataset.wishlistCard)));
+      });
+
+      const visibleCards = wishlistGrid.querySelectorAll('[data-wishlist-card]:not(.hidden)');
+      if (wishlistEmpty) {
+        wishlistEmpty.classList.toggle('hidden', visibleCards.length > 0);
+      }
+    };
+
     const setButtonPending = (button, pending, pendingLabel = 'Please wait...') => {
       if (!button) {
         return;
@@ -245,6 +287,7 @@
         headers: {
           Accept: 'application/json',
           'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRF-Token': getCsrfToken(),
           ...(options.body ? { 'Content-Type': 'application/json' } : {}),
           ...(options.headers || {})
         },
@@ -259,6 +302,26 @@
       }
 
       return normalizeCart(data.cart || data);
+    };
+
+    const requestWishlist = async (url, options = {}) => {
+      const response = await fetch(url, {
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRF-Token': getCsrfToken(),
+          ...(options.body ? { 'Content-Type': 'application/json' } : {})
+        },
+        ...options
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to update wishlist right now.');
+      }
+
+      return data;
     };
 
     window.openCart = () => {
@@ -329,6 +392,24 @@
       return updatedCart;
     };
 
+    window.toggleWishlistItem = async (productId) => {
+      const normalizedId = String(productId);
+      const isSaved = window.wishlistState.has(normalizedId);
+      const response = isSaved
+        ? await requestWishlist(`/wishlist/items/${encodeURIComponent(normalizedId)}`, {
+          method: 'DELETE'
+        })
+        : await requestWishlist('/wishlist/items', {
+          method: 'POST',
+          body: JSON.stringify({ productId: normalizedId })
+        });
+
+      window.wishlistState = new Set(response.wishlist || []);
+      syncWishlistViews();
+      window.showToast(isSaved ? 'Item removed from wishlist.' : 'Item saved to wishlist.');
+      return response;
+    };
+
     document.addEventListener('click', async (event) => {
       const cartOpenTrigger = event.target.closest('[data-cart-open]');
       if (cartOpenTrigger) {
@@ -374,6 +455,17 @@
           setButtonPending(addToCartTrigger, false);
         }
 
+        return;
+      }
+
+      const wishlistTrigger = event.target.closest('[data-wishlist-toggle]');
+      if (wishlistTrigger) {
+        event.preventDefault();
+        try {
+          await window.toggleWishlistItem(wishlistTrigger.dataset.wishlistToggle);
+        } catch (error) {
+          window.showToast(error.message || 'Unable to update wishlist.', 'error');
+        }
         return;
       }
 
@@ -428,7 +520,15 @@
     document.addEventListener('DOMContentLoaded', () => {
       window.currencyContext = initialCurrencyContext;
       window.cartState = normalizeCart(initialCart);
+      window.wishlistState = new Set(initialWishlist.map((entry) => String(entry)));
       syncCartViews();
+      syncWishlistViews();
+
+      try {
+        sessionStorage.setItem('aisle.currencyContext', JSON.stringify(window.currencyContext));
+      } catch (error) {
+        // Ignore storage access failures.
+      }
 
       const cartOverlay = getCartOverlay();
       if (cartOverlay) {

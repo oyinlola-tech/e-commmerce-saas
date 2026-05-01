@@ -60,7 +60,7 @@ const sanitizeUrl = (value) => {
       return '';
     }
     return parsed.toString();
-  } catch (error) {
+  } catch {
     return '';
   }
 };

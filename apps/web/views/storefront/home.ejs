@@ -65,7 +65,7 @@
             <% spotlightProducts.forEach((item, index) => { %>
               <article class="theme-product-card overflow-hidden rounded-[2rem] <%= index === 0 && spotlightProducts.length > 1 ? 'sm:translate-y-8' : '' %>">
                 <a href="/products/<%= item.slug %>" class="theme-hero-media block <%= themeClasses.heroCardAspect || 'aspect-[4/5]' %> overflow-hidden bg-slate-100">
-                  <img src="<%= item.image %>" alt="<%= item.name %>" class="h-full w-full object-cover transition duration-300 hover:scale-105">
+                  <img src="<%= item.image %>" alt="<%= item.name %>" loading="lazy" class="h-full w-full object-cover transition duration-300 hover:scale-105">
                 </a>
                 <div class="space-y-2 p-5">
                   <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= item.category || storeThemeData.storeTypeLabel || storeThemeData.typeLabel || 'Featured' %></p>
@@ -120,7 +120,7 @@
       <% featured.forEach((product) => { %>
         <article class="theme-product-card lift-on-hover group overflow-hidden rounded-[2rem]">
           <a href="/products/<%= product.slug %>" class="block <%= themeClasses.catalogCardAspect || 'aspect-[4/5]' %> overflow-hidden bg-slate-100">
-            <img src="<%= product.image %>" alt="<%= product.name %>" class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
+            <img src="<%= product.image %>" alt="<%= product.name %>" loading="lazy" class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
           </a>
           <div class="space-y-4 p-5">
             <div>

@@ -1,0 +1,8 @@
+<%
+  const state = Object.assign({
+    statusCode: 502,
+    title: 'Upstream response failed',
+    message: 'A backend service returned an invalid or incomplete response.'
+  }, errorState || {});
+%>
+<%- include('./_error-page', { errorState: state }) %>

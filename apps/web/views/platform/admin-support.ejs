@@ -45,6 +45,7 @@
 
           <div class="space-y-5">
             <form action="/platform-admin/support/<%= conversation.id %>/update" method="post" class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+              <%- include('../partials/csrf-field') %>
               <p class="text-sm font-semibold text-slate-900">Queue management</p>
               <div class="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
@@ -72,6 +73,7 @@
             </form>
 
             <form action="/platform-admin/support/<%= conversation.id %>/reply" method="post" class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+              <%- include('../partials/csrf-field') %>
               <p class="text-sm font-semibold text-slate-900">Reply as support</p>
               <div class="mt-4">
                 <label for="reply-<%= conversation.id %>" class="mb-1 block text-sm font-medium text-slate-700">Message</label>

@@ -46,7 +46,7 @@
       <% productList.forEach((product) => { %>
         <article class="theme-product-card lift-on-hover group overflow-hidden rounded-[2rem]">
           <a href="/products/<%= product.slug %>" class="block <%= themeClasses.catalogCardAspect || 'aspect-[4/5]' %> overflow-hidden bg-slate-100">
-            <img src="<%= product.image %>" alt="<%= product.name %>" class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
+            <img src="<%= product.image %>" alt="<%= product.name %>" loading="lazy" class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
           </a>
           <div class="space-y-4 p-5">
             <div>
@@ -64,6 +64,9 @@
               <a href="/products/<%= product.slug %>" class="inline-flex flex-1 items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">
                 View detail
               </a>
+              <button type="button" data-wishlist-toggle="<%= product.id %>" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary" aria-pressed="<%= Array.isArray(wishlistIds) && wishlistIds.includes(String(product.id)) ? 'true' : 'false' %>">
+                Save
+              </button>
               <button type="button" data-add-to-cart="<%= product.id %>" data-quantity="1" class="inline-flex flex-1 items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">
                 Add to cart
               </button>

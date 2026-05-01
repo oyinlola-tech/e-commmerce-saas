@@ -1,4 +1,4 @@
-const { body, query } = require('express-validator');
+const { body, query, param } = require('express-validator');
 const {
   requireInternalRequest,
   EVENT_NAMES,
@@ -8,7 +8,7 @@ const {
   asyncHandler,
   createHttpError,
   validate,
-  commonRules,
+  allowBodyFields,
   sanitizeEmail
 } = require('../../../../packages/shared');
 const {
@@ -174,6 +174,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/subscriptions/checkout-session', requireInternal, validate([
+    allowBodyFields(['plan', 'billing_cycle', 'provider', 'currency', 'email']),
     body('plan').isString().notEmpty(),
     body('billing_cycle').isIn(['monthly', 'yearly']),
     body('provider').optional().isIn(['paystack', 'flutterwave']),
@@ -272,6 +273,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/subscriptions', requireInternal, validate([
+    allowBodyFields(['owner_id', 'plan', 'status', 'billing_cycle']),
     body('plan').optional().isString(),
     body('status').optional().isString(),
     body('billing_cycle').optional().isIn(['monthly', 'yearly'])
@@ -324,7 +326,9 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     return res.status(201).json({ subscription: serializeSubscription(subscription) });
   }));
 
-  app.post('/subscriptions/cancel', requireInternal, asyncHandler(async (req, res) => {
+  app.post('/subscriptions/cancel', requireInternal, validate([
+    allowBodyFields([])
+  ]), asyncHandler(async (req, res) => {
     const ownerId = Number(req.authContext.userId);
     const subscription = await getOwnerSubscription(db, ownerId);
     if (!subscription) {
@@ -365,7 +369,9 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     });
   }));
 
-  app.get('/subscriptions/:ownerId', requireInternal, asyncHandler(async (req, res) => {
+  app.get('/subscriptions/:ownerId', requireInternal, validate([
+    param('ownerId').isInt({ min: 1 }).toInt()
+  ]), asyncHandler(async (req, res) => {
     if (![PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT].includes(req.authContext.actorRole)) {
       throw createHttpError(403, 'Only platform staff can inspect another owner subscription.', null, { expose: true });
     }

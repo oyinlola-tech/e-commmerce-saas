@@ -9,6 +9,7 @@ const {
   asyncHandler,
   createHttpError,
   validate,
+  allowBodyFields,
   commonRules
 } = require('../../../../packages/shared');
 
@@ -41,6 +42,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   const requireInternal = buildRequireInternal(config);
 
   app.post('/auth/register', validate([
+    allowBodyFields(['name', 'email', 'password', 'role']),
     commonRules.name('name', 120),
     commonRules.email(),
     commonRules.password(),
@@ -81,6 +83,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/auth/login', validate([
+    allowBodyFields(['email', 'password']),
     commonRules.email(),
     body('password').isString().notEmpty().withMessage('Password is required.')
   ]), asyncHandler(async (req, res) => {
@@ -119,6 +122,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/users', requireInternal, validate([
+    allowBodyFields(['name', 'email', 'password', 'role']),
     commonRules.name('name', 120),
     commonRules.email(),
     commonRules.password(),

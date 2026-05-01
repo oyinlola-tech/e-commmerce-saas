@@ -4,11 +4,12 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
-const csurf = require('csurf');
 const rateLimit = require('express-rate-limit');
 const client = require('prom-client');
 const swaggerUi = require('swagger-ui-express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const { doubleCsrf } = require('csrf-csrf');
+const { body } = require('express-validator');
 const {
   createServiceConfig,
   createLogger,
@@ -22,6 +23,14 @@ const {
   setCustomerTokenCookie,
   clearAuthCookies,
   PLATFORM_ROLES,
+  normalizeHostname,
+  normalizeOrigin,
+  isSubdomainOf,
+  isPlatformHost,
+  isSecureRequest,
+  validate,
+  allowBodyFields,
+  commonRules,
   asyncHandler,
   errorHandler
 } = require('../../packages/shared');
@@ -37,6 +46,11 @@ const config = createServiceConfig({
 const logger = createLogger('gateway');
 const app = express();
 const server = http.createServer(app);
+let requestCache = null;
+
+const STORE_RESOLUTION_CACHE_TTL_SECONDS = 60;
+const CORS_ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
+const CORS_ALLOWED_HEADERS = ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'];
 
 const registry = new client.Registry();
 const openApiSpec = createGatewayOpenApiSpec(config);
@@ -78,39 +92,14 @@ const resolveRouteLabel = (req) => {
 
 app.set('trust proxy', true);
 app.use(helmet({
-  crossOriginResourcePolicy: false
-}));
-app.use(cors({
-  origin: true,
-  credentials: true
+  crossOriginResourcePolicy: false,
+  referrerPolicy: {
+    policy: 'no-referrer'
+  }
 }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
-
-const csrfProtection = csurf({
-  cookie: {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production'
-  }
-});
-
-const csrfExemptRoutes = new Set([
-  '/api/platform/auth/register',
-  '/api/platform/auth/login',
-  '/api/platform/auth/logout',
-  '/api/customers/register',
-  '/api/customers/login',
-  '/api/customers/logout'
-]);
-
-app.use((req, res, next) => {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || csrfExemptRoutes.has(req.path)) {
-    return next();
-  }
-  return csrfProtection(req, res, next);
-});
 
 app.use((req, res, next) => {
   req.requestId = req.headers['x-request-id'] || crypto.randomUUID();
@@ -154,13 +143,17 @@ app.use((req, res, next) => {
     return next();
   }
 
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').toLowerCase();
-  if (req.secure || forwardedProto === 'https') {
+  if (isSecureRequest(req)) {
     return next();
   }
 
+  const requestHost = normalizeHostname(req.headers.host);
+  if (!requestHost) {
+    return res.status(400).json({ error: 'Invalid host header.' });
+  }
+
   if (req.method === 'GET' || req.method === 'HEAD') {
-    return res.redirect(308, `https://${req.headers.host}${req.originalUrl}`);
+    return res.redirect(308, `https://${requestHost}${req.originalUrl}`);
   }
 
   return res.status(400).json({ error: 'HTTPS is required.' });
@@ -181,15 +174,6 @@ const buildRateLimiter = (options = {}) => {
   return rateLimit(limiterOptions);
 };
 
-const isPlatformHost = (hostname = '') => {
-  return [
-    'localhost',
-    '127.0.0.1',
-    config.rootDomain,
-    `www.${config.rootDomain}`
-  ].includes(String(hostname || '').toLowerCase());
-};
-
 const resolveRequestHost = (req) => {
   const signedInternalHeaders = verifySignedInternalHeaders(req.headers, config.internalSharedSecret, {
     maxAgeMs: config.internalRequestMaxAgeMs,
@@ -203,12 +187,17 @@ const resolveRequestHost = (req) => {
       .toLowerCase();
 
     if (trustedTenantHost) {
+      const normalizedTrustedHost = normalizeHostname(trustedTenantHost);
+      if (!normalizedTrustedHost) {
+        return '';
+      }
+
       req.isTrustedWebRequest = true;
-      return trustedTenantHost.split(':')[0];
+      return normalizedTrustedHost;
     }
   }
 
-  return String(req.hostname || req.headers.host || '').split(':')[0].toLowerCase();
+  return normalizeHostname(req.hostname || req.headers.host || '');
 };
 
 const extractToken = (req) => {
@@ -220,6 +209,21 @@ const extractToken = (req) => {
   return req.cookies.platform_token || req.cookies.customer_token || null;
 };
 
+const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
+  getSecret: () => config.internalSharedSecret,
+  cookieName: 'aisle.gateway-csrf-token',
+  cookieOptions: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: config.cookieSecure,
+    path: '/'
+  },
+  size: 64,
+  ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
+  getSessionIdentifier: (req) => extractToken(req) || req.ip || 'anonymous',
+  getTokenFromRequest: (req) => req.body?._csrf || req.headers['x-csrf-token'] || req.headers['csrf-token']
+});
+
 const resolveAuthContext = (req) => {
   const token = extractToken(req);
   if (!token) {
@@ -228,7 +232,7 @@ const resolveAuthContext = (req) => {
 
   try {
     return verifyToken(token, config.jwtSecret);
-  } catch (error) {
+  } catch {
     return null;
   }
 };
@@ -253,7 +257,7 @@ const createServiceHeaders = (req, overrides = {}) => {
 
 const resolveStoreContext = async (req, res, next) => {
   const host = resolveRequestHost(req);
-  const needsStoreResolution = !isPlatformHost(host)
+  const needsStoreResolution = !isPlatformHost(host, config.rootDomain)
     || req.path.startsWith('/api/chats')
     || req.path.startsWith('/api/support')
     || req.path.startsWith('/api/products')
@@ -264,17 +268,37 @@ const resolveStoreContext = async (req, res, next) => {
 
   req.publicHost = host;
 
+  if (!host) {
+    return res.status(400).json({ error: 'Invalid host header.' });
+  }
+
   if (!needsStoreResolution) {
     return next();
   }
 
   try {
-    req.storeContext = await requestJson(`${config.serviceUrls.store}/resolve?host=${encodeURIComponent(host)}`, {
-      headers: {
-        'x-request-id': req.requestId
-      },
-      timeoutMs: config.requestTimeoutMs
-    });
+    const cacheKey = `gateway:store-resolution:${host}`;
+    const response = requestCache
+      ? await requestCache.getOrSetJson(cacheKey, STORE_RESOLUTION_CACHE_TTL_SECONDS, async () => {
+        return requestJson(`${config.serviceUrls.store}/resolve?host=${encodeURIComponent(host)}`, {
+          headers: {
+            'x-request-id': req.requestId
+          },
+          timeoutMs: config.requestTimeoutMs
+        });
+      })
+      : {
+        value: await requestJson(`${config.serviceUrls.store}/resolve?host=${encodeURIComponent(host)}`, {
+          headers: {
+            'x-request-id': req.requestId
+          },
+          timeoutMs: config.requestTimeoutMs
+        }),
+        cacheHit: false
+      };
+
+    req.storeContext = response.value;
+    res.setHeader('x-store-cache', response.cacheHit ? 'hit' : 'miss');
 
     if (!req.storeContext || !req.storeContext.store || !req.storeContext.store.is_active) {
       return res.status(404).json({ error: 'Store not found or inactive.' });
@@ -291,6 +315,71 @@ const resolveStoreContext = async (req, res, next) => {
       error: 'Unable to resolve store.'
     });
   }
+};
+
+const isOriginAllowed = (req, origin) => {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) {
+    return false;
+  }
+
+  const requestHost = req.publicHost || resolveRequestHost(req);
+  if (!requestHost) {
+    return false;
+  }
+
+  if (normalizedOrigin.hostname === requestHost) {
+    return true;
+  }
+
+  if (isPlatformHost(normalizedOrigin.hostname, config.rootDomain) && isPlatformHost(requestHost, config.rootDomain)) {
+    return true;
+  }
+
+  if (isSubdomainOf(normalizedOrigin.hostname, config.rootDomain) && isSubdomainOf(requestHost, config.rootDomain)) {
+    return true;
+  }
+
+  const store = req.storeContext?.store;
+  if (!store) {
+    return false;
+  }
+
+  const allowedHosts = [
+    requestHost,
+    store.custom_domain,
+    store.subdomain ? `${store.subdomain}.${config.rootDomain}` : ''
+  ]
+    .map((entry) => normalizeHostname(entry))
+    .filter(Boolean);
+
+  return allowedHosts.includes(normalizedOrigin.hostname);
+};
+
+const gatewayCors = (req, res, next) => {
+  return cors({
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      return callback(null, isOriginAllowed(req, origin));
+    },
+    credentials: true,
+    methods: CORS_ALLOWED_METHODS,
+    allowedHeaders: CORS_ALLOWED_HEADERS,
+    exposedHeaders: ['x-request-id', 'x-cache', 'x-store-cache'],
+    maxAge: 600
+  })(req, res, next);
+};
+
+const shouldEnforceGatewayCsrf = (req) => {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return false;
+  }
+
+  const authorization = String(req.headers.authorization || '').trim();
+  return !authorization.startsWith('Bearer ');
 };
 
 const attachGatewayContext = (req, res, next) => {
@@ -364,14 +453,30 @@ const ensureOwnerCanAccessStore = async (req, res, next) => {
   }
 };
 
-const createServiceProxy = (target, pathRewrite) => {
+const createServiceProxy = (target, pathRewrite, options = {}) => {
   return createProxyMiddleware({
     target,
     changeOrigin: true,
     ws: true,
     xfwd: true,
     pathRewrite,
+    proxyTimeout: options.proxyTimeout || config.requestTimeoutMs + 1000,
+    timeout: options.timeout || config.requestTimeoutMs + 1000,
     on: {
+      error: (error, req, res) => {
+        req.log?.warn('upstream_unavailable', {
+          target,
+          error: error.message
+        });
+
+        if (res.headersSent) {
+          return;
+        }
+
+        return res.status(503).json({
+          error: options.serviceUnavailableMessage || 'This service is temporarily unavailable.'
+        });
+      },
       proxyReq: (proxyReq, req) => {
         const headers = req.gatewayContext?.internalHeaders || {};
         Object.entries(headers).forEach(([key, value]) => {
@@ -385,6 +490,7 @@ const createServiceProxy = (target, pathRewrite) => {
 
 const bootstrap = async () => {
   const cache = await createCache(config, logger);
+  requestCache = cache;
   const redisStore = cache.redis
     ? createRedisRateLimitStore({
       redis: cache.redis,
@@ -444,11 +550,32 @@ const bootstrap = async () => {
   }));
 
   app.use(resolveStoreContext);
+  app.use(gatewayCors);
   app.use(attachGatewayContext);
+
+  app.get('/api/csrf-token', (req, res) => {
+    return res.json({
+      csrfToken: generateToken(req, res)
+    });
+  });
+
+  app.use('/api', (req, res, next) => {
+    if (!shouldEnforceGatewayCsrf(req)) {
+      return next();
+    }
+
+    return doubleCsrfProtection(req, res, next);
+  });
 
   app.get('/api/platform/billing/plans', createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' }));
 
-  app.post('/api/platform/auth/register', authRateLimiter, asyncHandler(async (req, res) => {
+  app.post('/api/platform/auth/register', authRateLimiter, validate([
+    allowBodyFields(['name', 'email', 'password', 'role', '_csrf']),
+    commonRules.name('name', 120),
+    commonRules.email(),
+    commonRules.password(),
+    body('role').optional().isIn(Object.values(PLATFORM_ROLES))
+  ]), asyncHandler(async (req, res) => {
     const response = await requestJson(`${config.serviceUrls.user}/auth/register`, {
       method: 'POST',
       headers: createServiceHeaders(req, {
@@ -461,13 +588,17 @@ const bootstrap = async () => {
     });
 
     if (response.token) {
-      setPlatformTokenCookie(res, response.token, config);
+      setPlatformTokenCookie(req, res, response.token, config);
     }
 
     return res.status(201).json(response);
   }));
 
-  app.post('/api/platform/auth/login', authRateLimiter, asyncHandler(async (req, res) => {
+  app.post('/api/platform/auth/login', authRateLimiter, validate([
+    allowBodyFields(['email', 'password', '_csrf']),
+    commonRules.email(),
+    body('password').isString().notEmpty().withMessage('Password is required.')
+  ]), asyncHandler(async (req, res) => {
     const response = await requestJson(`${config.serviceUrls.user}/auth/login`, {
       method: 'POST',
       headers: createServiceHeaders(req, {
@@ -480,18 +611,28 @@ const bootstrap = async () => {
     });
 
     if (response.token) {
-      setPlatformTokenCookie(res, response.token, config);
+      setPlatformTokenCookie(req, res, response.token, config);
     }
 
     return res.json(response);
   }));
 
-  app.post('/api/platform/auth/logout', (req, res) => {
-    clearAuthCookies(res, config);
+  app.post('/api/platform/auth/logout', validate([
+    allowBodyFields(['_csrf'])
+  ]), (req, res) => {
+    clearAuthCookies(req, res, config);
     return res.status(204).send();
   });
 
-  app.post('/api/customers/register', authRateLimiter, asyncHandler(async (req, res) => {
+  app.post('/api/customers/register', authRateLimiter, validate([
+    allowBodyFields(['store_id', 'name', 'email', 'password', 'phone', 'addresses', 'metadata', '_csrf']),
+    commonRules.name('name', 120),
+    commonRules.email(),
+    commonRules.password(),
+    commonRules.phone(),
+    body('addresses').optional().isArray({ max: 10 }),
+    commonRules.jsonObject('metadata')
+  ]), asyncHandler(async (req, res) => {
     const storeId = req.storeContext?.store?.id || req.body.store_id;
     const response = await requestJson(`${config.serviceUrls.customer}/customers/register`, {
       method: 'POST',
@@ -510,13 +651,17 @@ const bootstrap = async () => {
     });
 
     if (response.token) {
-      setCustomerTokenCookie(res, response.token, config);
+      setCustomerTokenCookie(req, res, response.token, config);
     }
 
     return res.status(201).json(response);
   }));
 
-  app.post('/api/customers/login', authRateLimiter, asyncHandler(async (req, res) => {
+  app.post('/api/customers/login', authRateLimiter, validate([
+    allowBodyFields(['store_id', 'email', 'password', '_csrf']),
+    commonRules.email(),
+    body('password').isString().notEmpty().withMessage('Password is required.')
+  ]), asyncHandler(async (req, res) => {
     const storeId = req.storeContext?.store?.id || req.body.store_id;
     const response = await requestJson(`${config.serviceUrls.customer}/customers/login`, {
       method: 'POST',
@@ -535,14 +680,16 @@ const bootstrap = async () => {
     });
 
     if (response.token) {
-      setCustomerTokenCookie(res, response.token, config);
+      setCustomerTokenCookie(req, res, response.token, config);
     }
 
     return res.json(response);
   }));
 
-  app.post('/api/customers/logout', (req, res) => {
-    clearAuthCookies(res, config);
+  app.post('/api/customers/logout', validate([
+    allowBodyFields(['_csrf'])
+  ]), (req, res) => {
+    clearAuthCookies(req, res, config);
     return res.status(204).send();
   });
 
@@ -550,10 +697,16 @@ const bootstrap = async () => {
     auth: createServiceProxy(config.serviceUrls.user, { '^/api/platform': '' }),
     stores: createServiceProxy(config.serviceUrls.store, { '^/api/platform': '' }),
     compliance: createServiceProxy(config.serviceUrls.compliance, { '^/api/platform': '' }),
-    support: createServiceProxy(config.serviceUrls.support, { '^/api/platform': '' }),
-    chats: createServiceProxy(config.serviceUrls.chat, { '^/api/platform': '' }),
+    support: createServiceProxy(config.serviceUrls.support, { '^/api/platform': '' }, {
+      serviceUnavailableMessage: 'Support service is temporarily unavailable.'
+    }),
+    chats: createServiceProxy(config.serviceUrls.chat, { '^/api/platform': '' }, {
+      serviceUnavailableMessage: 'Chat service is temporarily unavailable.'
+    }),
     billing: createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' }),
-    notifications: createServiceProxy(config.serviceUrls.notification, { '^/api/platform': '' })
+    notifications: createServiceProxy(config.serviceUrls.notification, { '^/api/platform': '' }, {
+      serviceUnavailableMessage: 'Notification service is temporarily unavailable.'
+    })
   };
 
   const storefrontProxies = {
@@ -562,8 +715,12 @@ const bootstrap = async () => {
     cart: createServiceProxy(config.serviceUrls.cart, {}),
     checkout: createServiceProxy(config.serviceUrls.order, {}),
     orders: createServiceProxy(config.serviceUrls.order, {}),
-    chats: createServiceProxy(config.serviceUrls.chat, {}),
-    support: createServiceProxy(config.serviceUrls.support, {})
+    chats: createServiceProxy(config.serviceUrls.chat, {}, {
+      serviceUnavailableMessage: 'Chat service is temporarily unavailable.'
+    }),
+    support: createServiceProxy(config.serviceUrls.support, {}, {
+      serviceUnavailableMessage: 'Support service is temporarily unavailable.'
+    })
   };
 
   const ownerPathRewrite = {
@@ -574,12 +731,24 @@ const bootstrap = async () => {
     products: createServiceProxy(config.serviceUrls.product, ownerPathRewrite),
     orders: createServiceProxy(config.serviceUrls.order, ownerPathRewrite),
     customers: createServiceProxy(config.serviceUrls.customer, ownerPathRewrite),
-    support: createServiceProxy(config.serviceUrls.support, ownerPathRewrite),
-    chats: createServiceProxy(config.serviceUrls.chat, ownerPathRewrite),
+    support: createServiceProxy(config.serviceUrls.support, ownerPathRewrite, {
+      serviceUnavailableMessage: 'Support service is temporarily unavailable.'
+    }),
+    chats: createServiceProxy(config.serviceUrls.chat, ownerPathRewrite, {
+      serviceUnavailableMessage: 'Chat service is temporarily unavailable.'
+    }),
     payments: createServiceProxy(config.serviceUrls.payment, ownerPathRewrite),
     settings: createServiceProxy(config.serviceUrls.store, ownerPathRewrite),
-    notifications: createServiceProxy(config.serviceUrls.notification, ownerPathRewrite)
+    notifications: createServiceProxy(config.serviceUrls.notification, ownerPathRewrite, {
+      serviceUnavailableMessage: 'Notification service is temporarily unavailable.'
+    })
   };
+  const ownerLogoProxy = createServiceProxy(config.serviceUrls.store, {
+    '^/api/owner/stores/([^/]+)/logo$': '/stores/$1/logo'
+  });
+  const logoProxy = createServiceProxy(config.serviceUrls.store, {}, {
+    serviceUnavailableMessage: 'Store assets are temporarily unavailable.'
+  });
 
   app.use('/api/platform/auth', platformProxy.auth);
   app.use('/api/platform/stores', requirePlatformUser(), platformProxy.stores);
@@ -595,6 +764,7 @@ const bootstrap = async () => {
   app.use('/api/owner/stores/:storeId/support', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.support);
   app.use('/api/owner/stores/:storeId/chats', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.chats);
   app.use('/api/owner/stores/:storeId/payments', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER]), ensureOwnerCanAccessStore, ownerProxies.payments);
+  app.use('/api/owner/stores/:storeId/logo', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER]), ensureOwnerCanAccessStore, ownerLogoProxy);
   app.use('/api/owner/stores/:storeId/settings', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER]), ensureOwnerCanAccessStore, ownerProxies.settings);
   app.use('/api/owner/stores/:storeId/notifications', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.notifications);
 
@@ -612,11 +782,29 @@ const bootstrap = async () => {
   const publicPaymentProxy = createProxyMiddleware({
     target: config.serviceUrls.payment,
     changeOrigin: true,
-    xfwd: true
+    xfwd: true,
+    proxyTimeout: config.requestTimeoutMs + 1000,
+    timeout: config.requestTimeoutMs + 1000,
+    on: {
+      error: (error, req, res) => {
+        req.log?.warn('payment_proxy_failed', {
+          error: error.message
+        });
+
+        if (res.headersSent) {
+          return;
+        }
+
+        return res.status(503).json({
+          error: 'Payment service is temporarily unavailable.'
+        });
+      }
+    }
   });
   app.use('/socket.io/support', supportSocketProxy);
   app.use('/socket.io/chat', chatSocketProxy);
   app.use('/payments', publicPaymentProxy);
+  app.use('/logos', logoProxy);
 
   const webProxy = createProxyMiddleware({
     target: config.webAppUrl,
@@ -640,6 +828,16 @@ const bootstrap = async () => {
   });
 
   app.use('/', webProxy);
+
+  app.use((error, req, res, next) => {
+    if (error === invalidCsrfTokenError) {
+      return res.status(403).json({
+        error: 'Invalid CSRF token.'
+      });
+    }
+
+    return next(error);
+  });
 
   app.use(errorHandler({
     logger,

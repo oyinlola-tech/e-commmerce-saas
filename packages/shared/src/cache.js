@@ -64,7 +64,7 @@ const createMemoryAdapter = (prefix) => {
   };
 };
 
-const createRedisAdapter = async ({ prefix, redisUrl, logger }) => {
+const createRedisAdapter = async ({ prefix, redisUrl }) => {
   const redis = new Redis(redisUrl, {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
@@ -125,8 +125,7 @@ const createCache = async (config, logger) => {
 
     adapter = await createRedisAdapter({
       prefix,
-      redisUrl: config.redisUrl,
-      logger
+      redisUrl: config.redisUrl
     });
     logger.info('Redis cache connected', { prefix });
   } catch (error) {
@@ -151,7 +150,7 @@ const createCache = async (config, logger) => {
 
       try {
         return JSON.parse(value);
-      } catch (error) {
+      } catch {
         return null;
       }
     },

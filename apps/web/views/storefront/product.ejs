@@ -15,12 +15,12 @@
   <div class="grid gap-10 <%= themeClasses.productGrid || 'lg:grid-cols-[1fr_1fr]' %>">
     <div class="space-y-4">
       <div class="theme-hero-frame overflow-hidden rounded-[2.35rem]">
-        <img src="<%= gallery[0] %>" alt="<%= productData.name %>" class="h-full w-full object-cover">
+        <img src="<%= gallery[0] %>" alt="<%= productData.name %>" loading="eager" class="h-full w-full object-cover">
       </div>
       <div class="grid grid-cols-4 gap-3">
         <% gallery.slice(0, 4).forEach((image, index) => { %>
           <div class="overflow-hidden rounded-2xl border <%= index === 0 ? 'border-primary' : 'border-slate-200' %> bg-slate-100">
-            <img src="<%= image %>" alt="<%= productData.name %> thumbnail <%= index + 1 %>" class="aspect-square h-full w-full object-cover">
+            <img src="<%= image %>" alt="<%= productData.name %> thumbnail <%= index + 1 %>" loading="lazy" class="aspect-square h-full w-full object-cover">
           </div>
         <% }) %>
       </div>
@@ -96,9 +96,14 @@
               </button>
             </div>
           </div>
-          <button type="button" data-add-to-cart="<%= productData.id %>" data-qty-target="#product-quantity" class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50" <%= inStock ? '' : 'disabled' %>>
-            <%= inStock ? 'Add to cart' : 'Out of stock' %>
-          </button>
+          <div class="flex flex-col gap-3 sm:items-end">
+            <button type="button" data-add-to-cart="<%= productData.id %>" data-qty-target="#product-quantity" class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50" <%= inStock ? '' : 'disabled' %>>
+              <%= inStock ? 'Add to cart' : 'Out of stock' %>
+            </button>
+            <button type="button" data-wishlist-toggle="<%= productData.id %>" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary" aria-pressed="<%= Array.isArray(wishlistIds) && wishlistIds.includes(String(productData.id)) ? 'true' : 'false' %>">
+              Save to wishlist
+            </button>
+          </div>
         </div>
         <p class="mt-4 text-sm leading-6 text-slate-500"><%= themeCopy.productPromise || 'Secure checkout, order tracking, and support follow-up are available from your account after purchase.' %></p>
       </div>
@@ -119,7 +124,7 @@
       <% recommendations.forEach((entry) => { %>
         <article class="theme-product-card lift-on-hover overflow-hidden rounded-[2rem]">
           <a href="/products/<%= entry.slug %>" class="block <%= themeClasses.catalogCardAspect || 'aspect-[4/5]' %> overflow-hidden bg-slate-100">
-            <img src="<%= entry.image %>" alt="<%= entry.name %>" class="h-full w-full object-cover">
+            <img src="<%= entry.image %>" alt="<%= entry.name %>" loading="lazy" class="h-full w-full object-cover">
           </a>
           <div class="p-5">
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= entry.category %></p>

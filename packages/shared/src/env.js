@@ -1,6 +1,8 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
+const { normalizeHostname } = require('./security');
 
 const normalizeEnvironment = (value = '') => {
   return String(value).trim().toLowerCase() === 'production' ? 'production' : 'development';
@@ -43,6 +45,26 @@ const getEnv = (name, fallback, { requiredInProduction = false, environment = 'd
   return fallback;
 };
 
+const getSecretEnv = (name, { environment }) => {
+  const value = process.env[name];
+  if (value !== undefined && value !== '') {
+    return value;
+  }
+
+  if (environment === 'production') {
+    throw new Error(`${name} must be set in production.`);
+  }
+
+  return crypto.randomBytes(32).toString('hex');
+};
+
+const normalizeSameSite = (value = 'lax') => {
+  const normalized = String(value || 'lax').trim().toLowerCase();
+  return ['lax', 'strict', 'none'].includes(normalized)
+    ? normalized
+    : 'lax';
+};
+
 const hasWorkspaceRoot = (directory) => {
   const packageJsonPath = path.join(directory, 'package.json');
   if (!fs.existsSync(packageJsonPath)) {
@@ -52,7 +74,7 @@ const hasWorkspaceRoot = (directory) => {
   try {
     const contents = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     return Array.isArray(contents.workspaces);
-  } catch (error) {
+  } catch {
     return false;
   }
 };
@@ -102,6 +124,11 @@ const createServiceConfig = ({
 }) => {
   const { workspaceRoot, environment } = loadEnvFiles(appRoot);
   const isProduction = environment === 'production';
+  const rootDomain = normalizeHostname(getEnv('PLATFORM_ROOT_DOMAIN', 'aislecommerce.com'));
+
+  if (!rootDomain) {
+    throw new Error('PLATFORM_ROOT_DOMAIN must be a valid hostname.');
+  }
 
   return {
     appRoot,
@@ -118,26 +145,20 @@ const createServiceConfig = ({
     databaseAcquireTimeoutMs: asNumber(process.env.DB_ACQUIRE_TIMEOUT_MS, 10 * 1000),
     databaseConnectRetries: asNumber(process.env.DB_CONNECT_RETRIES, 5),
     databaseRetryDelayMs: asNumber(process.env.DB_CONNECT_RETRY_DELAY_MS, 1000),
-    jwtSecret: getEnv('JWT_SECRET', 'aisle-jwt-secret', {
-      requiredInProduction: true,
-      environment
-    }),
+    jwtSecret: getSecretEnv('JWT_SECRET', { environment }),
     jwtAccessTtl: getEnv('JWT_ACCESS_TTL', '1h'),
-    internalSharedSecret: getEnv('INTERNAL_SHARED_SECRET', 'aisle-internal-secret', {
-      requiredInProduction: true,
-      environment
-    }),
+    internalSharedSecret: getSecretEnv('INTERNAL_SHARED_SECRET', { environment }),
     rabbitmqUrl: getEnv('RABBITMQ_URL', 'amqp://127.0.0.1:5672'),
     redisUrl: getEnv('REDIS_URL', 'redis://127.0.0.1:6379'),
     disableRedis: asBoolean(process.env.DISABLE_REDIS, false),
-    rootDomain: getEnv('PLATFORM_ROOT_DOMAIN', 'aislecommerce.com'),
+    rootDomain,
     eventExchange: getEnv('EVENT_EXCHANGE', 'aisle.events'),
     requestTimeoutMs: asNumber(process.env.REQUEST_TIMEOUT_MS, 5000),
     webAppUrl: getEnv('WEB_APP_URL', 'http://127.0.0.1:3000'),
     gatewayUrl: getEnv('GATEWAY_URL', 'http://127.0.0.1:4000'),
     cookieSecure: asBoolean(process.env.COOKIE_SECURE, isProduction),
     cookieDomain: process.env.COOKIE_DOMAIN || '',
-    cookieSameSite: getEnv('COOKIE_SAMESITE', 'strict'),
+    cookieSameSite: normalizeSameSite(getEnv('COOKIE_SAMESITE', 'lax')),
     redisPrefix: getEnv('REDIS_PREFIX', `aisle:${serviceName}`),
     internalRequestMaxAgeMs: asNumber(process.env.INTERNAL_REQUEST_MAX_AGE_MS, 5 * 60 * 1000),
     internalRequestNonceTtlMs: asNumber(process.env.INTERNAL_REQUEST_NONCE_TTL_MS, 5 * 60 * 1000),

@@ -60,7 +60,10 @@
     </div>
     <div class="grid grid-cols-2 gap-3">
       <a href="/stores/<%= store && store.id ? store.id : '' %>/preview" class="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/5 hover:text-white">Storefront</a>
-      <a href="/logout" class="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/5 hover:text-white">Sign out</a>
+      <form action="/logout" method="post">
+        <%- include('./csrf-field') %>
+        <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/5 hover:text-white">Sign out</button>
+      </form>
     </div>
   </div>
 </aside>
