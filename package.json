@@ -1,0 +1,15 @@
+{
+  "name": "e-commerce-saas-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Frontend scaffold for a multi-tenant ecommerce SaaS using Express, EJS, Tailwind CDN, and vanilla JavaScript.",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "ejs": "^5.0.2",
+    "express": "^5.2.1",
+    "express-ejs-layouts": "^2.5.1"
+  }
+}

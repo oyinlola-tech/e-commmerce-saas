@@ -42,6 +42,7 @@
       modalState.previousFocus = document.activeElement;
       modalState.activeId = id;
       modal.classList.remove('hidden');
+      modal.classList.add('flex');
       modal.setAttribute('aria-hidden', 'false');
       document.body.classList.add('overflow-hidden');
 
@@ -57,6 +58,7 @@
         return;
       }
 
+      modal.classList.remove('flex');
       modal.classList.add('hidden');
       modal.setAttribute('aria-hidden', 'true');
       document.body.classList.remove('overflow-hidden');

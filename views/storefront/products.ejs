@@ -31,7 +31,7 @@
           </a>
           <div class="space-y-4 p-4">
             <div>
-              <a href="/products/<%= product.slug %>" class="line-clamp-2 text-base font-semibold text-gray-900 transition hover:text-primary"><%= product.name %></a>
+              <a href="/products/<%= product.slug %>" class="block min-h-[3rem] text-base font-semibold text-gray-900 transition hover:text-primary"><%= product.name %></a>
               <div class="mt-2 flex items-center gap-2">
                 <span class="text-base font-semibold text-gray-900"><%= currency.format(product.price || 0) %></span>
                 <% if (product.compare_at_price) { %>
