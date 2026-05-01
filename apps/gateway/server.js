@@ -830,7 +830,7 @@ const bootstrap = async () => {
   app.use('/', webProxy);
 
   app.use((error, req, res, next) => {
-    if (error === invalidCsrfTokenError) {
+    if (error === invalidCsrfTokenError || error?.code === 'EBADCSRFTOKEN') {
       return res.status(403).json({
         error: 'Invalid CSRF token.'
       });

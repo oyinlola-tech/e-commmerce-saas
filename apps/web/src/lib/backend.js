@@ -7,7 +7,8 @@ const {
   setCustomerTokenCookie,
   setPlatformTokenCookie,
   clearAuthCookies,
-  verifyToken
+  verifyToken,
+  isSecureRequest
 } = require('../../../../packages/shared');
 
 const DEFAULT_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=300&q=80';
@@ -29,6 +30,10 @@ const buildSessionCookieOptions = () => {
     sameSite: 'lax',
     maxAge: SESSION_COOKIE_MAX_AGE_MS
   });
+};
+
+const shouldWriteSensitiveCookie = (req) => {
+  return !env.isProduction || isSecureRequest(req);
 };
 
 const createEmptyCart = ({ storeId = null, customerId = null, sessionId = null } = {}) => {
@@ -312,13 +317,15 @@ const ensureStorefrontSession = (req, res) => {
   }
 
   const generated = crypto.randomUUID();
-  res.cookie(SESSION_COOKIE_NAME, generated, buildSessionCookieOptions());
+  if (shouldWriteSensitiveCookie(req)) {
+    res.cookie(SESSION_COOKIE_NAME, generated, buildSessionCookieOptions());
+  }
   req.cookies[SESSION_COOKIE_NAME] = generated;
   return generated;
 };
 
 const clearWebAuthCookies = (req, res, options = {}) => {
-  clearAuthCookies(res, env);
+  clearAuthCookies(req, res, env);
   delete req.cookies.customer_token;
   delete req.cookies.platform_token;
 
@@ -631,7 +638,7 @@ const registerStorefrontCustomer = async (req, res, store, payload = {}) => {
   });
 
   if (response?.token) {
-    setCustomerTokenCookie(res, response.token, env);
+    setCustomerTokenCookie(req, res, response.token, env);
   }
 
   const customer = normalizeCustomer(response?.customer || null);
@@ -655,7 +662,7 @@ const loginStorefrontCustomer = async (req, res, store, payload = {}) => {
   });
 
   if (response?.token) {
-    setCustomerTokenCookie(res, response.token, env);
+    setCustomerTokenCookie(req, res, response.token, env);
   }
 
   const customer = normalizeCustomer(response?.customer || null);
@@ -746,7 +753,7 @@ const registerPlatformUser = async (req, res, payload = {}) => {
   });
 
   if (response?.token) {
-    setPlatformTokenCookie(res, response.token, env);
+    setPlatformTokenCookie(req, res, response.token, env);
   }
 
   return response;
@@ -759,7 +766,7 @@ const loginPlatformUser = async (req, res, payload = {}) => {
   });
 
   if (response?.token) {
-    setPlatformTokenCookie(res, response.token, env);
+    setPlatformTokenCookie(req, res, response.token, env);
   }
 
   return response;

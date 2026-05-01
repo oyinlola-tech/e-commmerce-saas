@@ -10,7 +10,8 @@ const {
   allowBodyFields,
   commonRules,
   storeIdRule,
-  buildCookieOptions
+  buildCookieOptions,
+  isSecureRequest
 } = require('../../../../packages/shared');
 
 const buildSessionCookieOptions = (config) => {
@@ -19,6 +20,14 @@ const buildSessionCookieOptions = (config) => {
     httpOnly: true,
     maxAge: 30 * 24 * 60 * 60 * 1000
   });
+};
+
+const setSessionCookie = (req, res, config, sessionId) => {
+  if (config.isProduction && !isSecureRequest(req)) {
+    return;
+  }
+
+  res.cookie('aisle_session_id', sessionId, buildSessionCookieOptions(config));
 };
 
 const resolveIdentity = (req) => {
@@ -151,7 +160,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       storeId: identity.storeId
     });
 
-    res.cookie('aisle_session_id', identity.sessionId, buildSessionCookieOptions(config));
+    setSessionCookie(req, res, config, identity.sessionId);
     return res.json({ cart: serializeCart(hydrated, identity) });
   }));
 
@@ -209,7 +218,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     });
     await publishCartUpdated(bus, cart, identity);
 
-    res.cookie('aisle_session_id', identity.sessionId, buildSessionCookieOptions(config));
+    setSessionCookie(req, res, config, identity.sessionId);
     return res.status(201).json({ cart: serializeCart(hydrated, identity) });
   }));
 
@@ -281,7 +290,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 
     const cart = await findActiveCart(db, identity);
     if (!cart) {
-      res.cookie('aisle_session_id', identity.sessionId, buildSessionCookieOptions(config));
+      setSessionCookie(req, res, config, identity.sessionId);
       return res.json({ cart: serializeCart(null, identity) });
     }
 
@@ -292,7 +301,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     });
     await publishCartUpdated(bus, cart, identity);
 
-    res.cookie('aisle_session_id', identity.sessionId, buildSessionCookieOptions(config));
+    setSessionCookie(req, res, config, identity.sessionId);
     return res.json({ cart: serializeCart(hydrated, identity) });
   }));
 
