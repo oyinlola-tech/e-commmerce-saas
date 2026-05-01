@@ -1,20 +1,20 @@
 <section class="mx-auto flex max-w-7xl items-center justify-center px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
-  <div class="w-full max-w-md rounded-[2rem] border border-gray-200 bg-white p-8 shadow-soft sm:p-10">
+  <div class="surface-card w-full max-w-md rounded-[2rem] p-8 sm:p-10">
     <div class="text-center">
-      <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Customer login</p>
-      <h1 class="mt-3 text-3xl font-semibold tracking-tight text-gray-900">Sign in to this store</h1>
-      <p class="mt-3 text-base text-gray-600">This account only works on the current storefront, keeping each tenant's customer data isolated.</p>
+      <span class="eyebrow">Customer Login</span>
+      <h1 class="section-title mt-5 text-3xl font-semibold tracking-tight text-slate-950">Sign in to your account</h1>
+      <p class="mt-3 text-base text-slate-600">View order history, speed through checkout, and keep support communication tied to your purchases.</p>
     </div>
 
     <form action="/login" method="post" class="mt-8 space-y-5">
       <div>
-        <label for="email" class="mb-1 block text-sm font-medium text-gray-700">Email</label>
-        <input id="email" name="email" type="email" value="<%= formData && formData.email ? formData.email : '' %>" class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="you@example.com">
+        <label for="email" class="mb-1 block text-sm font-medium text-slate-700">Email</label>
+        <input id="email" name="email" type="email" value="<%= formData && formData.email ? formData.email : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="you@example.com">
         <%- include('../partials/form-error', { field: 'email' }) %>
       </div>
       <div>
-        <label for="password" class="mb-1 block text-sm font-medium text-gray-700">Password</label>
-        <input id="password" name="password" type="password" class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Enter your password">
+        <label for="password" class="mb-1 block text-sm font-medium text-slate-700">Password</label>
+        <input id="password" name="password" type="password" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Enter your password">
         <%- include('../partials/form-error', { field: 'password' }) %>
       </div>
       <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark">
@@ -22,7 +22,7 @@
       </button>
     </form>
 
-    <p class="mt-6 text-center text-sm text-gray-600">
+    <p class="mt-6 text-center text-sm text-slate-600">
       Don't have an account?
       <a href="/register" class="font-semibold text-primary transition hover:underline">Register</a>
     </p>

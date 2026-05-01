@@ -1,110 +1,115 @@
 <%
   const pricingTiers = [
     {
-      name: 'Basic',
-      description: 'For founders launching a single storefront with the essentials in place.',
-      monthly: '$29',
-      yearly: '$279',
-      features: ['1 storefront', 'Custom domain support', 'Basic analytics', 'Email support'],
+      name: 'Launch',
+      description: 'For teams opening a single flagship store with clean operations from day one.',
+      monthly: '$79',
+      yearly: '$759',
+      features: ['1 live storefront', 'International checkout setup', 'Domain management', 'Email support'],
       featured: false
     },
     {
-      name: 'Pro',
-      description: 'For growing teams that need deeper operations and better conversion tooling.',
-      monthly: '$79',
-      yearly: '$759',
-      features: ['5 storefronts', 'Advanced admin tools', 'Abandoned cart recovery', 'Priority support'],
+      name: 'Scale',
+      description: 'For growing operators who need deeper tooling, better service workflows, and multi-region confidence.',
+      monthly: '$249',
+      yearly: '$2,390',
+      features: ['Up to 5 storefronts', 'Support operations console', 'Cross-team workflows', 'Priority service'],
       featured: true
     },
     {
       name: 'Enterprise',
-      description: 'For multi-brand businesses running at scale with more control and SLA support.',
-      monthly: '$199',
-      yearly: '$1,919',
-      features: ['Unlimited storefronts', 'Custom onboarding', 'Dedicated success manager', 'Tailored integrations'],
+      description: 'For multi-brand organizations that require centralized governance, reliability, and hands-on enablement.',
+      monthly: '$799',
+      yearly: '$7,670',
+      features: ['Unlimited storefronts', 'Dedicated onboarding', 'Incident management', 'Custom integrations'],
       featured: false
     }
   ];
+  const overview = metrics || {};
+  const featuredStores = Array.isArray(stores) ? stores : [];
+  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 %>
 <section class="relative overflow-hidden">
-  <div class="absolute inset-x-0 top-0 -z-10 h-[32rem] bg-gradient-to-br from-primary/10 via-white to-sky-50"></div>
+  <div class="hero-orb hero-orb-primary left-0 top-10 h-72 w-72"></div>
+  <div class="hero-orb hero-orb-sky right-0 top-16 h-72 w-72"></div>
   <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
-    <div class="grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+    <div class="grid gap-12 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
       <div class="space-y-8">
-        <span class="inline-flex items-center gap-2 rounded-full border border-primary-soft bg-primary-soft px-4 py-2 text-sm font-medium text-primary">
-          <span class="inline-flex h-2.5 w-2.5 rounded-full bg-primary"></span>
-          Multi-tenant commerce for ambitious brands
-        </span>
+        <span class="eyebrow">Enterprise Commerce Operating System</span>
         <div class="space-y-6">
-          <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-gray-900 sm:text-5xl lg:text-6xl">
-            Launch your online store in minutes
+          <h1 class="section-title max-w-4xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
+            Launch faster, operate tighter, and grow stores globally with <span class="gradient-text">Aisle</span>.
           </h1>
-          <p class="max-w-2xl text-lg leading-8 text-gray-600">
-            Create branded storefronts, manage products and orders, and give every customer a secure checkout experience without rebuilding the basics from scratch.
+          <p class="max-w-2xl text-lg leading-8 text-slate-600">
+            Aisle Commerce Cloud gives modern retail teams a polished storefront, dependable admin workflows, and a real platform control layer for support and reliability.
           </p>
         </div>
         <div class="flex flex-col gap-3 sm:flex-row">
-          <a href="/signup" class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
-            Start free trial
+          <a href="/dashboard" class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+            Enter owner dashboard
           </a>
-          <a href="/#pricing" class="inline-flex items-center justify-center rounded-2xl border border-gray-200 bg-white px-6 py-3.5 text-base font-semibold text-gray-700 transition hover:border-primary hover:text-primary">
-            View pricing
+          <a href="/platform-admin" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-base font-semibold text-slate-700 transition hover:border-primary hover:text-primary">
+            Explore control center
           </a>
         </div>
-        <dl class="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-3">
-          <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <dt class="text-sm font-medium text-gray-500">Stores launched</dt>
-            <dd class="mt-2 text-2xl font-semibold text-gray-900">12,000+</dd>
+        <dl class="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-4">
+          <div class="metric-card rounded-3xl p-5">
+            <dt class="text-sm font-medium text-slate-500">Live stores</dt>
+            <dd class="metric-value mt-2 text-2xl font-semibold text-slate-950"><%= overview.liveStores || 0 %></dd>
           </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <dt class="text-sm font-medium text-gray-500">Checkout uptime</dt>
-            <dd class="mt-2 text-2xl font-semibold text-gray-900">99.9%</dd>
+          <div class="metric-card rounded-3xl p-5">
+            <dt class="text-sm font-medium text-slate-500">GMV (30d)</dt>
+            <dd class="metric-value mt-2 text-2xl font-semibold text-slate-950"><%= currency.format(overview.gmv30d || 0) %></dd>
           </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <dt class="text-sm font-medium text-gray-500">Avg. setup time</dt>
-            <dd class="mt-2 text-2xl font-semibold text-gray-900">18 min</dd>
+          <div class="metric-card rounded-3xl p-5">
+            <dt class="text-sm font-medium text-slate-500">Markets</dt>
+            <dd class="metric-value mt-2 text-2xl font-semibold text-slate-950"><%= overview.activeMarkets || 0 %></dd>
+          </div>
+          <div class="metric-card rounded-3xl p-5">
+            <dt class="text-sm font-medium text-slate-500">Open tickets</dt>
+            <dd class="metric-value mt-2 text-2xl font-semibold text-slate-950"><%= overview.openTickets || 0 %></dd>
           </div>
         </dl>
       </div>
 
-      <div class="relative">
-        <div class="rounded-[2rem] border border-white/70 bg-white p-5 shadow-soft sm:p-6">
-          <div class="rounded-[1.5rem] bg-gray-950 p-5 text-white">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-gray-400">Store overview</p>
-                <p class="mt-2 text-2xl font-semibold">Northline Studio</p>
-              </div>
-              <span class="inline-flex items-center rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">Live</span>
+      <div class="surface-card rounded-[2rem] p-5 sm:p-6">
+        <div class="surface-card-dark rounded-[1.6rem] p-6 text-white">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-slate-300">Operations snapshot</p>
+              <h2 class="section-title mt-2 text-3xl font-semibold">Platform pulse</h2>
             </div>
-            <div class="mt-6 grid gap-4 sm:grid-cols-2">
-              <div class="rounded-2xl bg-white/5 p-4">
-                <p class="text-sm text-gray-400">Revenue</p>
-                <p class="mt-3 text-3xl font-semibold">$48.2k</p>
-                <p class="mt-2 text-sm text-emerald-300">+18% this month</p>
-              </div>
-              <div class="rounded-2xl bg-white/5 p-4">
-                <p class="text-sm text-gray-400">Orders</p>
-                <p class="mt-3 text-3xl font-semibold">1,284</p>
-                <p class="mt-2 text-sm text-gray-300">Across web and mobile</p>
-              </div>
+            <span class="signal-chip border-white/10 bg-white/10 text-white">
+              <span class="signal-dot"></span>
+              Stable
+            </span>
+          </div>
+          <div class="mt-6 grid gap-4 sm:grid-cols-2">
+            <div class="rounded-3xl bg-white/5 p-5">
+              <p class="text-sm text-slate-300">Tenant health</p>
+              <p class="metric-value mt-3 text-3xl font-semibold"><%= overview.liveStores || 0 %>/<%= overview.storesCount || 0 %></p>
+              <p class="mt-2 text-sm text-emerald-300">Live stores operating across multiple regions</p>
             </div>
-            <div class="mt-6 rounded-2xl bg-white p-4 text-gray-900">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-sm font-medium text-gray-500">Today's conversion</p>
-                  <p class="mt-1 text-xl font-semibold">3.8%</p>
-                </div>
-                <span class="rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">Healthy funnel</span>
-              </div>
-              <div class="mt-4 h-24 rounded-2xl bg-gradient-to-r from-primary/15 via-sky-100 to-emerald-50"></div>
+            <div class="rounded-3xl bg-white/5 p-5">
+              <p class="text-sm text-slate-300">Reliability watch</p>
+              <p class="metric-value mt-3 text-3xl font-semibold"><%= overview.unresolvedIncidents || 0 %></p>
+              <p class="mt-2 text-sm text-slate-300">Issues requiring ongoing attention</p>
             </div>
           </div>
-        </div>
-        <div class="absolute -bottom-8 -left-6 hidden rounded-3xl border border-gray-200 bg-white p-5 shadow-soft lg:block">
-          <p class="text-sm font-medium text-gray-500">Custom domain connected</p>
-          <p class="mt-2 text-lg font-semibold text-gray-900">shop.northline.com</p>
-          <p class="mt-1 text-sm text-emerald-600">SSL issued and verified</p>
+          <div class="mt-6 rounded-3xl bg-white p-5 text-slate-900">
+            <p class="text-sm font-medium text-slate-500">Featured tenants</p>
+            <div class="mt-4 space-y-3">
+              <% featuredStores.forEach((store) => { %>
+                <div class="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+                  <div>
+                    <p class="text-sm font-semibold text-slate-950"><%= store.name %></p>
+                    <p class="text-xs text-slate-500"><%= store.markets ? store.markets.join(', ') : 'Global' %></p>
+                  </div>
+                  <span class="text-sm font-semibold text-primary"><%= currency.format(store.monthly_revenue || 0) %></span>
+                </div>
+              <% }) %>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -113,96 +118,96 @@
 
 <section id="features" class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
   <div class="mx-auto max-w-2xl text-center">
-    <span class="text-sm font-semibold uppercase tracking-[0.28em] text-primary">Why teams choose MultiStore</span>
-    <h2 class="mt-4 text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">Everything you need to run storefronts that convert</h2>
-    <p class="mt-4 text-lg leading-8 text-gray-600">
-      Built for founders, operators, and product teams who want a clean path from setup to scale.
+    <span class="eyebrow">Why Aisle</span>
+    <h2 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950">Everything a serious commerce team expects, without the operational drag.</h2>
+    <p class="mt-4 text-lg leading-8 text-slate-600">
+      Built for operators who care about design, conversion, support responsiveness, and platform control in equal measure.
     </p>
   </div>
   <div class="mt-12 grid gap-6 md:grid-cols-3">
-    <article class="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+    <article class="surface-card lift-on-hover rounded-[2rem] p-8">
       <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
         <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-          <path d="M7 7h10v10H7z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
-          <path d="M4 4h16v16H4z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M4 4h16v16H4z" stroke-width="1.5"></path>
+          <path d="M8 8h8v8H8z" stroke-width="1.5"></path>
         </svg>
       </span>
-      <h3 class="mt-6 text-xl font-semibold text-gray-900">Custom domain</h3>
-      <p class="mt-3 text-base leading-7 text-gray-600">
-        Give every store its own polished web presence with subdomains today and custom domains when owners are ready.
+      <h3 class="section-title mt-6 text-2xl font-semibold text-slate-950">Storefronts with presence</h3>
+      <p class="mt-3 text-base leading-7 text-slate-600">
+        Launch premium storefronts with stronger visual identity, better mobile rhythm, and content that feels ready for international audiences.
       </p>
     </article>
-    <article class="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+    <article class="surface-card lift-on-hover rounded-[2rem] p-8">
       <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
         <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-          <path d="M4 7h16" stroke-width="1.5" stroke-linecap="round"></path>
-          <path d="M6 11h5" stroke-width="1.5" stroke-linecap="round"></path>
-          <path d="M6 15h8" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M4 7h16" stroke-width="1.5"></path>
+          <path d="M6 12h12" stroke-width="1.5"></path>
+          <path d="M8 17h8" stroke-width="1.5"></path>
           <rect x="3.25" y="4.25" width="17.5" height="15.5" rx="2.75" stroke-width="1.5"></rect>
         </svg>
       </span>
-      <h3 class="mt-6 text-xl font-semibold text-gray-900">Full admin panel</h3>
-      <p class="mt-3 text-base leading-7 text-gray-600">
-        Manage products, inventory, orders, and settings from a clear admin dashboard designed for everyday operations.
+      <h3 class="section-title mt-6 text-2xl font-semibold text-slate-950">Operations that stay clear</h3>
+      <p class="mt-3 text-base leading-7 text-slate-600">
+        Product, order, settings, and domain workflows stay fast for teams that need clean execution instead of scattered admin tooling.
       </p>
     </article>
-    <article class="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+    <article class="surface-card lift-on-hover rounded-[2rem] p-8">
       <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
         <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-          <path d="M7 10V8a5 5 0 0110 0v2" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M7 10V8a5 5 0 0110 0v2" stroke-width="1.5"></path>
           <rect x="5" y="10" width="14" height="10" rx="2" stroke-width="1.5"></rect>
-          <path d="M12 14v2" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M12 14v2" stroke-width="1.5"></path>
         </svg>
       </span>
-      <h3 class="mt-6 text-xl font-semibold text-gray-900">Secure checkout</h3>
-      <p class="mt-3 text-base leading-7 text-gray-600">
-        Deliver a reassuring, mobile-friendly checkout flow with customer accounts that stay scoped to the current store.
+      <h3 class="section-title mt-6 text-2xl font-semibold text-slate-950">Control above the store</h3>
+      <p class="mt-3 text-base leading-7 text-slate-600">
+        Platform admins can manage tenants, respond as support, and track incidents from a dedicated control center built for real operations.
       </p>
     </article>
   </div>
 </section>
 
-<section id="pricing" class="border-y border-gray-200 bg-white">
+<section id="pricing" class="border-y border-slate-200/80 bg-white/70 backdrop-blur">
   <div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
     <div class="mx-auto max-w-2xl text-center">
-      <span class="text-sm font-semibold uppercase tracking-[0.28em] text-primary">Pricing</span>
-      <h2 class="mt-4 text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">Simple plans that scale with your stores</h2>
-      <p data-billing-copy class="mt-4 text-lg text-gray-600">Switch to annual billing and save 20%</p>
+      <span class="eyebrow">Pricing</span>
+      <h2 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950">Plans designed for teams with ambition, not hobby overhead.</h2>
+      <p data-billing-copy class="mt-4 text-lg text-slate-600">Switch to annual billing and save 20%</p>
     </div>
 
     <div class="mt-8 flex items-center justify-center gap-4">
-      <span class="text-sm font-medium text-gray-600">Monthly</span>
+      <span class="text-sm font-medium text-slate-600">Monthly</span>
       <label class="relative inline-flex cursor-pointer items-center">
         <input type="checkbox" data-pricing-toggle class="peer sr-only">
-        <span class="h-7 w-14 rounded-full bg-gray-200 transition peer-checked:bg-primary"></span>
+        <span class="h-7 w-14 rounded-full bg-slate-200 transition peer-checked:bg-primary"></span>
         <span class="absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition peer-checked:translate-x-7"></span>
       </label>
-      <span class="text-sm font-medium text-gray-600">Yearly</span>
+      <span class="text-sm font-medium text-slate-600">Yearly</span>
     </div>
 
     <div class="mt-12 grid gap-6 lg:grid-cols-3">
       <% pricingTiers.forEach((tier) => { %>
-        <article data-price-card data-price-monthly="<%= tier.monthly %>" data-price-yearly="<%= tier.yearly %>" class="rounded-3xl border p-8 shadow-sm <%= tier.featured ? 'border-primary bg-gray-950 text-white shadow-soft' : 'border-gray-200 bg-white text-gray-900' %>">
+        <article data-price-card data-price-monthly="<%= tier.monthly %>" data-price-yearly="<%= tier.yearly %>" class="rounded-[2rem] border p-8 shadow-sm <%= tier.featured ? 'border-primary bg-slate-950 text-white shadow-glow' : 'border-slate-200 bg-white text-slate-900' %>">
           <% if (tier.featured) { %>
-            <span class="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-primary-light">Most popular</span>
+            <span class="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200">Best for growing teams</span>
           <% } %>
-          <h3 class="mt-4 text-2xl font-semibold"><%= tier.name %></h3>
-          <p class="mt-3 text-sm leading-6 <%= tier.featured ? 'text-gray-300' : 'text-gray-600' %>"><%= tier.description %></p>
+          <h3 class="section-title mt-4 text-3xl font-semibold"><%= tier.name %></h3>
+          <p class="mt-3 text-sm leading-6 <%= tier.featured ? 'text-slate-300' : 'text-slate-600' %>"><%= tier.description %></p>
           <div class="mt-8 flex items-end gap-2">
-            <span data-price-value class="text-4xl font-semibold tracking-tight"><%= tier.monthly %></span>
-            <span data-price-suffix class="pb-1 text-sm <%= tier.featured ? 'text-gray-300' : 'text-gray-500' %>">/month</span>
+            <span data-price-value class="section-title text-4xl font-semibold tracking-tight"><%= tier.monthly %></span>
+            <span data-price-suffix class="pb-1 text-sm <%= tier.featured ? 'text-slate-300' : 'text-slate-500' %>">/month</span>
           </div>
           <ul class="mt-8 space-y-3">
             <% tier.features.forEach((feature) => { %>
-              <li class="flex items-start gap-3 text-sm <%= tier.featured ? 'text-gray-200' : 'text-gray-600' %>">
-                <svg class="mt-0.5 h-5 w-5 flex-none <%= tier.featured ? 'text-primary-light' : 'text-primary' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <li class="flex items-start gap-3 text-sm <%= tier.featured ? 'text-slate-200' : 'text-slate-600' %>">
+                <svg class="mt-0.5 h-5 w-5 flex-none <%= tier.featured ? 'text-emerald-200' : 'text-primary' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                   <path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.2 7.2a1 1 0 01-1.415 0l-3-3a1 1 0 111.414-1.42l2.293 2.294 6.493-6.494a1 1 0 011.415 0z" clip-rule="evenodd"></path>
                 </svg>
                 <span><%= feature %></span>
               </li>
             <% }) %>
           </ul>
-          <a href="/signup" class="mt-8 inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition <%= tier.featured ? 'bg-primary text-white hover:bg-primary-dark' : 'border border-gray-200 bg-white text-gray-700 hover:border-primary hover:text-primary' %>">
+          <a href="/dashboard" class="mt-8 inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition <%= tier.featured ? 'bg-primary text-white hover:bg-primary-dark' : 'border border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary' %>">
             Choose <%= tier.name %>
           </a>
         </article>
@@ -214,24 +219,24 @@
 <section id="faq" class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
   <div class="grid gap-10 lg:grid-cols-[0.85fr_1.15fr]">
     <div>
-      <span class="text-sm font-semibold uppercase tracking-[0.28em] text-primary">FAQ</span>
-      <h2 class="mt-4 text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">Answers for founders building fast</h2>
-      <p class="mt-4 text-lg leading-8 text-gray-600">
-        The backend handles tenant routing and data isolation, while this frontend keeps every experience lightweight, responsive, and store aware.
+      <span class="eyebrow">FAQ</span>
+      <h2 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950">Answers for operators building beyond one market.</h2>
+      <p class="mt-4 text-lg leading-8 text-slate-600">
+        Aisle is designed for teams that need strong storefront UX and serious day-two operations in the same system.
       </p>
     </div>
     <div class="space-y-4">
-      <article class="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 class="text-lg font-semibold text-gray-900">Can each store use its own branding?</h3>
-        <p class="mt-3 text-base leading-7 text-gray-600">Yes. The storefront and admin templates are set up to respect `store.theme_color`, `store.logo`, and store-specific identity details.</p>
+      <article class="surface-card rounded-[2rem] p-6">
+        <h3 class="text-lg font-semibold text-slate-950">Can I manage multiple brands from one platform?</h3>
+        <p class="mt-3 text-base leading-7 text-slate-600">Yes. The owner workspace manages brand-level stores, while the control center watches the wider platform across tenants.</p>
       </article>
-      <article class="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 class="text-lg font-semibold text-gray-900">Are customer accounts shared between stores?</h3>
-        <p class="mt-3 text-base leading-7 text-gray-600">No. Customer login and registration are intentionally scoped to the active store so credentials stay isolated between tenants.</p>
+      <article class="surface-card rounded-[2rem] p-6">
+        <h3 class="text-lg font-semibold text-slate-950">Is there a dedicated support and incident layer?</h3>
+        <p class="mt-3 text-base leading-7 text-slate-600">Yes. Support conversations and incident workflows are surfaced in platform admin so teams can respond and coordinate from one place.</p>
       </article>
-      <article class="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 class="text-lg font-semibold text-gray-900">Can I add a custom domain later?</h3>
-        <p class="mt-3 text-base leading-7 text-gray-600">Absolutely. Owners can start on a subdomain and later connect a custom domain through the domain setup screen.</p>
+      <article class="surface-card rounded-[2rem] p-6">
+        <h3 class="text-lg font-semibold text-slate-950">Does the storefront support international operations?</h3>
+        <p class="mt-3 text-base leading-7 text-slate-600">The data model, content, and page structure are prepared for multi-market selling, domain management, and region-aware service messaging.</p>
       </article>
     </div>
   </div>

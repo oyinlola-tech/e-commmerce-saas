@@ -1,8 +1,26 @@
+const fs = require('fs');
+const path = require('path');
 const seed = require('../data/seed');
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-const state = clone(seed);
+const runtimeStatePath = path.join(__dirname, '..', 'data', 'runtime-state.json');
+
+const loadState = () => {
+  if (fs.existsSync(runtimeStatePath)) {
+    return JSON.parse(fs.readFileSync(runtimeStatePath, 'utf8'));
+  }
+
+  const initialState = clone(seed);
+  fs.writeFileSync(runtimeStatePath, JSON.stringify(initialState, null, 2));
+  return initialState;
+};
+
+const state = loadState();
+
+const persistState = () => {
+  fs.writeFileSync(runtimeStatePath, JSON.stringify(state, null, 2));
+};
 
 const themePalette = ['#0F766E', '#1D4ED8', '#B45309', '#BE123C', '#0B7285', '#4C1D95'];
 
@@ -257,6 +275,7 @@ const addCartItem = (storeId, productId, quantity = 1) => {
     });
   }
 
+  persistState();
   return clone(ensureCartTotals(cart));
 };
 
@@ -274,17 +293,20 @@ const updateCartItemQuantity = (storeId, productId, quantity) => {
     target.quantity = qty;
   }
 
+  persistState();
   return clone(ensureCartTotals(cart));
 };
 
 const removeCartItem = (storeId, productId) => {
   const cart = ensureStoreCart(storeId);
   cart.items = cart.items.filter((item) => String(item.product_id) !== String(productId));
+  persistState();
   return clone(ensureCartTotals(cart));
 };
 
 const clearCart = (storeId) => {
   state.carts[storeId] = { items: [], total: 0 };
+  persistState();
   return getCart(storeId);
 };
 
@@ -339,6 +361,7 @@ const createStore = ({ name, subdomain, ownerId }) => {
 
   state.stores.unshift(store);
   state.carts[store.id] = { items: [], total: 0 };
+  persistState();
   return store;
 };
 
@@ -366,6 +389,7 @@ const updateStoreSettings = (storeId, payload = {}) => {
     store.return_window_days = parsedReturnWindow;
   }
 
+  persistState();
   return store;
 };
 
@@ -377,6 +401,7 @@ const updateStoreDomain = (storeId, customDomain) => {
 
   store.custom_domain = String(customDomain || '').trim();
   store.ssl_status = store.custom_domain ? 'pending' : 'issued';
+  persistState();
   return store;
 };
 
@@ -428,6 +453,7 @@ const createProduct = (storeId, payload = {}) => {
   }
 
   state.products.unshift(product);
+  persistState();
   return product;
 };
 
@@ -442,6 +468,7 @@ const updateProduct = (storeId, productId, payload = {}) => {
     product.slug = slugify(product.name || product.id);
   }
 
+  persistState();
   return product;
 };
 
@@ -457,6 +484,7 @@ const deleteProduct = (storeId, productId) => {
     ensureCartTotals(state.carts[storeId]);
   }
 
+  persistState();
   return true;
 };
 
@@ -468,6 +496,7 @@ const createCustomer = (storeId, payload = {}) => {
     existingCustomer.city = String(payload.city || existingCustomer.city || '').trim();
     existingCustomer.country = String(payload.country || existingCustomer.country || '').trim();
     existingCustomer.postal_code = String(payload.postal_code || existingCustomer.postal_code || '').trim();
+    persistState();
     return existingCustomer;
   }
 
@@ -486,6 +515,7 @@ const createCustomer = (storeId, payload = {}) => {
   };
 
   state.customers.unshift(customer);
+  persistState();
   return customer;
 };
 
@@ -536,6 +566,7 @@ const createOrder = (storeId, customer, payload = {}) => {
   activeCustomer.lifetime_value = Number(activeCustomer.lifetime_value || 0) + Number(order.total || 0);
   clearCart(storeId);
 
+  persistState();
   return order;
 };
 
@@ -546,6 +577,7 @@ const updateOrderStatus = (storeId, orderId, status) => {
   }
 
   order.status = toTitleCase(status || order.status);
+  persistState();
   return order;
 };
 
@@ -568,6 +600,7 @@ const updateSupportConversation = (conversationId, payload = {}) => {
   }
 
   conversation.last_message_at = new Date().toISOString();
+  persistState();
   return conversation;
 };
 
@@ -598,6 +631,7 @@ const replyToSupportConversation = (conversationId, payload = {}) => {
   }
 
   conversation.last_message_at = new Date().toISOString();
+  persistState();
   return conversation;
 };
 
@@ -625,6 +659,7 @@ const updateIncident = (incidentId, payload = {}) => {
   }
 
   incident.updated_at = new Date().toISOString();
+  persistState();
   return incident;
 };
 

@@ -1,39 +1,63 @@
 <section class="space-y-8">
   <div>
     <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Brand settings</p>
-    <h1 class="mt-2 text-3xl font-semibold tracking-tight text-gray-900">Store Settings</h1>
-    <p class="mt-3 max-w-2xl text-base leading-7 text-gray-600">Update the visible identity of this tenant so the storefront and admin feel clearly aligned to the brand.</p>
+    <h1 class="section-title mt-2 text-3xl font-semibold tracking-tight text-slate-950">Store Settings</h1>
+    <p class="mt-3 max-w-2xl text-base leading-7 text-slate-600">Keep identity, customer-facing promises, and support details aligned across storefront and operations.</p>
   </div>
 
   <form action="/admin/settings" method="post" class="grid gap-8 xl:grid-cols-[1fr_0.9fr]">
-    <section class="space-y-6 rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
+    <section class="surface-card space-y-6 rounded-[2rem] p-6">
       <div>
-        <label for="storeName" class="mb-1 block text-sm font-medium text-gray-700">Store Name</label>
-        <input id="storeName" name="name" type="text" value="<%= store && store.name ? store.name : '' %>" class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Northline Studio">
+        <label for="storeName" class="mb-1 block text-sm font-medium text-slate-700">Store name</label>
+        <input id="storeName" name="name" type="text" value="<%= store && store.name ? store.name : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Aisle">
         <%- include('../partials/form-error', { field: 'name' }) %>
       </div>
       <div>
-        <label for="logo" class="mb-1 block text-sm font-medium text-gray-700">Logo URL</label>
-        <input id="logo" name="logo" type="url" value="<%= store && store.logo ? store.logo : '' %>" class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="https://example.com/logo.png">
-        <%- include('../partials/form-error', { field: 'logo' }) %>
+        <label for="tagline" class="mb-1 block text-sm font-medium text-slate-700">Tagline</label>
+        <input id="tagline" name="tagline" type="text" value="<%= store && store.tagline ? store.tagline : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Cross-border essentials for modern homes, studios, and teams.">
       </div>
       <div>
-        <label for="themeColor" class="mb-1 block text-sm font-medium text-gray-700">Theme Colour</label>
-        <div class="flex items-center gap-4 rounded-2xl border border-gray-300 bg-white px-4 py-3 shadow-sm">
-          <input id="themeColor" name="theme_color" type="color" value="<%= store && store.theme_color ? store.theme_color : '#4F46E5' %>" class="h-12 w-16 rounded-xl border-0 bg-transparent p-0">
+        <label for="description" class="mb-1 block text-sm font-medium text-slate-700">Description</label>
+        <textarea id="description" name="description" rows="6" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Describe the store experience..."><%= store && store.description ? store.description : '' %></textarea>
+      </div>
+      <div>
+        <label for="logo" class="mb-1 block text-sm font-medium text-slate-700">Logo URL</label>
+        <input id="logo" name="logo" type="url" value="<%= store && store.logo ? store.logo : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="https://example.com/logo.png">
+      </div>
+      <div>
+        <label for="themeColor" class="mb-1 block text-sm font-medium text-slate-700">Theme colour</label>
+        <div class="flex items-center gap-4 rounded-2xl border border-slate-300 bg-white px-4 py-3 shadow-sm">
+          <input id="themeColor" name="theme_color" type="color" value="<%= store && store.theme_color ? store.theme_color : '#0F766E' %>" class="h-12 w-16 rounded-xl border-0 bg-transparent p-0">
           <div>
-            <p class="text-sm font-medium text-gray-900"><%= store && store.theme_color ? store.theme_color : '#4F46E5' %></p>
-            <p class="mt-1 text-sm text-gray-500">Used for storefront buttons, links, badges, and focus states.</p>
+            <p class="text-sm font-medium text-slate-900"><%= store && store.theme_color ? store.theme_color : '#0F766E' %></p>
+            <p class="mt-1 text-sm text-slate-500">Applied to calls-to-action, badges, links, and focus states.</p>
           </div>
         </div>
-        <%- include('../partials/form-error', { field: 'theme_color' }) %>
+      </div>
+      <div class="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label for="supportEmail" class="mb-1 block text-sm font-medium text-slate-700">Support email</label>
+          <input id="supportEmail" name="support_email" type="email" value="<%= store && store.support_email ? store.support_email : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="support@example.com">
+        </div>
+        <div>
+          <label for="contactPhone" class="mb-1 block text-sm font-medium text-slate-700">Contact phone</label>
+          <input id="contactPhone" name="contact_phone" type="text" value="<%= store && store.contact_phone ? store.contact_phone : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="+1 000 000 0000">
+        </div>
+        <div>
+          <label for="fulfillmentSla" class="mb-1 block text-sm font-medium text-slate-700">Fulfillment SLA</label>
+          <input id="fulfillmentSla" name="fulfillment_sla" type="text" value="<%= store && store.fulfillment_sla ? store.fulfillment_sla : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Ships same day before 16:00 UTC">
+        </div>
+        <div>
+          <label for="returnWindow" class="mb-1 block text-sm font-medium text-slate-700">Return window (days)</label>
+          <input id="returnWindow" name="return_window_days" type="number" min="1" step="1" value="<%= store && store.return_window_days ? store.return_window_days : 30 %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+        </div>
       </div>
     </section>
 
     <aside class="space-y-6">
-      <section class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-        <p class="text-sm font-medium text-gray-500">Preview card</p>
-        <div class="mt-5 rounded-[1.75rem] border border-gray-200 bg-gray-50 p-5">
+      <section class="surface-card rounded-[2rem] p-6">
+        <p class="text-sm font-medium text-slate-500">Preview</p>
+        <div class="mt-5 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
           <div class="flex items-center gap-3">
             <% if (store && store.logo) { %>
               <img src="<%= store.logo %>" alt="<%= store.name %> logo" class="h-12 w-12 rounded-2xl object-cover">
@@ -41,19 +65,19 @@
               <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-lg font-semibold text-white"><%= store && store.name ? store.name.charAt(0).toUpperCase() : 'S' %></span>
             <% } %>
             <div>
-              <p class="text-base font-semibold text-gray-900"><%= store && store.name ? store.name : 'Your Store' %></p>
-              <p class="text-sm text-gray-500"><%= store && store.subdomain ? `${store.subdomain}.yoursaas.com` : 'store.yoursaas.com' %></p>
+              <p class="text-base font-semibold text-slate-900"><%= store && store.name ? store.name : 'Aisle' %></p>
+              <p class="text-sm text-slate-500"><%= store && store.tagline ? store.tagline : 'Global storefront experience' %></p>
             </div>
           </div>
           <div class="mt-5 rounded-2xl bg-white p-4">
-            <button type="button" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm">Primary storefront button</button>
+            <button type="button" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-soft">Primary storefront button</button>
           </div>
         </div>
       </section>
 
-      <div class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-        <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark">
-          Save
+      <div class="surface-card rounded-[2rem] p-6">
+        <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+          Save Settings
         </button>
       </div>
     </aside>

@@ -6,76 +6,102 @@
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
   <div class="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
     <form action="/checkout" method="post" data-checkout-form class="order-2 space-y-6 lg:order-1">
-      <section class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Checkout</p>
-        <h1 class="mt-2 text-3xl font-semibold tracking-tight text-gray-900">Shipping details</h1>
+      <section class="surface-card rounded-[2rem] p-6">
+        <span class="eyebrow">Checkout</span>
+        <h1 class="section-title mt-5 text-3xl font-semibold tracking-tight text-slate-950">Shipping details</h1>
         <div class="mt-8 grid gap-5 sm:grid-cols-2">
           <div class="sm:col-span-2">
-            <label for="name" class="mb-1 block text-sm font-medium text-gray-700">Name</label>
-            <input id="name" name="name" type="text" value="<%= customer && customer.name ? customer.name : '' %>" class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Jane Doe">
+            <label for="name" class="mb-1 block text-sm font-medium text-slate-700">Full name</label>
+            <input id="name" name="name" type="text" value="<%= customer && customer.name ? customer.name : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Amara Bello">
             <%- include('../partials/form-error', { field: 'name' }) %>
           </div>
           <div class="sm:col-span-2">
-            <label for="address" class="mb-1 block text-sm font-medium text-gray-700">Address</label>
-            <input id="address" name="address" type="text" class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="123 Market Street">
+            <label for="address" class="mb-1 block text-sm font-medium text-slate-700">Address</label>
+            <input id="address" name="address" type="text" value="<%= customer && customer.address ? customer.address : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="17 Marina Road">
             <%- include('../partials/form-error', { field: 'address' }) %>
           </div>
           <div>
-            <label for="city" class="mb-1 block text-sm font-medium text-gray-700">City</label>
-            <input id="city" name="city" type="text" class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Lagos">
+            <label for="city" class="mb-1 block text-sm font-medium text-slate-700">City</label>
+            <input id="city" name="city" type="text" value="<%= customer && customer.city ? customer.city : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Lagos">
             <%- include('../partials/form-error', { field: 'city' }) %>
           </div>
           <div>
-            <label for="country" class="mb-1 block text-sm font-medium text-gray-700">Country</label>
-            <input id="country" name="country" type="text" class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Nigeria">
+            <label for="country" class="mb-1 block text-sm font-medium text-slate-700">Country</label>
+            <input id="country" name="country" type="text" value="<%= customer && customer.country ? customer.country : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Nigeria">
             <%- include('../partials/form-error', { field: 'country' }) %>
           </div>
           <div class="sm:col-span-2">
-            <label for="postalCode" class="mb-1 block text-sm font-medium text-gray-700">Postal Code</label>
-            <input id="postalCode" name="postal_code" type="text" class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="100001">
+            <label for="postalCode" class="mb-1 block text-sm font-medium text-slate-700">Postal code</label>
+            <input id="postalCode" name="postal_code" type="text" value="<%= customer && customer.postal_code ? customer.postal_code : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="100001">
             <%- include('../partials/form-error', { field: 'postal_code' }) %>
           </div>
         </div>
       </section>
 
-      <section class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-        <p class="text-sm font-medium text-gray-500">Payment</p>
-        <div class="mt-5 rounded-3xl border border-dashed border-gray-300 bg-gray-50 px-6 py-10">
-          <p class="text-base font-semibold text-gray-900">Payment card element placeholder</p>
-          <p class="mt-2 text-sm leading-6 text-gray-500">Payment (Flutterwave or Paystack) card element will be injected here by the backend or payment microservice.</p>
+      <section class="surface-card rounded-[2rem] p-6">
+        <p class="text-sm font-medium text-slate-500">Payment method</p>
+        <div class="mt-5 grid gap-4 sm:grid-cols-3">
+          <label class="rounded-3xl border border-slate-200 bg-white p-4 transition hover:border-primary">
+            <input type="radio" name="payment_method" value="card" class="sr-only" checked>
+            <p class="text-sm font-semibold text-slate-900">Card</p>
+            <p class="mt-2 text-sm text-slate-500">Visa, Mastercard, Amex</p>
+          </label>
+          <label class="rounded-3xl border border-slate-200 bg-white p-4 transition hover:border-primary">
+            <input type="radio" name="payment_method" value="apple pay" class="sr-only">
+            <p class="text-sm font-semibold text-slate-900">Wallet</p>
+            <p class="mt-2 text-sm text-slate-500">Apple Pay or Google Pay</p>
+          </label>
+          <label class="rounded-3xl border border-slate-200 bg-white p-4 transition hover:border-primary">
+            <input type="radio" name="payment_method" value="bank transfer" class="sr-only">
+            <p class="text-sm font-semibold text-slate-900">Transfer</p>
+            <p class="mt-2 text-sm text-slate-500">Manual confirmation flow</p>
+          </label>
+        </div>
+        <div class="mt-5 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="cardholder" class="mb-1 block text-sm font-medium text-slate-700">Cardholder</label>
+              <input id="cardholder" name="cardholder" type="text" value="<%= customer && customer.name ? customer.name : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Name on card">
+            </div>
+            <div>
+              <label for="reference" class="mb-1 block text-sm font-medium text-slate-700">Reference note</label>
+              <input id="reference" name="reference" type="text" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Optional PO or delivery note">
+            </div>
+          </div>
+          <p class="mt-4 text-sm leading-6 text-slate-500">This preview captures payment intent and shipping details. Live charge capture can be connected to your preferred gateway in production.</p>
         </div>
       </section>
 
-      <button type="submit" data-checkout-submit class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-5 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark">
-        Place Order
+      <button type="submit" data-checkout-submit class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-5 py-3.5 text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+        Place order
       </button>
     </form>
 
     <aside class="order-1 space-y-6 lg:order-2">
-      <section class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-        <p class="text-sm font-medium text-gray-500">Order summary</p>
+      <section class="surface-card rounded-[2rem] p-6">
+        <p class="text-sm font-medium text-slate-500">Order summary</p>
         <div class="mt-6 space-y-4">
           <% cartItems.forEach((item) => { %>
             <article class="flex items-center gap-4">
-              <img src="<%= item.image || 'https://placehold.co/96x96?text=Item' %>" alt="<%= item.name %>" class="h-16 w-16 rounded-2xl object-cover">
+              <img src="<%= item.image %>" alt="<%= item.name %>" class="h-16 w-16 rounded-2xl object-cover">
               <div class="min-w-0 flex-1">
-                <h2 class="truncate text-sm font-semibold text-gray-900"><%= item.name %></h2>
-                <p class="mt-1 text-sm text-gray-500">Qty <%= item.quantity || 1 %></p>
+                <h2 class="truncate text-sm font-semibold text-slate-900"><%= item.name %></h2>
+                <p class="mt-1 text-sm text-slate-500">Qty <%= item.quantity || 1 %></p>
               </div>
-              <p class="text-sm font-semibold text-gray-900"><%= currency.format((item.price || 0) * (item.quantity || 1)) %></p>
+              <p class="text-sm font-semibold text-slate-900"><%= currency.format((item.price || 0) * (item.quantity || 1)) %></p>
             </article>
           <% }) %>
         </div>
-        <div class="mt-6 border-t border-gray-200 pt-6 text-sm text-gray-600">
+        <div class="mt-6 border-t border-slate-200 pt-6 text-sm text-slate-600">
           <div class="flex items-center justify-between">
             <span>Subtotal</span>
-            <span data-cart-subtotal class="font-semibold text-gray-900"><%= currency.format(cartTotal || 0) %></span>
+            <span data-cart-subtotal class="font-semibold text-slate-900"><%= currency.format(cartTotal || 0) %></span>
           </div>
           <div class="mt-4 flex items-center justify-between">
             <span>Shipping</span>
-            <span>Calculated at checkout</span>
+            <span>Calculated in fulfillment SLA</span>
           </div>
-          <div class="mt-6 flex items-center justify-between text-lg font-semibold text-gray-900">
+          <div class="mt-6 flex items-center justify-between text-lg font-semibold text-slate-900">
             <span>Total</span>
             <span data-cart-total><%= currency.format(cartTotal || 0) %></span>
           </div>

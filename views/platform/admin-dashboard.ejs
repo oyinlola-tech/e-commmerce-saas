@@ -1,0 +1,169 @@
+<%
+  const overview = metrics || {};
+  const tenantList = Array.isArray(stores) ? stores : [];
+  const ticketList = Array.isArray(supportQueue) ? supportQueue : [];
+  const incidentList = Array.isArray(incidents) ? incidents : [];
+  const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const healthBadge = (status) => {
+    switch ((status || '').toLowerCase()) {
+      case 'attention':
+        return 'bg-amber-50 text-amber-700';
+      case 'watch':
+        return 'bg-sky-50 text-sky-700';
+      case 'healthy':
+      default:
+        return 'bg-emerald-50 text-emerald-700';
+    }
+  };
+  const severityBadge = (severity) => {
+    switch ((severity || '').toLowerCase()) {
+      case 'critical':
+        return 'bg-rose-50 text-rose-700';
+      case 'major':
+        return 'bg-amber-50 text-amber-700';
+      default:
+        return 'bg-slate-100 text-slate-700';
+    }
+  };
+%>
+<section class="space-y-8">
+  <div class="surface-card relative overflow-hidden rounded-[2rem] p-8 sm:p-10">
+    <div class="hero-orb hero-orb-primary -left-10 top-0 h-40 w-40"></div>
+    <div class="hero-orb hero-orb-sky right-0 top-4 h-44 w-44"></div>
+    <div class="relative grid gap-8 xl:grid-cols-[1.05fr_0.95fr] xl:items-center">
+      <div class="space-y-6">
+        <span class="eyebrow">Platform Operations</span>
+        <div class="space-y-4">
+          <h1 class="section-title max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">One command layer for storefront growth, support, and reliability.</h1>
+          <p class="max-w-2xl text-lg leading-8 text-slate-600">
+            Watch tenant performance, clear support backlog, and close incidents before they become revenue problems.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <a href="/platform-admin/support" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">Open support queue</a>
+          <a href="/platform-admin/incidents" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary">Review incidents</a>
+        </div>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <article class="metric-card rounded-3xl p-5">
+          <p class="text-sm font-medium text-slate-500">Stores online</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= overview.liveStores || 0 %>/<%= overview.storesCount || 0 %></p>
+          <p class="mt-2 text-sm text-slate-500">Live tenants currently serving customers.</p>
+        </article>
+        <article class="metric-card rounded-3xl p-5">
+          <p class="text-sm font-medium text-slate-500">GMV (30 days)</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= currency.format(overview.gmv30d || 0) %></p>
+          <p class="mt-2 text-sm text-slate-500">Platform-wide transaction volume across all regions.</p>
+        </article>
+        <article class="metric-card rounded-3xl p-5">
+          <p class="text-sm font-medium text-slate-500">Open tickets</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= overview.openTickets || 0 %></p>
+          <p class="mt-2 text-sm text-slate-500">Conversations still awaiting action or customer closure.</p>
+        </article>
+        <article class="metric-card rounded-3xl p-5">
+          <p class="text-sm font-medium text-slate-500">Unresolved incidents</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= overview.unresolvedIncidents || 0 %></p>
+          <p class="mt-2 text-sm text-slate-500">Operational issues currently under investigation or monitoring.</p>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid gap-8 xl:grid-cols-[1.08fr_0.92fr]">
+    <section class="surface-card rounded-[2rem] p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="text-sm font-medium text-slate-500">Tenant health</p>
+          <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Performance at a glance</h2>
+        </div>
+        <a href="/platform-admin/stores" class="text-sm font-semibold text-primary transition hover:underline">View all tenants</a>
+      </div>
+      <div class="mt-6 space-y-4">
+        <% tenantList.slice(0, 4).forEach((store) => { %>
+          <article class="lift-on-hover rounded-3xl border border-slate-200 bg-white p-5">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <h3 class="text-lg font-semibold text-slate-950"><%= store.name %></h3>
+                  <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize <%= healthBadge(store.operational_status) %>"><%= store.operational_status || 'healthy' %></span>
+                </div>
+                <p class="mt-2 text-sm leading-6 text-slate-600"><%= store.tagline %></p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <a href="/stores/<%= store.id %>/preview" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Storefront</a>
+                <a href="/stores/<%= store.id %>/manage" class="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-dark">Open admin</a>
+              </div>
+            </div>
+            <div class="mt-5 grid gap-3 sm:grid-cols-4">
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Revenue</p>
+                <p class="mt-2 text-lg font-semibold text-slate-950"><%= currency.format(store.monthly_revenue || 0) %></p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Orders</p>
+                <p class="mt-2 text-lg font-semibold text-slate-950"><%= store.monthly_orders || 0 %></p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Health score</p>
+                <p class="mt-2 text-lg font-semibold text-slate-950"><%= store.health_score || 0 %></p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Backlog</p>
+                <p class="mt-2 text-lg font-semibold text-slate-950"><%= store.support_backlog || 0 %></p>
+              </div>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+    </section>
+
+    <div class="space-y-8">
+      <section class="surface-card rounded-[2rem] p-6">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium text-slate-500">Support queue</p>
+            <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Customers waiting on action</h2>
+          </div>
+          <a href="/platform-admin/support" class="text-sm font-semibold text-primary transition hover:underline">Open queue</a>
+        </div>
+        <div class="mt-6 space-y-4">
+          <% ticketList.forEach((conversation) => { %>
+            <article class="rounded-3xl border border-slate-200 bg-white p-4">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-slate-950"><%= conversation.subject %></p>
+                  <p class="mt-1 text-sm text-slate-500"><%= conversation.customer_name %> • <%= conversation.channel %> • <%= conversation.region %></p>
+                </div>
+                <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= conversation.priority %></span>
+              </div>
+            </article>
+          <% }) %>
+        </div>
+      </section>
+
+      <section class="surface-card rounded-[2rem] p-6">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium text-slate-500">Reliability</p>
+            <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Active incident watch</h2>
+          </div>
+          <a href="/platform-admin/incidents" class="text-sm font-semibold text-primary transition hover:underline">Manage incidents</a>
+        </div>
+        <div class="mt-6 space-y-4">
+          <% incidentList.forEach((incident) => { %>
+            <article class="rounded-3xl border border-slate-200 bg-white p-4">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-slate-950"><%= incident.area %></p>
+                  <p class="mt-1 text-sm leading-6 text-slate-500"><%= incident.summary %></p>
+                </div>
+                <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] <%= severityBadge(incident.severity) %>"><%= incident.severity %></span>
+              </div>
+            </article>
+          <% }) %>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>

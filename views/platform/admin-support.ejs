@@ -1,0 +1,105 @@
+<%
+  const queue = Array.isArray(conversations) ? conversations : [];
+  const statusBadge = (status) => {
+    switch ((status || '').toLowerCase()) {
+      case 'resolved':
+        return 'bg-emerald-50 text-emerald-700';
+      case 'pending':
+        return 'bg-sky-50 text-sky-700';
+      default:
+        return 'bg-amber-50 text-amber-700';
+    }
+  };
+%>
+<section class="space-y-8">
+  <div class="max-w-3xl">
+    <span class="eyebrow">Support Operations</span>
+    <h1 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950">Keep support human, fast, and globally coordinated.</h1>
+    <p class="mt-4 text-lg leading-8 text-slate-600">
+      Update ownership, shift priority, and reply from the same queue your operations team uses every day.
+    </p>
+  </div>
+
+  <div class="space-y-5">
+    <% queue.forEach((conversation) => { %>
+      <article class="surface-card rounded-[2rem] p-6">
+        <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <div>
+            <div class="flex flex-wrap items-center gap-3">
+              <h2 class="text-2xl font-semibold text-slate-950"><%= conversation.subject %></h2>
+              <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] <%= statusBadge(conversation.status) %>"><%= conversation.status %></span>
+            </div>
+            <p class="mt-3 text-sm text-slate-500"><%= conversation.customer_name %> • <%= conversation.customer_email %> • <%= conversation.channel %> • <%= conversation.region %></p>
+            <div class="mt-5 space-y-3">
+              <% (conversation.messages || []).slice(-3).forEach((message) => { %>
+                <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div class="flex items-center justify-between gap-3">
+                    <p class="text-sm font-semibold text-slate-900"><%= message.author %></p>
+                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400"><%= message.role %></p>
+                  </div>
+                  <p class="mt-3 text-sm leading-6 text-slate-600"><%= message.body %></p>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+
+          <div class="space-y-5">
+            <form action="/platform-admin/support/<%= conversation.id %>/update" method="post" class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+              <p class="text-sm font-semibold text-slate-900">Queue management</p>
+              <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="status-<%= conversation.id %>" class="mb-1 block text-sm font-medium text-slate-700">Status</label>
+                  <select id="status-<%= conversation.id %>" name="status" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <% ['open', 'pending', 'resolved'].forEach((entry) => { %>
+                      <option value="<%= entry %>" <%= conversation.status === entry ? 'selected' : '' %>><%= entry.charAt(0).toUpperCase() + entry.slice(1) %></option>
+                    <% }) %>
+                  </select>
+                </div>
+                <div>
+                  <label for="priority-<%= conversation.id %>" class="mb-1 block text-sm font-medium text-slate-700">Priority</label>
+                  <select id="priority-<%= conversation.id %>" name="priority" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <% ['high', 'normal', 'low'].forEach((entry) => { %>
+                      <option value="<%= entry %>" <%= conversation.priority === entry ? 'selected' : '' %>><%= entry.charAt(0).toUpperCase() + entry.slice(1) %></option>
+                    <% }) %>
+                  </select>
+                </div>
+              </div>
+              <div class="mt-4">
+                <label for="owner-<%= conversation.id %>" class="mb-1 block text-sm font-medium text-slate-700">Owner</label>
+                <input id="owner-<%= conversation.id %>" name="owner" type="text" value="<%= conversation.owner || '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+              </div>
+              <button type="submit" class="mt-4 inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary">Save queue settings</button>
+            </form>
+
+            <form action="/platform-admin/support/<%= conversation.id %>/reply" method="post" class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+              <p class="text-sm font-semibold text-slate-900">Reply as support</p>
+              <div class="mt-4">
+                <label for="reply-<%= conversation.id %>" class="mb-1 block text-sm font-medium text-slate-700">Message</label>
+                <textarea id="reply-<%= conversation.id %>" name="body" rows="5" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Write a clear update, resolution note, or next step."></textarea>
+              </div>
+              <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="reply-status-<%= conversation.id %>" class="mb-1 block text-sm font-medium text-slate-700">Post-reply status</label>
+                  <select id="reply-status-<%= conversation.id %>" name="status" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <% ['pending', 'resolved', 'open'].forEach((entry) => { %>
+                      <option value="<%= entry %>"><%= entry.charAt(0).toUpperCase() + entry.slice(1) %></option>
+                    <% }) %>
+                  </select>
+                </div>
+                <div>
+                  <label for="reply-priority-<%= conversation.id %>" class="mb-1 block text-sm font-medium text-slate-700">Priority</label>
+                  <select id="reply-priority-<%= conversation.id %>" name="priority" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <% ['high', 'normal', 'low'].forEach((entry) => { %>
+                      <option value="<%= entry %>" <%= conversation.priority === entry ? 'selected' : '' %>><%= entry.charAt(0).toUpperCase() + entry.slice(1) %></option>
+                    <% }) %>
+                  </select>
+                </div>
+              </div>
+              <button type="submit" class="mt-4 inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">Send reply</button>
+            </form>
+          </div>
+        </div>
+      </article>
+    <% }) %>
+  </div>
+</section>

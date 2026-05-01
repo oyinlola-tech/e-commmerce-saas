@@ -1,40 +1,47 @@
-<footer class="border-t border-gray-100 bg-white">
-  <div class="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.3fr_repeat(3,1fr)] lg:px-8">
-    <div class="space-y-3">
-      <p class="text-lg font-semibold text-gray-900"><%= store && store.name ? store.name : 'Your Store' %></p>
-      <p class="max-w-sm text-sm leading-6 text-gray-500">
-        Thoughtfully curated products, secure checkout, and a polished shopping experience from first click to confirmation.
-      </p>
+<footer class="border-t border-slate-200/70 bg-white/88 backdrop-blur">
+  <div class="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.35fr_repeat(3,1fr)] lg:px-8">
+    <div class="space-y-4">
+      <div>
+        <p class="section-title text-xl font-semibold text-slate-950"><%= store && store.name ? store.name : 'Aisle' %></p>
+        <p class="mt-2 max-w-sm text-sm leading-6 text-slate-500">
+          <%= store && store.description ? store.description : 'A premium commerce experience built for confident discovery and trustworthy fulfillment.' %>
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <% (store && Array.isArray(store.markets) ? store.markets.slice(0, 3) : []).forEach((market) => { %>
+          <span class="signal-chip text-slate-700"><%= market %></span>
+        <% }) %>
+      </div>
     </div>
     <div>
-      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Shop</h2>
-      <ul class="mt-4 space-y-3 text-sm text-gray-600">
+      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Shop</h2>
+      <ul class="mt-4 space-y-3 text-sm text-slate-600">
         <li><a href="/" class="transition hover:text-primary">Home</a></li>
-        <li><a href="/products" class="transition hover:text-primary">Products</a></li>
+        <li><a href="/products" class="transition hover:text-primary">Catalog</a></li>
         <li><a href="/cart" class="transition hover:text-primary">Cart</a></li>
       </ul>
     </div>
     <div>
-      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Company</h2>
-      <ul class="mt-4 space-y-3 text-sm text-gray-600">
-        <li><a href="/" class="transition hover:text-primary">About</a></li>
-        <li><a href="/" class="transition hover:text-primary">Contact</a></li>
-        <li><a href="/" class="transition hover:text-primary">Privacy</a></li>
+      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Account</h2>
+      <ul class="mt-4 space-y-3 text-sm text-slate-600">
+        <li><a href="/account" class="transition hover:text-primary">My account</a></li>
+        <li><a href="/orders" class="transition hover:text-primary">Orders</a></li>
+        <li><a href="/login" class="transition hover:text-primary">Sign in</a></li>
       </ul>
     </div>
     <div>
-      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Support</h2>
-      <ul class="mt-4 space-y-3 text-sm text-gray-600">
-        <li><a href="/" class="transition hover:text-primary">Shipping</a></li>
-        <li><a href="/" class="transition hover:text-primary">Returns</a></li>
-        <li><a href="/" class="transition hover:text-primary">FAQ</a></li>
+      <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Support</h2>
+      <ul class="mt-4 space-y-3 text-sm text-slate-600">
+        <li><span><%= store && store.support_email ? store.support_email : 'support@example.com' %></span></li>
+        <li><span><%= store && store.contact_phone ? store.contact_phone : '+1 000 000 0000' %></span></li>
+        <li><span><%= store && store.return_window_days ? `${store.return_window_days}-day returns` : '30-day returns' %></span></li>
       </ul>
     </div>
   </div>
-  <div class="border-t border-gray-100">
-    <div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-      <p>&copy; <%= new Date().getFullYear() %> <%= store && store.name ? store.name : 'Your Store' %>. All rights reserved.</p>
-      <p>Powered by MultiStore.</p>
+  <div class="border-t border-slate-200/70">
+    <div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+      <p>&copy; <%= new Date().getFullYear() %> <%= store && store.name ? store.name : 'Aisle' %>. All rights reserved.</p>
+      <p>Powered by Aisle Commerce Cloud.</p>
     </div>
   </div>
 </footer>

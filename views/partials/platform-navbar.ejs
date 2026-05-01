@@ -8,46 +8,43 @@
     .join('')
     .toUpperCase();
 %>
-<header class="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur">
+<header class="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
   <nav x-data="{ mobileOpen: false }" class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <div class="flex items-center justify-between py-4">
       <a href="/" class="flex items-center gap-3">
-        <span class="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-lg font-bold text-white shadow-soft">M</span>
+        <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-lg font-bold text-white shadow-glow">A</span>
         <span>
-          <span class="block text-sm font-semibold uppercase tracking-[0.28em] text-gray-500">MultiStore</span>
-          <span class="block text-lg font-semibold text-gray-900">Commerce SaaS</span>
+          <span class="block text-xs font-semibold uppercase tracking-[0.34em] text-slate-500">Aisle</span>
+          <span class="block section-title text-lg font-semibold text-slate-950">Commerce Cloud</span>
         </span>
       </a>
 
       <div class="hidden items-center gap-8 md:flex">
-        <a href="/#features" class="text-sm font-medium text-gray-600 transition hover:text-primary">Features</a>
-        <a href="/#pricing" class="text-sm font-medium text-gray-600 transition hover:text-primary">Pricing</a>
-        <a href="/#faq" class="text-sm font-medium text-gray-600 transition hover:text-primary">FAQ</a>
+        <a href="/#features" class="text-sm font-medium text-slate-600 transition hover:text-primary">Platform</a>
+        <a href="/#pricing" class="text-sm font-medium text-slate-600 transition hover:text-primary">Pricing</a>
+        <a href="/#faq" class="text-sm font-medium text-slate-600 transition hover:text-primary">FAQ</a>
       </div>
 
       <div class="hidden items-center gap-3 md:flex">
-        <% if (platformUser) { %>
-          <a href="/dashboard" class="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-primary hover:text-primary">Dashboard</a>
-          <div x-data="{ open: false }" class="relative">
-            <button type="button" @click="open = !open" @click.outside="open = false" class="flex items-center gap-3 rounded-full border border-gray-200 bg-white px-2 py-2 shadow-sm transition hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
-              <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-white"><%= initials || 'MS' %></span>
-              <span class="hidden text-left lg:block">
-                <span class="block text-sm font-semibold text-gray-900"><%= userName %></span>
-                <span class="block text-xs text-gray-500"><%= platformUser.email %></span>
-              </span>
-            </button>
-            <div x-cloak x-show="open" x-transition class="absolute right-0 mt-3 w-56 rounded-2xl border border-gray-200 bg-white p-2 shadow-soft">
-              <a href="/dashboard" class="block rounded-xl px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-50 hover:text-primary">Dashboard</a>
-              <a href="/logout" class="block rounded-xl px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-50 hover:text-primary">Sign out</a>
-            </div>
+        <a href="/platform-admin" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Control Center</a>
+        <a href="/dashboard" class="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">Owner Dashboard</a>
+        <div x-data="{ open: false }" class="relative">
+          <button type="button" @click="open = !open" @click.outside="open = false" class="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-2 py-2 shadow-sm transition hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+            <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white"><%= initials || 'AC' %></span>
+            <span class="hidden text-left lg:block">
+              <span class="block text-sm font-semibold text-slate-900"><%= userName %></span>
+              <span class="block text-xs text-slate-500"><%= platformUser && platformUser.email ? platformUser.email : 'owner@aislecommerce.com' %></span>
+            </span>
+          </button>
+          <div x-cloak x-show="open" x-transition class="absolute right-0 mt-3 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-soft">
+            <a href="/dashboard" class="block rounded-xl px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-50 hover:text-primary">Owner workspace</a>
+            <a href="/platform-admin" class="block rounded-xl px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-50 hover:text-primary">Platform control center</a>
+            <a href="/logout" class="block rounded-xl px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-50 hover:text-primary">Sign out</a>
           </div>
-        <% } else { %>
-          <a href="/login" class="rounded-xl px-4 py-2 text-sm font-medium text-gray-700 transition hover:text-primary">Sign In</a>
-          <a href="/signup" class="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">Get Started</a>
-        <% } %>
+        </div>
       </div>
 
-      <button type="button" @click="mobileOpen = !mobileOpen" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-gray-200 text-gray-700 md:hidden" aria-label="Toggle navigation">
+      <button type="button" @click="mobileOpen = !mobileOpen" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-700 md:hidden" aria-label="Toggle navigation">
         <svg x-show="!mobileOpen" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4A1 1 0 013 5zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm1 4a1 1 0 100 2h12a1 1 0 100-2H4z" clip-rule="evenodd"></path>
         </svg>
@@ -57,18 +54,13 @@
       </button>
     </div>
 
-    <div x-cloak x-show="mobileOpen" x-transition class="space-y-3 border-t border-gray-200 pb-5 pt-4 md:hidden">
-      <a href="/#features" class="block rounded-xl px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:text-primary">Features</a>
-      <a href="/#pricing" class="block rounded-xl px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:text-primary">Pricing</a>
-      <a href="/#faq" class="block rounded-xl px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:text-primary">FAQ</a>
+    <div x-cloak x-show="mobileOpen" x-transition class="space-y-3 border-t border-slate-200 pb-5 pt-4 md:hidden">
+      <a href="/#features" class="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-primary">Platform</a>
+      <a href="/#pricing" class="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-primary">Pricing</a>
+      <a href="/#faq" class="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-primary">FAQ</a>
       <div class="flex flex-col gap-3 pt-2">
-        <% if (platformUser) { %>
-          <a href="/dashboard" class="rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-white">Dashboard</a>
-          <a href="/logout" class="rounded-xl border border-gray-200 px-4 py-3 text-center text-sm font-medium text-gray-700">Sign out</a>
-        <% } else { %>
-          <a href="/login" class="rounded-xl border border-gray-200 px-4 py-3 text-center text-sm font-medium text-gray-700">Sign In</a>
-          <a href="/signup" class="rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-white">Get Started</a>
-        <% } %>
+        <a href="/dashboard" class="rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-white">Owner Dashboard</a>
+        <a href="/platform-admin" class="rounded-xl border border-slate-200 px-4 py-3 text-center text-sm font-medium text-slate-700">Control Center</a>
       </div>
     </div>
   </nav>
