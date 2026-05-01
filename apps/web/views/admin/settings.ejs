@@ -1,0 +1,163 @@
+<%
+  const storeThemeData = typeof storeTheme !== 'undefined'
+    ? storeTheme
+    : (typeof currentStoreTheme !== 'undefined' ? currentStoreTheme : {});
+  const storeTypeChoices = typeof storeTypes !== 'undefined' && Array.isArray(storeTypes) ? storeTypes : [];
+  const templateChoices = typeof storeTemplates !== 'undefined' && Array.isArray(storeTemplates) ? storeTemplates : [];
+  const fontChoices = typeof fontPresets !== 'undefined' && Array.isArray(fontPresets) ? fontPresets : [];
+  const selectedTemplateKey = store && store.template_key ? store.template_key : (storeThemeData.templateKey || 'fashion');
+  const selectedStoreType = store && store.store_type ? store.store_type : (storeThemeData.storeType || (storeTypeChoices[0] ? storeTypeChoices[0].key : selectedTemplateKey));
+  const selectedFontKey = store && store.font_preset ? store.font_preset : (storeThemeData.fonts ? storeThemeData.fonts.key : 'jakarta');
+  const selectedStoreTypeChoice = storeTypeChoices.find((entry) => entry.key === selectedStoreType) || storeTypeChoices[0] || null;
+  const recommendedTemplateForType = selectedStoreTypeChoice
+    ? (templateChoices.find((template) => template.key === selectedStoreTypeChoice.recommendedTemplateKey) || null)
+    : null;
+  const recommendedFontForType = selectedStoreTypeChoice
+    ? (fontChoices.find((preset) => preset.key === selectedStoreTypeChoice.recommendedFontPreset) || null)
+    : null;
+%>
+<section class="space-y-8">
+  <div>
+    <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Brand settings</p>
+    <h1 class="section-title mt-2 text-3xl font-semibold tracking-tight text-slate-950">Store Settings</h1>
+    <p class="mt-3 max-w-2xl text-base leading-7 text-slate-600">Keep identity, template layout, customer-facing promises, and support details aligned across storefront and operations.</p>
+  </div>
+
+  <form action="/admin/settings" method="post" class="grid gap-8 xl:grid-cols-[1fr_0.9fr]">
+    <section class="surface-card space-y-6 rounded-[2rem] p-6">
+      <div>
+        <label for="storeName" class="mb-1 block text-sm font-medium text-slate-700">Store name</label>
+        <input id="storeName" name="name" type="text" value="<%= store && store.name ? store.name : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Aisle">
+        <%- include('../partials/form-error', { field: 'name' }) %>
+      </div>
+      <div>
+        <label for="tagline" class="mb-1 block text-sm font-medium text-slate-700">Tagline</label>
+        <input id="tagline" name="tagline" type="text" value="<%= store && store.tagline ? store.tagline : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Cross-border essentials for modern homes, studios, and teams.">
+      </div>
+      <div>
+        <label for="description" class="mb-1 block text-sm font-medium text-slate-700">Description</label>
+        <textarea id="description" name="description" rows="6" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Describe the store experience..."><%= store && store.description ? store.description : '' %></textarea>
+      </div>
+      <div class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Design system</p>
+            <h2 class="section-title mt-2 text-2xl font-semibold text-slate-950">Template, store type, and typography</h2>
+          </div>
+          <p class="max-w-md text-sm leading-6 text-slate-500">Store type is a categorization label for setup guidance. Template and font choices stay independent so you can mix and match freely.</p>
+        </div>
+
+        <div class="mt-6 grid gap-5 sm:grid-cols-2">
+          <div>
+            <label for="storeType" class="mb-1 block text-sm font-medium text-slate-700">Store category</label>
+            <select id="storeType" name="store_type" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+              <% storeTypeChoices.forEach((storeType) => { %>
+                <% const recommendedTemplate = templateChoices.find((template) => template.key === storeType.recommendedTemplateKey); %>
+                <% const recommendedFont = fontChoices.find((preset) => preset.key === storeType.recommendedFontPreset); %>
+                <option
+                  value="<%= storeType.key %>"
+                  data-store-type-label="<%= storeType.label %>"
+                  data-recommended-template-label="<%= recommendedTemplate ? recommendedTemplate.label : '' %>"
+                  data-recommended-font-label="<%= recommendedFont ? recommendedFont.label : '' %>"
+                  <%= selectedStoreType === storeType.key ? 'selected' : '' %>><%= storeType.label %></option>
+              <% }) %>
+            </select>
+            <p class="mt-2 text-sm text-slate-500" data-store-type-recommendation-label>
+              Recommended starter: <%= recommendedTemplateForType ? recommendedTemplateForType.label : 'Fashion Atelier' %> + <%= recommendedFontForType ? recommendedFontForType.label : 'Editorial Serif' %>
+            </p>
+          </div>
+          <div>
+            <label for="fontPreset" class="mb-1 block text-sm font-medium text-slate-700">Font preset</label>
+            <select id="fontPreset" name="font_preset" data-template-font-input class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+              <% fontChoices.forEach((preset) => { %>
+                <option value="<%= preset.key %>" <%= selectedFontKey === preset.key ? 'selected' : '' %>><%= preset.label %></option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+
+        <input type="hidden" name="template_key" value="<%= selectedTemplateKey %>" data-template-key-input>
+        <div class="mt-6 grid gap-3 sm:grid-cols-2">
+          <% templateChoices.forEach((template) => { %>
+            <label class="group cursor-pointer">
+              <input type="radio" name="template_picker" value="<%= template.key %>" class="peer sr-only" data-template-option data-template-key="<%= template.key %>" data-template-label="<%= template.label %>" data-template-type-label="<%= template.typeLabel %>" data-template-default-color="<%= template.defaultColor %>" data-template-font="<%= template.fontPreset %>" <%= selectedTemplateKey === template.key ? 'checked' : '' %>>
+              <span class="theme-preview-tile block rounded-[1.75rem] border border-slate-200 p-4 transition peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary/20 group-hover:border-primary">
+                <span class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <span class="h-2.5 w-2.5 rounded-full" data-swatch-color="<%= template.defaultColor %>"></span>
+                  <%= template.typeLabel %>
+                </span>
+                <strong class="mt-3 block section-title text-xl font-semibold text-slate-950"><%= template.label %></strong>
+                <span class="mt-2 block text-sm leading-6 text-slate-600"><%= template.description %></span>
+              </span>
+            </label>
+          <% }) %>
+        </div>
+      </div>
+      <div>
+        <label for="logo" class="mb-1 block text-sm font-medium text-slate-700">Logo URL</label>
+        <input id="logo" name="logo" type="url" value="<%= store && store.logo ? store.logo : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="https://example.com/logo.png">
+      </div>
+      <div>
+        <label for="themeColor" class="mb-1 block text-sm font-medium text-slate-700">Theme colour</label>
+        <div class="flex items-center gap-4 rounded-2xl border border-slate-300 bg-white px-4 py-3 shadow-sm">
+          <input id="themeColor" name="theme_color" type="color" value="<%= store && store.theme_color ? store.theme_color : '#0F766E' %>" data-template-color-input class="h-12 w-16 rounded-xl border-0 bg-transparent p-0">
+          <div>
+            <p class="text-sm font-medium text-slate-900" data-template-color-label><%= store && store.theme_color ? store.theme_color : '#0F766E' %></p>
+            <p class="mt-1 text-sm text-slate-500">Applied to calls-to-action, badges, links, and focus states.</p>
+          </div>
+        </div>
+      </div>
+      <div class="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label for="supportEmail" class="mb-1 block text-sm font-medium text-slate-700">Support email</label>
+          <input id="supportEmail" name="support_email" type="email" value="<%= store && store.support_email ? store.support_email : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="support@example.com">
+        </div>
+        <div>
+          <label for="contactPhone" class="mb-1 block text-sm font-medium text-slate-700">Contact phone</label>
+          <input id="contactPhone" name="contact_phone" type="text" value="<%= store && store.contact_phone ? store.contact_phone : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="+1 000 000 0000">
+        </div>
+        <div>
+          <label for="fulfillmentSla" class="mb-1 block text-sm font-medium text-slate-700">Fulfillment SLA</label>
+          <input id="fulfillmentSla" name="fulfillment_sla" type="text" value="<%= store && store.fulfillment_sla ? store.fulfillment_sla : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Ships same day before 16:00 UTC">
+        </div>
+        <div>
+          <label for="returnWindow" class="mb-1 block text-sm font-medium text-slate-700">Return window (days)</label>
+          <input id="returnWindow" name="return_window_days" type="number" min="1" step="1" value="<%= store && store.return_window_days ? store.return_window_days : 30 %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+        </div>
+      </div>
+    </section>
+
+    <aside class="space-y-6">
+      <section class="surface-card rounded-[2rem] p-6">
+        <p class="text-sm font-medium text-slate-500">Preview</p>
+        <div class="mt-5 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <div class="mb-4 flex flex-wrap gap-2">
+            <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= storeThemeData.label || 'Store template' %></span>
+            <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= storeThemeData.storeTypeLabel || storeThemeData.typeLabel || 'Store type' %></span>
+          </div>
+          <div class="flex items-center gap-3">
+            <% if (store && store.logo) { %>
+              <img src="<%= store.logo %>" alt="<%= store.name %> logo" class="h-12 w-12 rounded-2xl object-cover">
+            <% } else { %>
+              <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-lg font-semibold text-white"><%= store && store.name ? store.name.charAt(0).toUpperCase() : 'S' %></span>
+            <% } %>
+            <div>
+              <p class="text-base font-semibold text-slate-900"><%= store && store.name ? store.name : 'Aisle' %></p>
+              <p class="text-sm text-slate-500"><%= store && store.tagline ? store.tagline : 'Global storefront experience' %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-2xl bg-white p-4">
+            <button type="button" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-soft">Primary storefront button</button>
+          </div>
+          <p class="mt-4 text-sm leading-6 text-slate-500"><%= storeThemeData.copy && storeThemeData.copy.catalogBody ? storeThemeData.copy.catalogBody : 'This preview reflects the currently active storefront design system.' %></p>
+        </div>
+      </section>
+
+      <div class="surface-card rounded-[2rem] p-6">
+        <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+          Save Settings
+        </button>
+      </div>
+    </aside>
+  </form>
+</section>

@@ -1,0 +1,212 @@
+<%
+  const storeTypeChoices = typeof storeTypes !== 'undefined' && Array.isArray(storeTypes) ? storeTypes : [];
+  const templateChoices = typeof storeTemplates !== 'undefined' && Array.isArray(storeTemplates) ? storeTemplates : [];
+  const fontChoices = typeof fontPresets !== 'undefined' && Array.isArray(fontPresets) ? fontPresets : [];
+  const defaultStoreTypeChoice = storeTypeChoices[0] || null;
+  const defaultTemplateChoice = defaultStoreTypeChoice
+    ? (templateChoices.find((template) => template.key === defaultStoreTypeChoice.recommendedTemplateKey) || templateChoices[0] || null)
+    : (templateChoices[0] || null);
+  const defaultFontChoice = defaultStoreTypeChoice
+    ? (
+      fontChoices.find((preset) => preset.key === defaultStoreTypeChoice.recommendedFontPreset)
+      || (defaultTemplateChoice ? fontChoices.find((preset) => preset.key === defaultTemplateChoice.fontPreset) : null)
+      || fontChoices[0]
+      || null
+    )
+    : (fontChoices[0] || null);
+%>
+<section class="mx-auto flex max-w-7xl items-center justify-center px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
+  <div class="surface-card grid w-full max-w-6xl gap-10 overflow-hidden rounded-[2rem] lg:grid-cols-[0.88fr_1.12fr]">
+    <div class="surface-card-dark px-8 py-10 text-white sm:px-10 sm:py-12">
+      <span class="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200">Start operating</span>
+      <h1 class="section-title mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">Create your Aisle owner account</h1>
+      <p class="mt-4 text-base leading-7 text-slate-300">
+        Launch your first tenant with guided design defaults, then fine-tune category, template layout, and typography independently from the same setup flow.
+      </p>
+      <div class="mt-10 space-y-4">
+        <div class="rounded-2xl bg-white/5 p-4">
+          <p class="text-sm font-medium text-white">Guided, not locked</p>
+          <p class="mt-2 text-sm text-slate-300">Store type recommends a cohesive starting template and font preset, but owners can mix and match before the store is created.</p>
+        </div>
+        <div class="rounded-2xl bg-white/5 p-4">
+          <p class="text-sm font-medium text-white">Editable after launch</p>
+          <p class="mt-2 text-sm text-slate-300">Color, category, template, and typography remain configurable later in store settings.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-8 py-10 sm:px-10 sm:py-12">
+      <div class="max-w-2xl">
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Owner signup</p>
+        <h2 class="section-title mt-3 text-3xl font-semibold tracking-tight text-slate-950">Start with a serious foundation</h2>
+        <p class="mt-3 text-base text-slate-600">Already have an account? <a href="/login" class="font-semibold text-primary transition hover:underline">Sign in</a></p>
+      </div>
+
+      <form action="/signup" method="post" class="mt-8 space-y-8" data-store-type-autofill="true">
+        <section class="space-y-5">
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label for="fullName" class="mb-1 block text-sm font-medium text-slate-700">Full Name</label>
+              <input id="fullName" name="name" type="text" value="<%= formData && formData.name ? formData.name : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Doris King">
+              <%- include('../partials/form-error', { field: 'name' }) %>
+            </div>
+            <div>
+              <label for="email" class="mb-1 block text-sm font-medium text-slate-700">Email</label>
+              <input id="email" name="email" type="email" value="<%= formData && formData.email ? formData.email : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="owner@aislecommerce.com">
+              <%- include('../partials/form-error', { field: 'email' }) %>
+            </div>
+          </div>
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label for="password" class="mb-1 block text-sm font-medium text-slate-700">Password</label>
+              <input id="password" name="password" type="password" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Create a secure password">
+              <%- include('../partials/form-error', { field: 'password' }) %>
+            </div>
+            <div>
+              <label for="confirmPassword" class="mb-1 block text-sm font-medium text-slate-700">Confirm Password</label>
+              <input id="confirmPassword" name="confirmPassword" type="password" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Confirm your password">
+              <%- include('../partials/form-error', { field: 'confirmPassword' }) %>
+            </div>
+          </div>
+        </section>
+
+        <section class="rounded-[2rem] border border-slate-200 bg-slate-50 p-6">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">First store setup</p>
+              <h3 class="section-title mt-2 text-2xl font-semibold text-slate-950">Choose store type, then refine the visual system</h3>
+            </div>
+            <p class="max-w-md text-sm leading-6 text-slate-500">Selecting a store type gives a recommended template and font preset. You can override both before submitting.</p>
+          </div>
+
+          <div class="mt-6 grid gap-5 sm:grid-cols-2">
+            <div>
+              <label for="storeName" class="mb-1 block text-sm font-medium text-slate-700">Store name</label>
+              <input id="storeName" data-auto-slug-source data-auto-slug-target="#storeSubdomain" name="store_name" type="text" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Aisle Signature">
+            </div>
+            <div>
+              <label for="storeSubdomain" class="mb-1 block text-sm font-medium text-slate-700">Subdomain</label>
+              <div class="flex overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+                <input id="storeSubdomain" name="store_subdomain" type="text" class="min-w-0 flex-1 border-0 px-4 py-3 text-slate-900 focus:outline-none focus:ring-0" placeholder="aisle-signature">
+                <span class="inline-flex items-center border-l border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-500">.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6">
+            <label class="mb-3 block text-sm font-medium text-slate-700">Store type</label>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <% storeTypeChoices.forEach((storeType, index) => { %>
+                <% const recommendedTemplate = templateChoices.find((template) => template.key === storeType.recommendedTemplateKey) || defaultTemplateChoice; %>
+                <% const recommendedFont = fontChoices.find((preset) => preset.key === storeType.recommendedFontPreset) || defaultFontChoice; %>
+                <label class="group cursor-pointer">
+                  <input
+                    type="radio"
+                    name="store_type"
+                    value="<%= storeType.key %>"
+                    class="peer sr-only"
+                    data-store-type-option
+                    data-store-type-label="<%= storeType.label %>"
+                    data-recommended-template="<%= recommendedTemplate ? recommendedTemplate.key : '' %>"
+                    data-recommended-template-label="<%= recommendedTemplate ? recommendedTemplate.label : '' %>"
+                    data-recommended-font="<%= recommendedFont ? recommendedFont.key : '' %>"
+                    data-recommended-font-label="<%= recommendedFont ? recommendedFont.label : '' %>"
+                    <%= index === 0 ? 'checked' : '' %>>
+                  <span class="block rounded-[1.75rem] border border-slate-200 bg-white p-4 transition peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary/20 group-hover:border-primary">
+                    <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Category guide</span>
+                    <strong class="mt-3 block section-title text-xl font-semibold text-slate-950"><%= storeType.label %></strong>
+                    <span class="mt-2 block text-sm leading-6 text-slate-600"><%= storeType.description %></span>
+                    <% if (recommendedTemplate && recommendedFont) { %>
+                      <span class="mt-4 block text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                        Recommended: <%= recommendedTemplate.label %> + <%= recommendedFont.label %>
+                      </span>
+                    <% } %>
+                  </span>
+                </label>
+              <% }) %>
+            </div>
+          </div>
+
+          <input type="hidden" name="template_key" value="<%= defaultTemplateChoice ? defaultTemplateChoice.key : 'fashion' %>" data-template-key-input>
+          <div class="mt-6">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <label class="mb-1 block text-sm font-medium text-slate-700">Template layout</label>
+                <p class="text-sm leading-6 text-slate-500">Templates handle the storefront rhythm, product pages, checkout styling, related products, reviews, and image presentation. Pick any layout you want.</p>
+              </div>
+              <p class="text-sm font-medium text-slate-500" data-store-type-recommendation-label>
+                Recommended starter: <%= defaultTemplateChoice ? defaultTemplateChoice.label : 'Fashion Atelier' %> + <%= defaultFontChoice ? defaultFontChoice.label : 'Editorial Serif' %>
+              </p>
+            </div>
+            <div class="mt-4 grid gap-3 sm:grid-cols-2">
+              <% templateChoices.forEach((template, index) => { %>
+                <label class="group cursor-pointer">
+                  <input
+                    type="radio"
+                    name="template_picker"
+                    value="<%= template.key %>"
+                    class="peer sr-only"
+                    data-template-option
+                    data-template-key="<%= template.key %>"
+                    data-template-label="<%= template.label %>"
+                    data-template-default-color="<%= template.defaultColor %>"
+                    data-template-font="<%= template.fontPreset %>"
+                    <%= defaultTemplateChoice && template.key === defaultTemplateChoice.key ? 'checked' : '' %>>
+                  <span class="theme-preview-tile block rounded-[1.75rem] border border-slate-200 bg-white p-4 transition peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary/20 group-hover:border-primary">
+                    <span class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      <span class="h-2.5 w-2.5 rounded-full" data-swatch-color="<%= template.defaultColor %>"></span>
+                      <%= template.typeLabel %>
+                    </span>
+                    <strong class="mt-3 block section-title text-xl font-semibold text-slate-950"><%= template.label %></strong>
+                    <span class="mt-2 block text-sm leading-6 text-slate-600"><%= template.description %></span>
+                  </span>
+                </label>
+              <% }) %>
+            </div>
+          </div>
+
+          <div class="mt-6 grid gap-5 sm:grid-cols-2">
+            <div>
+              <label for="themeColor" class="mb-1 block text-sm font-medium text-slate-700">Accent color</label>
+              <div class="flex items-center gap-4 rounded-2xl border border-slate-300 bg-white px-4 py-3 shadow-sm">
+                <input id="themeColor" name="theme_color" type="color" value="<%= defaultTemplateChoice ? defaultTemplateChoice.defaultColor : '#4F46E5' %>" data-template-color-input class="h-12 w-16 rounded-xl border-0 bg-transparent p-0">
+                <div>
+                  <p class="text-sm font-medium text-slate-900" data-template-color-label><%= defaultTemplateChoice ? defaultTemplateChoice.defaultColor : '#4F46E5' %></p>
+                  <p class="mt-1 text-sm text-slate-500">Applied to storefront actions and emphasis.</p>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label for="fontPreset" class="mb-1 block text-sm font-medium text-slate-700">Font preset</label>
+              <select id="fontPreset" name="font_preset" data-template-font-input class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <% fontChoices.forEach((preset) => { %>
+                  <option value="<%= preset.key %>" <%= defaultFontChoice && preset.key === defaultFontChoice.key ? 'selected' : '' %>><%= preset.label %></option>
+                <% }) %>
+              </select>
+              <p class="mt-2 text-sm text-slate-500">The recommended font follows store type until you choose a different preset yourself.</p>
+            </div>
+          </div>
+
+          <div class="mt-6 grid gap-3 sm:grid-cols-3">
+            <div class="rounded-2xl bg-white p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Store type</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900" data-store-type-label><%= defaultStoreTypeChoice ? defaultStoreTypeChoice.label : 'Fashion' %></p>
+            </div>
+            <div class="rounded-2xl bg-white p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Template</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900" data-template-name-label><%= defaultTemplateChoice ? defaultTemplateChoice.label : 'Fashion Atelier' %></p>
+            </div>
+            <div class="rounded-2xl bg-white p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Fonts</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900" data-template-font-label><%= defaultFontChoice ? defaultFontChoice.label : 'Editorial Serif' %></p>
+            </div>
+          </div>
+        </section>
+
+        <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+          Create Account
+        </button>
+      </form>
+    </div>
+  </div>
+</section>

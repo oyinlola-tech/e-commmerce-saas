@@ -1,0 +1,303 @@
+<%
+  const ownerStores = Array.isArray(stores) ? stores : [];
+  const overview = metrics || {};
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
+  const storeTypeChoices = typeof storeTypes !== 'undefined' && Array.isArray(storeTypes) ? storeTypes : [];
+  const templateChoices = typeof storeTemplates !== 'undefined' && Array.isArray(storeTemplates) ? storeTemplates : [];
+  const fontChoices = typeof fontPresets !== 'undefined' && Array.isArray(fontPresets) ? fontPresets : [];
+  const defaultStoreTypeChoice = storeTypeChoices[0] || null;
+  const defaultTemplateChoice = defaultStoreTypeChoice
+    ? (templateChoices.find((template) => template.key === defaultStoreTypeChoice.recommendedTemplateKey) || templateChoices[0] || null)
+    : (templateChoices[0] || null);
+  const defaultFontChoice = defaultStoreTypeChoice
+    ? (
+      fontChoices.find((preset) => preset.key === defaultStoreTypeChoice.recommendedFontPreset)
+      || (defaultTemplateChoice ? fontChoices.find((preset) => preset.key === defaultTemplateChoice.fontPreset) : null)
+      || fontChoices[0]
+      || null
+    )
+    : (fontChoices[0] || null);
+  const findStoreTypeLabel = (key) => {
+    const match = storeTypeChoices.find((entry) => entry.key === key);
+    return match ? match.label : null;
+  };
+  const findTemplateLabel = (key) => {
+    const match = templateChoices.find((entry) => entry.key === key);
+    return match ? match.label : null;
+  };
+%>
+<section class="space-y-8 px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+  <div class="surface-card relative overflow-hidden rounded-[2rem] p-8 sm:p-10">
+    <div class="hero-orb hero-orb-primary -left-10 top-0 h-36 w-36"></div>
+    <div class="hero-orb hero-orb-sky right-0 top-2 h-40 w-40"></div>
+    <div class="relative grid gap-8 xl:grid-cols-[1.05fr_0.95fr] xl:items-end">
+      <div>
+        <span class="eyebrow">Owner Workspace</span>
+        <h1 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Operate your stores like an international retail team, not a prototype.</h1>
+        <p class="mt-4 max-w-2xl text-lg leading-8 text-slate-600">
+          Move between tenant operations, create new stores, and step into the wider platform control center when support or reliability needs attention.
+        </p>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-3">
+        <article class="metric-card rounded-3xl p-5">
+          <p class="text-sm font-medium text-slate-500">Owned stores</p>
+          <p class="metric-value mt-2 text-3xl font-semibold text-slate-950"><%= ownerStores.length %></p>
+        </article>
+        <article class="metric-card rounded-3xl p-5">
+          <p class="text-sm font-medium text-slate-500">Platform GMV</p>
+          <p class="metric-value mt-2 text-3xl font-semibold text-slate-950"><%= money(overview.gmv30d || 0) %></p>
+        </article>
+        <article class="metric-card rounded-3xl p-5">
+          <p class="text-sm font-medium text-slate-500">Open tickets</p>
+          <p class="metric-value mt-2 text-3xl font-semibold text-slate-950"><%= overview.openTickets || 0 %></p>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Store portfolio</p>
+      <h2 class="section-title mt-3 text-3xl font-semibold text-slate-950">Your active brands</h2>
+      <p class="mt-3 max-w-2xl text-base leading-7 text-slate-600">
+        Open any admin instantly, preview the storefront, or create a fresh tenant with production-ready defaults.
+      </p>
+    </div>
+    <div class="flex flex-wrap gap-3">
+      <a href="/platform-admin" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary">
+        Control Center
+      </a>
+      <button type="button" data-modal-open="create-store-modal" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+        Create Store
+      </button>
+    </div>
+  </div>
+
+  <% if (ownerStores.length) { %>
+    <div class="grid gap-6 xl:grid-cols-2">
+      <% ownerStores.forEach((entry) => { %>
+        <% const storeTypeLabel = findStoreTypeLabel(entry.store_type); %>
+        <% const templateLabel = findTemplateLabel(entry.template_key); %>
+        <article class="surface-card lift-on-hover rounded-[2rem] p-6">
+          <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div class="flex min-w-0 items-start gap-4">
+              <span class="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-primary-soft text-lg font-semibold text-primary"><%= entry.name ? entry.name.charAt(0).toUpperCase() : 'S' %></span>
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-3">
+                  <h3 class="section-title truncate text-2xl font-semibold text-slate-950"><%= entry.name %></h3>
+                  <span class="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700"><%= entry.launch_status || 'live' %></span>
+                  <% if (storeTypeLabel) { %>
+                    <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700">Type: <%= storeTypeLabel %></span>
+                  <% } %>
+                  <% if (templateLabel) { %>
+                    <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700">Template: <%= templateLabel %></span>
+                  <% } %>
+                </div>
+                <p class="mt-2 text-sm leading-6 text-slate-600"><%= entry.tagline %></p>
+                <p class="mt-2 text-sm text-slate-500"><%= entry.subdomain %>.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></p>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <a href="/stores/<%= entry.id %>/preview" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Storefront</a>
+              <a href="/stores/<%= entry.id %>/manage" class="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-dark">Open admin</a>
+            </div>
+          </div>
+          <div class="mt-6 grid gap-3 sm:grid-cols-4">
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Revenue</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900"><%= money(entry.monthly_revenue || 0) %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Orders</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900"><%= entry.monthly_orders || 0 %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Markets</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900"><%= entry.markets ? entry.markets.length : 0 %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Health score</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900"><%= entry.health_score || 0 %>/100</p>
+            </div>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="surface-card rounded-[2rem] px-6 py-16 text-center">
+      <span class="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-primary-soft text-primary">
+        <svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+          <path d="M4 6.5h16V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6.5Z" stroke-width="1.5" stroke-linejoin="round"></path>
+          <path d="M9 3h6" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M12 10v5" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M9.5 12.5H14.5" stroke-width="1.5" stroke-linecap="round"></path>
+        </svg>
+      </span>
+      <h2 class="section-title mt-6 text-2xl font-semibold text-slate-950">No stores yet</h2>
+      <p class="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">
+        Create your first storefront to unlock catalog operations, order handling, support visibility, and international-ready content.
+      </p>
+      <button type="button" data-modal-open="create-store-modal" class="mt-8 inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+        Create your first store
+      </button>
+    </div>
+  <% } %>
+</section>
+
+<div id="create-store-modal" data-modal-backdrop="create-store-modal" aria-hidden="true" class="fixed inset-0 z-[65] hidden items-center justify-center bg-slate-950/60 px-4 py-8 backdrop-blur-sm">
+  <div class="w-full max-w-6xl rounded-[2rem] bg-white p-8 shadow-2xl">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">New tenant</p>
+        <h2 class="section-title mt-2 text-3xl font-semibold text-slate-950">Create a new store</h2>
+        <p class="mt-3 text-sm leading-6 text-slate-600">Pick a store type for guidance, then keep template and typography independent if you want a custom storefront mix.</p>
+      </div>
+      <button type="button" data-modal-close="create-store-modal" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary" aria-label="Close modal">
+        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+        </svg>
+      </button>
+    </div>
+
+    <form action="/stores" method="post" class="mt-8 grid gap-8 xl:grid-cols-[0.96fr_1.04fr]" data-store-type-autofill="true">
+      <section class="space-y-5">
+        <div>
+          <label for="createStoreName" class="mb-1 block text-sm font-medium text-slate-700">Store name</label>
+          <input id="createStoreName" data-auto-slug-source data-auto-slug-target="#createStoreSubdomain" name="name" type="text" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Aisle Signature">
+        </div>
+        <div>
+          <label for="createStoreSubdomain" class="mb-1 block text-sm font-medium text-slate-700">Subdomain</label>
+          <div class="flex overflow-hidden rounded-2xl border border-slate-300 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+            <input id="createStoreSubdomain" name="subdomain" type="text" class="min-w-0 flex-1 border-0 px-4 py-3 text-slate-900 focus:outline-none focus:ring-0" placeholder="aisle-signature">
+            <span class="inline-flex items-center border-l border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-500">.<%= platformBrand && platformBrand.website ? platformBrand.website : 'aislecommerce.com' %></span>
+          </div>
+        </div>
+
+        <div>
+          <label class="mb-3 block text-sm font-medium text-slate-700">Store type</label>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <% storeTypeChoices.forEach((storeType, index) => { %>
+              <% const recommendedTemplate = templateChoices.find((template) => template.key === storeType.recommendedTemplateKey) || defaultTemplateChoice; %>
+              <% const recommendedFont = fontChoices.find((preset) => preset.key === storeType.recommendedFontPreset) || defaultFontChoice; %>
+              <label class="group cursor-pointer">
+                <input
+                  type="radio"
+                  name="store_type"
+                  value="<%= storeType.key %>"
+                  class="peer sr-only"
+                  data-store-type-option
+                  data-store-type-label="<%= storeType.label %>"
+                  data-recommended-template="<%= recommendedTemplate ? recommendedTemplate.key : '' %>"
+                  data-recommended-template-label="<%= recommendedTemplate ? recommendedTemplate.label : '' %>"
+                  data-recommended-font="<%= recommendedFont ? recommendedFont.key : '' %>"
+                  data-recommended-font-label="<%= recommendedFont ? recommendedFont.label : '' %>"
+                  <%= index === 0 ? 'checked' : '' %>>
+                <span class="block rounded-[1.75rem] border border-slate-200 bg-white p-4 transition peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary/20 group-hover:border-primary">
+                  <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Category guide</span>
+                  <strong class="mt-3 block section-title text-xl font-semibold text-slate-950"><%= storeType.label %></strong>
+                  <span class="mt-2 block text-sm leading-6 text-slate-600"><%= storeType.description %></span>
+                  <% if (recommendedTemplate && recommendedFont) { %>
+                    <span class="mt-4 block text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                      Recommended: <%= recommendedTemplate.label %> + <%= recommendedFont.label %>
+                    </span>
+                  <% } %>
+                </span>
+              </label>
+            <% }) %>
+          </div>
+        </div>
+      </section>
+
+      <section class="space-y-5">
+        <input type="hidden" name="template_key" value="<%= defaultTemplateChoice ? defaultTemplateChoice.key : 'fashion' %>" data-template-key-input>
+        <div class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Template layout</p>
+              <p class="mt-2 text-sm leading-6 text-slate-500">Templates control page structure, image framing, product detail rhythm, upsells, review presentation, and checkout styling.</p>
+            </div>
+            <p class="text-sm font-medium text-slate-500" data-store-type-recommendation-label>
+              Recommended starter: <%= defaultTemplateChoice ? defaultTemplateChoice.label : 'Fashion Atelier' %> + <%= defaultFontChoice ? defaultFontChoice.label : 'Editorial Serif' %>
+            </p>
+          </div>
+          <div class="mt-5 grid gap-3 sm:grid-cols-2">
+            <% templateChoices.forEach((template) => { %>
+              <label class="group cursor-pointer">
+                <input
+                  type="radio"
+                  name="template_picker"
+                  value="<%= template.key %>"
+                  class="peer sr-only"
+                  data-template-option
+                  data-template-key="<%= template.key %>"
+                  data-template-label="<%= template.label %>"
+                  data-template-default-color="<%= template.defaultColor %>"
+                  data-template-font="<%= template.fontPreset %>"
+                  <%= defaultTemplateChoice && template.key === defaultTemplateChoice.key ? 'checked' : '' %>>
+                <span class="theme-preview-tile block rounded-[1.75rem] border border-slate-200 bg-white p-4 transition peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary/20 group-hover:border-primary">
+                  <span class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    <span class="h-2.5 w-2.5 rounded-full" data-swatch-color="<%= template.defaultColor %>"></span>
+                    <%= template.typeLabel %>
+                  </span>
+                  <strong class="mt-3 block section-title text-xl font-semibold text-slate-950"><%= template.label %></strong>
+                  <span class="mt-2 block text-sm leading-6 text-slate-600"><%= template.description %></span>
+                </span>
+              </label>
+            <% }) %>
+          </div>
+        </div>
+
+        <div class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label for="createThemeColor" class="mb-1 block text-sm font-medium text-slate-700">Accent color</label>
+              <div class="flex items-center gap-4 rounded-2xl border border-slate-300 bg-white px-4 py-3 shadow-sm">
+                <input id="createThemeColor" name="theme_color" type="color" value="<%= defaultTemplateChoice ? defaultTemplateChoice.defaultColor : '#4F46E5' %>" data-template-color-input class="h-12 w-16 rounded-xl border-0 bg-transparent p-0">
+                <div>
+                  <p class="text-sm font-medium text-slate-900" data-template-color-label><%= defaultTemplateChoice ? defaultTemplateChoice.defaultColor : '#4F46E5' %></p>
+                  <p class="mt-1 text-sm text-slate-500">Used for buttons, focus rings, links, and badges.</p>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label for="createFontPreset" class="mb-1 block text-sm font-medium text-slate-700">Font preset</label>
+              <select id="createFontPreset" name="font_preset" data-template-font-input class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <% fontChoices.forEach((preset) => { %>
+                  <option value="<%= preset.key %>" <%= defaultFontChoice && preset.key === defaultFontChoice.key ? 'selected' : '' %>><%= preset.label %></option>
+                <% }) %>
+              </select>
+              <p class="mt-2 text-sm text-slate-500">The suggested preset follows store type until you pick a different font.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+          <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">How this starts</p>
+          <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Store type</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900" data-store-type-label><%= defaultStoreTypeChoice ? defaultStoreTypeChoice.label : 'Fashion' %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Template</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900" data-template-name-label><%= defaultTemplateChoice ? defaultTemplateChoice.label : 'Fashion Atelier' %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Fonts</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900" data-template-font-label><%= defaultFontChoice ? defaultFontChoice.label : 'Editorial Serif' %></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+          <button type="button" data-modal-close="create-store-modal" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">
+            Cancel
+          </button>
+          <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">
+            Create Store
+          </button>
+        </div>
+      </section>
+    </form>
+  </div>
+</div>

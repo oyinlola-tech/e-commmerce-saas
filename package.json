@@ -1,16 +1,50 @@
 {
-  "name": "e-commerce-saas-frontend",
+  "name": "aisle-commerce-platform",
   "version": "1.0.0",
   "private": true,
-  "description": "Frontend scaffold for a multi-tenant ecommerce SaaS using Express, EJS, Tailwind CDN, and vanilla JavaScript.",
-  "main": "app.js",
+  "description": "Aisle Commerce microservices monorepo with an Express SSR web app, gateway, and bounded-context services.",
+  "workspaces": [
+    "apps/web",
+    "apps/gateway",
+    "apps/services/*",
+    "packages/*"
+  ],
   "scripts": {
-    "start": "node app.js"
+    "start": "node apps/gateway/server.js",
+    "start:web": "node apps/web/app.js",
+    "start:gateway": "node apps/gateway/server.js",
+    "start:user-service": "node apps/services/user-service/server.js",
+    "start:store-service": "node apps/services/store-service/server.js",
+    "start:compliance-service": "node apps/services/compliance-service/server.js",
+    "start:customer-service": "node apps/services/customer-service/server.js",
+    "start:product-service": "node apps/services/product-service/server.js",
+    "start:cart-service": "node apps/services/cart-service/server.js",
+    "start:order-service": "node apps/services/order-service/server.js",
+    "start:payment-service": "node apps/services/payment-service/server.js",
+    "start:billing-service": "node apps/services/billing-service/server.js",
+    "start:support-service": "node apps/services/support-service/server.js",
+    "start:chat-service": "node apps/services/chat-service/server.js",
+    "start:notification-service": "node apps/services/notification-service/server.js"
   },
   "dependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
+    "amqplib": "^0.10.4",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
     "dotenv": "^17.4.2",
-    "ejs": "^5.0.2",
+    "ejs": "^3.1.10",
     "express": "^5.2.1",
-    "express-ejs-layouts": "^2.5.1"
+    "express-ejs-layouts": "^2.5.1",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "http-proxy-middleware": "^3.0.3",
+    "ioredis": "^5.4.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "mysql2": "^3.22.3",
+    "nodemailer": "^8.0.7",
+    "socket.io": "^4.8.3",
+    "uuid": "^14.0.0"
   }
 }

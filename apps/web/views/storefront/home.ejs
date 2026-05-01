@@ -1,0 +1,149 @@
+<%
+  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
+  const featured = Array.isArray(featuredProducts) ? featuredProducts : (Array.isArray(products) ? products.slice(0, 4) : []);
+  const spotlightProducts = Array.isArray(featured) ? featured.slice(0, 3) : [];
+  const overview = stats || {};
+  const storeThemeData = typeof storeTheme !== 'undefined'
+    ? storeTheme
+    : (typeof currentStoreTheme !== 'undefined' ? currentStoreTheme : {});
+  const themeClasses = storeThemeData.classes || {};
+  const themeCopy = storeThemeData.copy || {};
+  const themeTags = Array.isArray(storeThemeData.marketingTags) ? storeThemeData.marketingTags : [];
+  const themeFeatureCards = Array.isArray(storeThemeData.featureCards) ? storeThemeData.featureCards : [];
+  const heroMetrics = [
+    { label: 'Products live', value: overview.publishedProducts || featured.length || 0 },
+    { label: 'Orders served', value: overview.totalOrders || 0 },
+    { label: 'Markets', value: store && Array.isArray(store.markets) ? store.markets.length : 1 },
+    { label: 'Returns window', value: `${store && store.return_window_days ? store.return_window_days : 30}d` }
+  ];
+%>
+<section class="relative overflow-hidden">
+  <div class="hero-orb hero-orb-primary left-0 top-4 h-64 w-64"></div>
+  <div class="hero-orb hero-orb-sky right-0 top-10 h-72 w-72"></div>
+  <div class="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+    <div class="grid gap-10 <%= themeClasses.heroGrid || 'lg:grid-cols-[1.04fr_0.96fr]' %>">
+      <div class="space-y-8">
+        <div class="flex flex-wrap gap-3">
+          <span class="eyebrow"><%= themeCopy.eyebrow || 'Curated storefront' %></span>
+          <% themeTags.slice(0, 2).forEach((tag) => { %>
+            <span class="theme-chip"><%= tag %></span>
+          <% }) %>
+        </div>
+
+        <div class="space-y-5">
+          <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary"><%= storeThemeData.label || 'Storefront template' %></p>
+          <h1 class="section-title max-w-4xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
+            <%= store && store.name ? store.name : 'Aisle' %>
+          </h1>
+          <p class="max-w-3xl text-2xl leading-tight text-slate-900"><%= themeCopy.heroTitle || (store && store.tagline ? store.tagline : 'A premium storefront for modern essentials.') %></p>
+          <p class="max-w-2xl text-lg leading-8 text-slate-600"><%= themeCopy.heroBody || (store && store.description ? store.description : 'Designed for product discovery, trustworthy service, and confident checkout across international markets.') %></p>
+          <p class="max-w-2xl text-sm leading-7 text-slate-500"><%= themeCopy.heroSupport || (store && store.fulfillment_sla ? store.fulfillment_sla : 'Fast fulfillment available.') %></p>
+        </div>
+
+        <div class="flex flex-col gap-3 sm:flex-row">
+          <a href="/products" class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+            <%= themeCopy.primaryCta || 'Shop the collection' %>
+          </a>
+          <a href="/account" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-base font-semibold text-slate-700 transition hover:border-primary hover:text-primary">
+            <%= themeCopy.secondaryCta || 'My account' %>
+          </a>
+        </div>
+
+        <dl class="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <% heroMetrics.forEach((metric) => { %>
+            <div class="theme-stat rounded-[1.75rem] p-5">
+              <dt class="text-sm font-medium text-slate-500"><%= metric.label %></dt>
+              <dd class="metric-value mt-2 text-2xl font-semibold text-slate-950"><%= metric.value %></dd>
+            </div>
+          <% }) %>
+        </dl>
+      </div>
+
+      <div class="theme-hero-frame p-5 sm:p-6">
+        <% if (spotlightProducts.length) { %>
+          <div class="grid gap-4 <%= themeClasses.heroMediaGrid || 'sm:grid-cols-2' %>">
+            <% spotlightProducts.forEach((item, index) => { %>
+              <article class="theme-product-card overflow-hidden rounded-[2rem] <%= index === 0 && spotlightProducts.length > 1 ? 'sm:translate-y-8' : '' %>">
+                <a href="/products/<%= item.slug %>" class="theme-hero-media block <%= themeClasses.heroCardAspect || 'aspect-[4/5]' %> overflow-hidden bg-slate-100">
+                  <img src="<%= item.image %>" alt="<%= item.name %>" class="h-full w-full object-cover transition duration-300 hover:scale-105">
+                </a>
+                <div class="space-y-2 p-5">
+                  <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= item.category || storeThemeData.storeTypeLabel || storeThemeData.typeLabel || 'Featured' %></p>
+                  <h2 class="section-title text-xl font-semibold text-slate-950"><%= item.name %></h2>
+                  <div class="flex items-center gap-2">
+                    <span class="text-base font-semibold text-slate-950"><%= money(item.price || 0) %></span>
+                    <% if (item.compare_at_price) { %>
+                      <span class="text-sm text-slate-400 line-through"><%= money(item.compare_at_price) %></span>
+                    <% } %>
+                  </div>
+                </div>
+              </article>
+            <% }) %>
+          </div>
+        <% } else { %>
+          <div class="theme-panel theme-panel-soft flex min-h-[26rem] flex-col items-center justify-center rounded-[2rem] px-6 py-12 text-center">
+            <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary"><%= storeThemeData.storeTypeLabel || storeThemeData.typeLabel || 'Store category' %></p>
+            <h2 class="section-title mt-4 text-3xl font-semibold text-slate-950">Catalog preview coming soon</h2>
+            <p class="mt-3 max-w-md text-base leading-7 text-slate-600">Publish products to fill this hero stack with your category-specific cards, imagery, and merchandising rhythm.</p>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+  <div class="grid gap-6 <%= themeClasses.featureGrid || 'lg:grid-cols-3' %>">
+    <% themeFeatureCards.forEach((card) => { %>
+      <article class="theme-panel rounded-[2rem] p-6">
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary"><%= card.label %></p>
+        <h2 class="section-title mt-3 text-2xl font-semibold text-slate-950"><%= card.title %></h2>
+        <p class="mt-3 text-base leading-7 text-slate-600"><%= card.body %></p>
+      </article>
+    <% }) %>
+  </div>
+</section>
+
+<section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
+  <div class="grid gap-6 <%= themeClasses.catalogHeader || 'lg:grid-cols-[0.82fr_1.18fr] lg:items-end' %>">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary"><%= themeCopy.catalogLabel || 'Featured collection' %></p>
+      <h2 class="section-title mt-3 text-4xl font-semibold tracking-tight text-slate-950"><%= themeCopy.catalogTitle || 'Best-sellers customers trust first' %></h2>
+    </div>
+    <div class="theme-accent-note rounded-[2rem] px-6 py-5">
+      <p class="text-sm leading-7 text-slate-600"><%= themeCopy.catalogBody || 'Thoughtfully merchandised products with clearer storytelling, faster scanning, and a premium path from browse to checkout.' %></p>
+    </div>
+  </div>
+
+  <% if (featured.length) { %>
+    <div class="mt-10 grid grid-cols-1 gap-5 <%= themeClasses.catalogGrid || 'sm:grid-cols-2 xl:grid-cols-4' %>">
+      <% featured.forEach((product) => { %>
+        <article class="theme-product-card lift-on-hover group overflow-hidden rounded-[2rem]">
+          <a href="/products/<%= product.slug %>" class="block <%= themeClasses.catalogCardAspect || 'aspect-[4/5]' %> overflow-hidden bg-slate-100">
+            <img src="<%= product.image %>" alt="<%= product.name %>" class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
+          </a>
+          <div class="space-y-4 p-5">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= product.category || storeThemeData.storeTypeLabel || storeThemeData.typeLabel || 'Collection' %></p>
+              <a href="/products/<%= product.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= product.name %></a>
+              <div class="mt-3 flex items-center gap-2">
+                <span class="text-base font-semibold text-slate-950"><%= money(product.price || 0) %></span>
+                <% if (product.compare_at_price) { %>
+                  <span class="text-sm text-slate-400 line-through"><%= money(product.compare_at_price) %></span>
+                <% } %>
+              </div>
+            </div>
+            <button type="button" data-add-to-cart="<%= product.id %>" data-quantity="1" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">
+              Add to cart
+            </button>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="theme-panel mt-10 rounded-[2rem] px-6 py-16 text-center">
+      <h2 class="section-title text-2xl font-semibold text-slate-950">Collection coming soon</h2>
+      <p class="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">Featured products will appear here as soon as the catalog is published.</p>
+    </div>
+  <% } %>
+</section>
