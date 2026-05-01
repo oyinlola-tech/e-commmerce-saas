@@ -2,51 +2,525 @@
 
 Proprietary software owned by Oluwayemi Oyinlola Michael. Portfolio: https://www.oyinlola.site/
 
-This repository is not free to use. No right to copy, modify, deploy, resell, sublicense, or redistribute this codebase is granted without explicit permission from Oluwayemi Oyinlola Michael.
+This repository is not free to use. No right to copy, modify, deploy, host, distribute, resell, sublicense, or reuse this codebase is granted without explicit written permission from Oluwayemi Oyinlola Michael.
 
-## Overview
+## Project Summary
 
-Aisle Commerce SaaS is a multi-tenant e-commerce platform organized as a Node.js monorepo. It contains:
+Aisle Commerce SaaS is a multi-tenant e-commerce platform organized as a Node.js monorepo. It combines:
 
-- An Express SSR web experience for storefront, owner, and platform admin flows.
-- A gateway that resolves tenant hosts, verifies authentication context, and proxies traffic to domain services.
-- Bounded-context services for users, stores, compliance, customers, products, carts, orders, payments, and billing.
-- A shared package for environment loading, database bootstrap, event delivery, JWT handling, internal request signing, and common constants.
+- An Express SSR web experience for storefront, owner dashboard, and platform admin flows
+- A gateway that resolves tenant hosts, verifies auth context, and proxies requests to bounded-context services
+- Domain services for identity, stores, compliance, customers, products, carts, orders, payments, and billing
+- A shared package for environment loading, database bootstrap, internal auth signing, JWT handling, HTTP helpers, logging, and event delivery
 
-## Repository Layout
+## Ownership and Usage
 
-- `apps/web` - SSR storefront and admin interface.
-- `apps/gateway` - API gateway and reverse proxy.
-- `apps/services/*` - Microservices grouped by domain.
-- `packages/shared` - Shared runtime utilities used by every service.
-- `docs` - Central documentation for architecture, environment, APIs, data model, and operational notes.
+| Item | Value |
+| --- | --- |
+| Owner | Oluwayemi Oyinlola Michael |
+| Portfolio | https://www.oyinlola.site/ |
+| License metadata | `UNLICENSED` |
+| Commercial status | Proprietary, not free to use |
 
-## Service Inventory
+See [LICENSE.md](LICENSE.md) and [NOTICE.md](NOTICE.md) for the repository usage restrictions.
 
-| Component | Default port | Status | Responsibility |
+## Monorepo Overview
+
+| Path | Role |
+| --- | --- |
+| `apps/web` | Express SSR storefront, store admin, and platform admin prototype |
+| `apps/gateway` | API gateway, tenant resolver, and reverse proxy |
+| `apps/services/*` | Domain microservices grouped by bounded context |
+| `packages/shared` | Shared runtime package used by gateway and services |
+| `docs` | Detailed architecture, environment, API, data, and gap documentation |
+| `.github/workflows` | Repository automation and security workflow definitions |
+
+## Architecture Overview
+
+### Runtime layers
+
+| Layer | Main file(s) | Responsibility |
+| --- | --- | --- |
+| Web | `apps/web/app.js` | Renders storefront, owner, and platform admin pages |
+| Gateway | `apps/gateway/server.js` | Resolves stores, reads tokens, signs internal headers, and proxies traffic |
+| Services | `apps/services/*/server.js` | Own business logic and persistence per domain |
+| Shared runtime | `packages/shared/src/*` | Common bootstrap, auth, DB, event, and utility code |
+
+### High-level request flow
+
+1. A browser request reaches the gateway on port `4000`.
+2. The gateway checks whether the host is a platform host or a storefront host.
+3. If store resolution is needed, the gateway calls `store-service /resolve`.
+4. The gateway extracts a customer or platform token and verifies it.
+5. The gateway builds signed internal headers with request, actor, and store context.
+6. The request is proxied to the correct downstream service.
+7. The target service validates the internal HMAC signature before trusting the request context.
+
+### Event-driven behavior
+
+| Event | Producer | Consumer | Purpose |
 | --- | --- | --- | --- |
-| `apps/web` | `3000` | Implemented | Server-rendered storefront, owner dashboard, and platform admin prototype |
-| `apps/gateway` | `4000` | Implemented | Authentication-aware reverse proxy and tenant resolver |
-| `user-service` | `4101` | Implemented | Platform registration, login, and staff directory |
-| `store-service` | `4102` | Implemented | Store provisioning, lookup, and settings |
-| `compliance-service` | `4103` | Implemented | KYC, KYB, documents, and reviews |
-| `customer-service` | `4104` | Implemented | Customer registration, login, self-service, and store customer list |
-| `product-service` | `4105` | Implemented | Product catalog CRUD and inventory reservations |
-| `cart-service` | `4106` | Implemented | Anonymous and authenticated cart handling |
-| `order-service` | `4107` | Implemented | Checkout, order creation, and order status updates |
-| `payment-service` | `4108` | Implemented | Payment session creation, provider config, and webhook intake |
-| `billing-service` | `4109` | Implemented | Subscription lifecycle and eligibility checks |
-| `support-service` | `4110` | Planned package only | Reserved for support operations |
-| `chat-service` | `4111` | Planned package only | Reserved for live chat and messaging |
-| `notification-service` | `4112` | Planned package only | Reserved for outbound notifications |
+| `USER_REGISTERED` | `user-service` | `billing-service` | Provision trial subscription for new store owners |
+| `ORDER_CREATED` | `order-service` | Reserved for future consumers | Signal successful order creation |
+| `PAYMENT_SUCCEEDED` | `payment-service` | `order-service` | Confirm order and commit reserved inventory |
+| `PAYMENT_FAILED` | `payment-service` | `order-service` | Mark order failed and release reserved inventory |
+| `SUBSCRIPTION_CHANGED` | `billing-service` | Reserved for future consumers | Broadcast plan or status changes |
+| `PRODUCT_*` | `product-service` | Reserved for future consumers | Broadcast catalog changes |
+| `CART_UPDATED` | `cart-service` | Reserved for future consumers | Broadcast cart state changes |
+| `COMPLIANCE_STATUS_CHANGED` | `compliance-service` | Reserved for future consumers | Broadcast KYC or KYB review outcome |
 
-## Running the Repository
+RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back to a no-op publisher.
+
+## Workspace and Service Inventory
+
+| Component | Path | Default port | Status | Responsibility |
+| --- | --- | --- | --- | --- |
+| Web app | `apps/web` | `3000` | Implemented | SSR storefront, owner dashboard, and platform admin prototype |
+| Gateway | `apps/gateway` | `4000` | Implemented | Host-aware reverse proxy and auth context bridge |
+| User service | `apps/services/user-service` | `4101` | Implemented | Platform registration, login, and staff directory |
+| Store service | `apps/services/store-service` | `4102` | Implemented | Store provisioning, lookup, domain resolution, and settings |
+| Compliance service | `apps/services/compliance-service` | `4103` | Implemented | KYC, KYB, documents, and review workflow |
+| Customer service | `apps/services/customer-service` | `4104` | Implemented | Store-scoped customer registration, login, and self-service |
+| Product service | `apps/services/product-service` | `4105` | Implemented | Catalog CRUD and inventory reservations |
+| Cart service | `apps/services/cart-service` | `4106` | Implemented | Guest and authenticated cart handling |
+| Order service | `apps/services/order-service` | `4107` | Implemented | Checkout, order persistence, and order lifecycle |
+| Payment service | `apps/services/payment-service` | `4108` | Implemented | Payment session creation, config, and webhooks |
+| Billing service | `apps/services/billing-service` | `4109` | Implemented | Subscription lifecycle and eligibility checks |
+| Support service | `apps/services/support-service` | `4110` | Placeholder package | Planned support workflow service |
+| Chat service | `apps/services/chat-service` | `4111` | Placeholder package | Planned live chat and messaging service |
+| Notification service | `apps/services/notification-service` | `4112` | Placeholder package | Planned outbound notification service |
+| Shared package | `packages/shared` | n/a | Implemented | Shared infrastructure and utilities |
+
+## Root Workspace Scripts
+
+| Command | Behavior |
+| --- | --- |
+| `npm start` | Starts the gateway |
+| `npm run start:web` | Starts the SSR web app |
+| `npm run start:gateway` | Starts the gateway directly |
+| `npm run start:user-service` | Starts `user-service` |
+| `npm run start:store-service` | Starts `store-service` |
+| `npm run start:compliance-service` | Starts `compliance-service` |
+| `npm run start:customer-service` | Starts `customer-service` |
+| `npm run start:product-service` | Starts `product-service` |
+| `npm run start:cart-service` | Starts `cart-service` |
+| `npm run start:order-service` | Starts `order-service` |
+| `npm run start:payment-service` | Starts `payment-service` |
+| `npm run start:billing-service` | Starts `billing-service` |
+| `npm run start:support-service` | Reserved for future `support-service` implementation |
+| `npm run start:chat-service` | Reserved for future `chat-service` implementation |
+| `npm run start:notification-service` | Reserved for future `notification-service` implementation |
+
+## Infrastructure Requirements
+
+| Dependency | Purpose | Notes |
+| --- | --- | --- |
+| MySQL | Primary persistence for implemented services | Required for implemented backend services |
+| RabbitMQ | Event bus transport | Optional but needed for real event-driven behavior |
+| Redis | Reserved runtime dependency | Configured by shared defaults, but not central to current implemented flows |
+| External FX API | Currency conversion in SSR web app | Default base: `https://api.frankfurter.dev/v1` |
+| External geolocation API | Currency/location context in SSR web app | Default base: `https://ipapi.co` |
+
+## Environment Variables
+
+### Shared service variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | Runtime mode |
+| `PORT` | Service-specific | Listener port |
+| `DATABASE_URL` | `mysql://root:password@127.0.0.1:3306/<service_db>` | MySQL connection |
+| `JWT_SECRET` | `aisle-jwt-secret` | JWT signing secret |
+| `INTERNAL_SHARED_SECRET` | `aisle-internal-secret` | HMAC signing secret for internal requests |
+| `RABBITMQ_URL` | `amqp://127.0.0.1:5672` | RabbitMQ connection string |
+| `REDIS_URL` | `redis://127.0.0.1:6379` | Redis connection string |
+| `PLATFORM_ROOT_DOMAIN` | `aislecommerce.com` | Platform root domain |
+| `EVENT_EXCHANGE` | `aisle.events` | RabbitMQ exchange name |
+| `REQUEST_TIMEOUT_MS` | `5000` | Internal HTTP request timeout |
+| `WEB_APP_URL` | `http://127.0.0.1:3000` | SSR web app base URL |
+| `GATEWAY_URL` | `http://127.0.0.1:4000` | Gateway base URL |
+| `USER_SERVICE_URL` | `http://127.0.0.1:4101` | User service URL |
+| `STORE_SERVICE_URL` | `http://127.0.0.1:4102` | Store service URL |
+| `COMPLIANCE_SERVICE_URL` | `http://127.0.0.1:4103` | Compliance service URL |
+| `CUSTOMER_SERVICE_URL` | `http://127.0.0.1:4104` | Customer service URL |
+| `PRODUCT_SERVICE_URL` | `http://127.0.0.1:4105` | Product service URL |
+| `CART_SERVICE_URL` | `http://127.0.0.1:4106` | Cart service URL |
+| `ORDER_SERVICE_URL` | `http://127.0.0.1:4107` | Order service URL |
+| `PAYMENT_SERVICE_URL` | `http://127.0.0.1:4108` | Payment service URL |
+| `BILLING_SERVICE_URL` | `http://127.0.0.1:4109` | Billing service URL |
+| `SUPPORT_SERVICE_URL` | `http://127.0.0.1:4110` | Planned support service URL |
+| `CHAT_SERVICE_URL` | `http://127.0.0.1:4111` | Planned chat service URL |
+| `NOTIFICATION_SERVICE_URL` | `http://127.0.0.1:4112` | Planned notification service URL |
+
+### Web app variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | Runtime mode |
+| `PORT` | `3000` | SSR web port |
+| `APP_ROOT_DOMAIN` | `localhost` | Hostname used to distinguish platform vs storefront requests |
+| `STATE_SEED_ON_BOOT` | `false` | Demo state boot seeding flag |
+| `IP_GEOLOCATION_API_BASE` | `https://ipapi.co` | Geolocation API base URL |
+| `FX_RATES_API_BASE` | `https://api.frankfurter.dev/v1` | FX API base URL |
+| `EXTERNAL_API_TIMEOUT_MS` | `2500` | Outbound request timeout |
+
+## How to Run the Repository
+
+### Full service mesh
 
 1. Install dependencies with `npm install`.
-2. Provide MySQL, Redis, and RabbitMQ if you want the full service mesh behavior.
-3. Configure `.env` files as described in [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md).
-4. Start the gateway with `npm start` or the web prototype with `npm run start:web`.
-5. Start individual services with the root scripts such as `npm run start:user-service` and `npm run start:product-service`.
+2. Ensure MySQL is available.
+3. Start RabbitMQ if you want active event subscriptions.
+4. Configure environment variables.
+5. Start the gateway and the services you need.
+6. Start the web app if you want the SSR interface.
+
+### Minimal UI preview
+
+If you only want to preview the interface, the SSR app can run by itself because it uses local state helpers and sample data instead of depending on the full service mesh for every screen.
+
+## API Surface Overview
+
+### Gateway
+
+- Resolves store hostnames through `store-service`
+- Extracts bearer or cookie tokens
+- Applies role checks for platform, owner, and customer flows
+- Proxies platform APIs, owner APIs, storefront APIs, and socket paths
+
+### User service
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
+- `POST /users`
+- `GET /users`
+
+### Store service
+
+- `GET /resolve`
+- `GET /stores/:id/access-check`
+- `POST /stores`
+- `GET /stores`
+- `GET /stores/:id`
+- `PUT /stores/:id`
+- `GET /settings`
+- `PUT /settings`
+
+### Compliance service
+
+- `POST /compliance/kyc`
+- `POST /compliance/kyb`
+- `POST /compliance/documents`
+- `GET /compliance/me`
+- `GET /compliance/submissions`
+- `POST /compliance/reviews`
+
+### Customer service
+
+- `POST /customers/register`
+- `POST /customers/login`
+- `GET /customers/me`
+- `PUT /customers/me`
+- `GET /customers`
+
+### Product service
+
+- `GET /products`
+- `GET /products/id/:id`
+- `GET /products/:slug`
+- `POST /products`
+- `PUT /products/:id`
+- `DELETE /products/:id`
+- `POST /inventory/reservations`
+- `POST /inventory/reservations/:id/release`
+- `POST /inventory/reservations/:id/commit`
+
+### Cart service
+
+- `GET /cart`
+- `POST /cart/items`
+- `PATCH /cart/items/:productId`
+- `DELETE /cart/items/:productId`
+- `POST /cart/merge`
+
+### Order service
+
+- `POST /checkout`
+- `GET /orders`
+- `GET /orders/:id`
+- `PATCH /orders/:id/status`
+
+### Payment service
+
+- `POST /payments/create-checkout-session`
+- `GET /payments/config`
+- `POST /payments/config`
+- `POST /payments/webhooks/:provider`
+- `POST /payments/mock/:provider/:reference`
+
+### Billing service
+
+- `GET /subscriptions/me`
+- `POST /subscriptions`
+- `POST /subscriptions/cancel`
+- `GET /internal/subscriptions/check`
+- `GET /subscriptions/:ownerId`
+
+## Data Ownership Summary
+
+| Service | Main table(s) | Purpose |
+| --- | --- | --- |
+| User service | `platform_users` | Platform identities and roles |
+| Store service | `stores` | Tenant records and store settings |
+| Compliance service | `kyc_profiles`, `kyb_profiles`, `compliance_documents`, `compliance_reviews` | Identity and business compliance workflow |
+| Customer service | `customers` | Store-scoped customer accounts |
+| Product service | `products`, `inventory_reservations`, `inventory_reservation_items` | Catalog and stock locking |
+| Cart service | `carts`, `cart_items` | Session and customer carts |
+| Order service | `orders`, `order_items` | Order records and line items |
+| Payment service | `payments`, `payment_provider_configs`, `payment_webhooks` | Payment attempts, provider config, webhook logs |
+| Billing service | `subscriptions`, `invoices` | Subscription lifecycle and billing records |
+
+## Shared Package Breakdown
+
+| File | Responsibility |
+| --- | --- |
+| `packages/shared/src/constants.js` | Event names, roles, theme contracts, provider lists |
+| `packages/shared/src/crypto.js` | Encryption helpers |
+| `packages/shared/src/database.js` | MySQL database bootstrap and transaction helpers |
+| `packages/shared/src/env.js` | Shared service environment loading and config shaping |
+| `packages/shared/src/events.js` | RabbitMQ event bus with no-op fallback |
+| `packages/shared/src/express.js` | Base Express app and pagination helpers |
+| `packages/shared/src/http.js` | Internal HTTP request helper(s) |
+| `packages/shared/src/internal-auth.js` | HMAC header signing and verification |
+| `packages/shared/src/jwt.js` | JWT helpers for platform and customer auth |
+| `packages/shared/src/logger.js` | Logging utilities |
+| `packages/shared/src/passwords.js` | Password hashing and comparison helpers |
+| `packages/shared/src/service-runner.js` | Standardized service bootstrap flow |
+
+## Web App Breakdown
+
+| Area | Purpose |
+| --- | --- |
+| `views/storefront` | Storefront pages such as home, product list, cart, checkout, account, and orders |
+| `views/admin` | Store owner admin pages |
+| `views/platform` | Platform dashboard and platform admin views |
+| `views/layouts` | Layout shells for main, store, admin, and platform admin modes |
+| `views/partials` | Shared EJS partials |
+| `src/lib` | Currency, env, theme, and runtime state helpers |
+| `src/data` | Seed and runtime data files for the SSR prototype |
+
+## Complete Folder Structure
+
+The tree below reflects the current project-owned repository structure and intentionally excludes `.git/` internals and `node_modules/` dependencies.
+
+```text
+.
++-- .github
+|   \-- workflows
+|       \-- codeql.yml
++-- apps
+|   +-- gateway
+|   |   +-- package.json
+|   |   +-- README.md
+|   |   \-- server.js
+|   +-- services
+|   |   +-- billing-service
+|   |   |   +-- src
+|   |   |   |   +-- consumers.js
+|   |   |   |   +-- routes.js
+|   |   |   |   \-- schema.js
+|   |   |   +-- package.json
+|   |   |   +-- README.md
+|   |   |   \-- server.js
+|   |   +-- cart-service
+|   |   |   +-- src
+|   |   |   |   +-- routes.js
+|   |   |   |   \-- schema.js
+|   |   |   +-- package.json
+|   |   |   +-- README.md
+|   |   |   \-- server.js
+|   |   +-- chat-service
+|   |   |   +-- package.json
+|   |   |   \-- README.md
+|   |   +-- compliance-service
+|   |   |   +-- src
+|   |   |   |   +-- routes.js
+|   |   |   |   \-- schema.js
+|   |   |   +-- package.json
+|   |   |   +-- README.md
+|   |   |   \-- server.js
+|   |   +-- customer-service
+|   |   |   +-- src
+|   |   |   |   +-- routes.js
+|   |   |   |   \-- schema.js
+|   |   |   +-- package.json
+|   |   |   +-- README.md
+|   |   |   \-- server.js
+|   |   +-- notification-service
+|   |   |   +-- package.json
+|   |   |   \-- README.md
+|   |   +-- order-service
+|   |   |   +-- src
+|   |   |   |   +-- consumers.js
+|   |   |   |   +-- routes.js
+|   |   |   |   \-- schema.js
+|   |   |   +-- package.json
+|   |   |   +-- README.md
+|   |   |   \-- server.js
+|   |   +-- payment-service
+|   |   |   +-- src
+|   |   |   |   +-- routes.js
+|   |   |   |   \-- schema.js
+|   |   |   +-- package.json
+|   |   |   +-- README.md
+|   |   |   \-- server.js
+|   |   +-- product-service
+|   |   |   +-- src
+|   |   |   |   +-- routes.js
+|   |   |   |   \-- schema.js
+|   |   |   +-- package.json
+|   |   |   +-- README.md
+|   |   |   \-- server.js
+|   |   +-- store-service
+|   |   |   +-- src
+|   |   |   |   +-- routes.js
+|   |   |   |   \-- schema.js
+|   |   |   +-- package.json
+|   |   |   +-- README.md
+|   |   |   \-- server.js
+|   |   +-- support-service
+|   |   |   +-- package.json
+|   |   |   \-- README.md
+|   |   \-- user-service
+|   |       +-- src
+|   |       |   +-- routes.js
+|   |       |   \-- schema.js
+|   |       +-- package.json
+|   |       +-- README.md
+|   |       \-- server.js
+|   \-- web
+|       +-- public
+|       |   +-- js
+|       |   \-- styles
+|       |       \-- theme.css
+|       +-- src
+|       |   +-- config
+|       |   +-- data
+|       |   |   +-- empty-state.js
+|       |   |   +-- runtime-state.json
+|       |   |   \-- seed.js
+|       |   +-- lib
+|       |   |   +-- currency.js
+|       |   |   +-- load-env.js
+|       |   |   +-- state.js
+|       |   |   \-- store-themes.js
+|       |   +-- middleware
+|       |   +-- routes
+|       |   \-- services
+|       +-- views
+|       |   +-- admin
+|       |   |   +-- dashboard.ejs
+|       |   |   +-- domain.ejs
+|       |   |   +-- order-detail.ejs
+|       |   |   +-- orders.ejs
+|       |   |   +-- product-form.ejs
+|       |   |   +-- products.ejs
+|       |   |   \-- settings.ejs
+|       |   +-- errors
+|       |   |   +-- 404.ejs
+|       |   |   \-- 500.ejs
+|       |   +-- layouts
+|       |   |   +-- admin.ejs
+|       |   |   +-- main.ejs
+|       |   |   +-- platform-admin.ejs
+|       |   |   \-- store.ejs
+|       |   +-- partials
+|       |   |   +-- admin-scripts.ejs
+|       |   |   +-- admin-sidebar.ejs
+|       |   |   +-- admin-topbar.ejs
+|       |   |   +-- flash.ejs
+|       |   |   +-- form-error.ejs
+|       |   |   +-- head.ejs
+|       |   |   +-- platform-admin-sidebar.ejs
+|       |   |   +-- platform-admin-topbar.ejs
+|       |   |   +-- platform-footer.ejs
+|       |   |   +-- platform-navbar.ejs
+|       |   |   +-- scripts.ejs
+|       |   |   +-- shared-scripts.ejs
+|       |   |   +-- store-footer.ejs
+|       |   |   \-- store-header.ejs
+|       |   +-- platform
+|       |   |   +-- admin-dashboard.ejs
+|       |   |   +-- admin-incidents.ejs
+|       |   |   +-- admin-stores.ejs
+|       |   |   +-- admin-support.ejs
+|       |   |   +-- dashboard.ejs
+|       |   |   +-- index.ejs
+|       |   |   +-- login.ejs
+|       |   |   \-- signup.ejs
+|       |   +-- platform-admin
+|       |   \-- storefront
+|       |       +-- account.ejs
+|       |       +-- cart.ejs
+|       |       +-- checkout.ejs
+|       |       +-- home.ejs
+|       |       +-- login.ejs
+|       |       +-- order-confirmation.ejs
+|       |       +-- orders.ejs
+|       |       +-- product.ejs
+|       |       +-- products.ejs
+|       |       \-- register.ejs
+|       +-- .env.development
+|       +-- .env.production
+|       +-- app.js
+|       +-- package.json
+|       \-- README.md
++-- docs
+|   +-- API-REFERENCE.md
+|   +-- ARCHITECTURE.md
+|   +-- DATA-MODEL.md
+|   +-- ENVIRONMENT.md
+|   \-- KNOWN-GAPS.md
++-- packages
+|   \-- shared
+|       +-- src
+|       |   +-- constants.js
+|       |   +-- crypto.js
+|       |   +-- database.js
+|       |   +-- env.js
+|       |   +-- events.js
+|       |   +-- express.js
+|       |   +-- http.js
+|       |   +-- internal-auth.js
+|       |   +-- jwt.js
+|       |   +-- logger.js
+|       |   +-- passwords.js
+|       |   \-- service-runner.js
+|       +-- index.js
+|       +-- package.json
+|       \-- README.md
++-- .gitignore
++-- LICENSE.md
++-- NOTICE.md
++-- package.json
++-- package-lock.json
+\-- README.md
+```
+
+### Structure notes
+
+- `apps/web/public/js`, `apps/web/src/config`, `apps/web/src/middleware`, `apps/web/src/routes`, `apps/web/src/services`, and `apps/web/views/platform-admin` currently exist as directories but do not yet contain committed implementation files in this snapshot.
+- `apps/services/chat-service`, `apps/services/support-service`, and `apps/services/notification-service` are currently metadata-plus-documentation placeholders only.
+
+## Known Gaps and Current Risks
+
+- `support-service`, `chat-service`, and `notification-service` do not yet have runnable service code.
+- The gateway already proxies support and chat routes, so those flows are not fully operational yet.
+- `order-service` calls `POST /cart/clear` during checkout, but `cart-service` does not currently implement that route.
+- `apps/web/app.js` is a prototype backed by local state helpers, not a full end-to-end gateway-backed interface for every flow.
+- `apps/gateway/server.js` references `crypto.randomUUID()` without importing `crypto`.
+- There is no visible automated test suite for the current repository snapshot.
 
 ## Documentation Map
 
@@ -55,16 +529,10 @@ Aisle Commerce SaaS is a multi-tenant e-commerce platform organized as a Node.js
 - [docs/API-REFERENCE.md](docs/API-REFERENCE.md)
 - [docs/DATA-MODEL.md](docs/DATA-MODEL.md)
 - [docs/KNOWN-GAPS.md](docs/KNOWN-GAPS.md)
-- [LICENSE.md](LICENSE.md)
-- [NOTICE.md](NOTICE.md)
+- [apps/gateway/README.md](apps/gateway/README.md)
+- [apps/web/README.md](apps/web/README.md)
+- [packages/shared/README.md](packages/shared/README.md)
 
-Package-level documentation also lives beside each workspace package in its local `README.md`.
+## Final Note
 
-## Ownership and Usage
-
-- Owner: Oluwayemi Oyinlola Michael
-- Portfolio: https://www.oyinlola.site/
-- License metadata: `UNLICENSED`
-- Commercial status: not free to use
-
-If you need permission for any use beyond private review, obtain written approval from the owner first.
+This root `README.md` is intended to be the single high-level handbook for the repository. The package-level READMEs and the `docs/` directory remain available for focused, per-area reference, but the structure, architecture, runtime expectations, ownership, and current implementation state are all summarized here.
