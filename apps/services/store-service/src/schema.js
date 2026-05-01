@@ -19,7 +19,9 @@ const schemaStatements = [
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_stores_subdomain (subdomain),
       UNIQUE KEY uq_stores_custom_domain (custom_domain),
-      KEY idx_stores_owner_id (owner_id)
+      KEY idx_stores_owner_id (owner_id),
+      KEY idx_stores_custom_domain_lookup (custom_domain),
+      KEY idx_stores_subdomain_lookup (subdomain)
     )
   `
 ];

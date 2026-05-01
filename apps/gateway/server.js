@@ -1,18 +1,30 @@
+const crypto = require('crypto');
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
+const client = require('prom-client');
+const swaggerUi = require('swagger-ui-express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const {
   createServiceConfig,
   createLogger,
+  createCache,
+  createRedisRateLimitStore,
   verifyToken,
   requestJson,
   buildSignedInternalHeaders,
-  PLATFORM_ROLES
+  verifySignedInternalHeaders,
+  setPlatformTokenCookie,
+  setCustomerTokenCookie,
+  clearAuthCookies,
+  PLATFORM_ROLES,
+  asyncHandler,
+  errorHandler
 } = require('../../packages/shared');
+const { createGatewayOpenApiSpec } = require('./src/openapi');
 
 const config = createServiceConfig({
   appRoot: __dirname,
@@ -20,29 +32,129 @@ const config = createServiceConfig({
   defaultPort: 4000,
   defaultDatabase: 'gateway_db'
 });
+
 const logger = createLogger('gateway');
 const app = express();
 const server = http.createServer(app);
 
+const registry = new client.Registry();
+const openApiSpec = createGatewayOpenApiSpec(config);
+client.collectDefaultMetrics({ register: registry, prefix: 'aisle_gateway_' });
+
+const requestCounter = new client.Counter({
+  name: 'aisle_gateway_http_requests_total',
+  help: 'Total gateway requests',
+  labelNames: ['method', 'route', 'status_code'],
+  registers: [registry]
+});
+
+const requestErrors = new client.Counter({
+  name: 'aisle_gateway_http_errors_total',
+  help: 'Total gateway error responses',
+  labelNames: ['method', 'route', 'status_code'],
+  registers: [registry]
+});
+
+const requestLatency = new client.Histogram({
+  name: 'aisle_gateway_http_request_duration_seconds',
+  help: 'Gateway request latency',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [0.005, 0.01, 0.05, 0.1, 0.3, 0.75, 1.5, 3, 5],
+  registers: [registry]
+});
+
+const resolveRouteLabel = (req) => {
+  if (req.route?.path) {
+    return `${req.baseUrl || ''}${req.route.path}`;
+  }
+
+  if (req.baseUrl) {
+    return req.baseUrl;
+  }
+
+  return req.path || '/';
+};
+
 app.set('trust proxy', true);
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: false
+}));
 app.use(cors({
   origin: true,
   credentials: true
 }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
-app.use(rateLimit({
-  windowMs: 60 * 1000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false
-}));
 
 app.use((req, res, next) => {
   req.requestId = req.headers['x-request-id'] || crypto.randomUUID();
   res.setHeader('x-request-id', req.requestId);
+  req.log = logger.child({
+    requestId: req.requestId,
+    method: req.method,
+    path: req.originalUrl
+  });
+
+  const endTimer = requestLatency.startTimer({
+    method: req.method,
+    route: resolveRouteLabel(req)
+  });
+
+  res.on('finish', () => {
+    const route = resolveRouteLabel(req);
+    const labels = {
+      method: req.method,
+      route,
+      status_code: String(res.statusCode)
+    };
+
+    requestCounter.inc(labels);
+    if (res.statusCode >= 400) {
+      requestErrors.inc(labels);
+    }
+
+    endTimer(labels);
+    req.log.info('request_completed', {
+      statusCode: res.statusCode,
+      route
+    });
+  });
+
   next();
 });
+
+app.use((req, res, next) => {
+  if (!config.isProduction) {
+    return next();
+  }
+
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').toLowerCase();
+  if (req.secure || forwardedProto === 'https') {
+    return next();
+  }
+
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    return res.redirect(308, `https://${req.headers.host}${req.originalUrl}`);
+  }
+
+  return res.status(400).json({ error: 'HTTPS is required.' });
+});
+
+const buildRateLimiter = (options = {}) => {
+  const limiterOptions = {
+    windowMs: options.windowMs || 60 * 1000,
+    limit: options.limit || 300,
+    standardHeaders: true,
+    legacyHeaders: false
+  };
+
+  if (options.store) {
+    limiterOptions.store = options.store;
+  }
+
+  return rateLimit(limiterOptions);
+};
 
 const isPlatformHost = (hostname = '') => {
   return [
@@ -51,6 +163,27 @@ const isPlatformHost = (hostname = '') => {
     config.rootDomain,
     `www.${config.rootDomain}`
   ].includes(String(hostname || '').toLowerCase());
+};
+
+const resolveRequestHost = (req) => {
+  const signedInternalHeaders = verifySignedInternalHeaders(req.headers, config.internalSharedSecret, {
+    maxAgeMs: config.internalRequestMaxAgeMs,
+    nonceTtlMs: config.internalRequestNonceTtlMs
+  });
+
+  if (signedInternalHeaders && req.headers['x-actor-type'] === 'web_app') {
+    const trustedTenantHost = String(req.headers['x-tenant-host'] || req.headers['x-forwarded-host'] || '')
+      .split(',')[0]
+      .trim()
+      .toLowerCase();
+
+    if (trustedTenantHost) {
+      req.isTrustedWebRequest = true;
+      return trustedTenantHost.split(':')[0];
+    }
+  }
+
+  return String(req.hostname || req.headers.host || '').split(':')[0].toLowerCase();
 };
 
 const extractToken = (req) => {
@@ -75,9 +208,36 @@ const resolveAuthContext = (req) => {
   }
 };
 
+const createServiceHeaders = (req, overrides = {}) => {
+  const auth = overrides.auth || req.gatewayContext?.auth || null;
+  const storeId = overrides.storeId === undefined
+    ? (req.storeContext?.store?.id || req.params?.storeId || '')
+    : overrides.storeId;
+
+  return buildSignedInternalHeaders({
+    requestId: req.requestId,
+    forwardedHost: overrides.forwardedHost || '',
+    storeId,
+    userId: overrides.userId === undefined ? auth?.user_id || '' : overrides.userId,
+    actorRole: overrides.actorRole === undefined ? auth?.role || '' : overrides.actorRole,
+    customerId: overrides.customerId === undefined ? auth?.customer_id || '' : overrides.customerId,
+    actorType: overrides.actorType === undefined ? auth?.actor_type || '' : overrides.actorType,
+    secret: config.internalSharedSecret
+  });
+};
+
 const resolveStoreContext = async (req, res, next) => {
-  const host = String(req.hostname || req.headers.host || '').split(':')[0];
-  const needsStoreResolution = !isPlatformHost(host) || req.path.startsWith('/api/chats') || req.path.startsWith('/api/products') || req.path.startsWith('/api/cart') || req.path.startsWith('/api/customers') || req.path.startsWith('/api/orders') || req.path.startsWith('/api/checkout');
+  const host = resolveRequestHost(req);
+  const needsStoreResolution = !isPlatformHost(host)
+    || req.path.startsWith('/api/chats')
+    || req.path.startsWith('/api/support')
+    || req.path.startsWith('/api/products')
+    || req.path.startsWith('/api/cart')
+    || req.path.startsWith('/api/customers')
+    || req.path.startsWith('/api/orders')
+    || req.path.startsWith('/api/checkout');
+
+  req.publicHost = host;
 
   if (!needsStoreResolution) {
     return next();
@@ -118,14 +278,8 @@ const attachGatewayContext = (req, res, next) => {
 
   req.gatewayContext = {
     auth,
-    internalHeaders: buildSignedInternalHeaders({
-      requestId: req.requestId,
-      storeId,
-      userId: auth?.user_id || '',
-      actorRole: auth?.role || '',
-      customerId: auth?.customer_id || '',
-      actorType: auth?.actor_type || '',
-      secret: config.internalSharedSecret
+    internalHeaders: createServiceHeaders(req, {
+      storeId
     })
   };
 
@@ -190,6 +344,7 @@ const createServiceProxy = (target, pathRewrite) => {
     target,
     changeOrigin: true,
     ws: true,
+    xfwd: true,
     pathRewrite,
     on: {
       proxyReq: (proxyReq, req) => {
@@ -197,97 +352,300 @@ const createServiceProxy = (target, pathRewrite) => {
         Object.entries(headers).forEach(([key, value]) => {
           proxyReq.setHeader(key, value);
         });
-        proxyReq.setHeader('x-forwarded-host', req.headers.host || '');
+        proxyReq.setHeader('x-forwarded-host', req.headers.host || req.publicHost || '');
       }
     }
   });
 };
 
-const platformProxy = {
-  auth: createServiceProxy(config.serviceUrls.user, { '^/api/platform': '' }),
-  stores: createServiceProxy(config.serviceUrls.store, { '^/api/platform': '' }),
-  compliance: createServiceProxy(config.serviceUrls.compliance, { '^/api/platform': '' }),
-  support: createServiceProxy(config.serviceUrls.support, { '^/api/platform': '' }),
-  chats: createServiceProxy(config.serviceUrls.chat, { '^/api/platform': '' }),
-  billing: createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' })
-};
+const bootstrap = async () => {
+  const cache = await createCache(config, logger);
+  const redisStore = cache.redis
+    ? createRedisRateLimitStore({
+      redis: cache.redis,
+      prefix: `${config.redisPrefix}:ratelimit:global`,
+      windowMs: 60 * 1000
+    })
+    : null;
 
-const storefrontProxies = {
-  customers: createServiceProxy(config.serviceUrls.customer, {}),
-  products: createServiceProxy(config.serviceUrls.product, {}),
-  cart: createServiceProxy(config.serviceUrls.cart, {}),
-  checkout: createServiceProxy(config.serviceUrls.order, {}),
-  orders: createServiceProxy(config.serviceUrls.order, {}),
-  chats: createServiceProxy(config.serviceUrls.chat, {})
-};
+  const authRedisStore = cache.redis
+    ? createRedisRateLimitStore({
+      redis: cache.redis,
+      prefix: `${config.redisPrefix}:ratelimit:auth`,
+      windowMs: 15 * 60 * 1000
+    })
+    : null;
 
-const ownerPathRewrite = {
-  '^/api/owner/stores/[^/]+': ''
-};
+  app.use(buildRateLimiter({
+    windowMs: 60 * 1000,
+    limit: Number(process.env.GATEWAY_RATE_LIMIT_MAX || 300),
+    store: redisStore
+  }));
 
-const ownerProxies = {
-  products: createServiceProxy(config.serviceUrls.product, ownerPathRewrite),
-  orders: createServiceProxy(config.serviceUrls.order, ownerPathRewrite),
-  customers: createServiceProxy(config.serviceUrls.customer, ownerPathRewrite),
-  support: createServiceProxy(config.serviceUrls.support, ownerPathRewrite),
-  chats: createServiceProxy(config.serviceUrls.chat, ownerPathRewrite),
-  payments: createServiceProxy(config.serviceUrls.payment, ownerPathRewrite),
-  settings: createServiceProxy(config.serviceUrls.store, ownerPathRewrite)
-};
-
-app.get('/health', async (req, res) => {
-  return res.json({
-    service: 'gateway',
-    status: 'ok'
+  const authRateLimiter = buildRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    limit: Number(process.env.GATEWAY_AUTH_RATE_LIMIT_MAX || 20),
+    store: authRedisStore
   });
-});
 
-app.use(resolveStoreContext);
-app.use(attachGatewayContext);
-
-app.use('/api/platform/auth', platformProxy.auth);
-app.use('/api/platform/stores', requirePlatformUser(), platformProxy.stores);
-app.use('/api/platform/compliance', requirePlatformUser([PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT, PLATFORM_ROLES.STORE_OWNER]), platformProxy.compliance);
-app.use('/api/platform/support', requirePlatformUser([PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT, PLATFORM_ROLES.STORE_OWNER]), platformProxy.support);
-app.use('/api/platform/chats', requirePlatformUser([PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT, PLATFORM_ROLES.STORE_OWNER]), platformProxy.chats);
-app.use('/api/platform/billing', requirePlatformUser(), platformProxy.billing);
-
-app.use('/api/owner/stores/:storeId/products', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.products);
-app.use('/api/owner/stores/:storeId/orders', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.orders);
-app.use('/api/owner/stores/:storeId/customers', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.customers);
-app.use('/api/owner/stores/:storeId/support', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.support);
-app.use('/api/owner/stores/:storeId/chats', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.chats);
-app.use('/api/owner/stores/:storeId/payments', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER]), ensureOwnerCanAccessStore, ownerProxies.payments);
-app.use('/api/owner/stores/:storeId/settings', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER]), ensureOwnerCanAccessStore, ownerProxies.settings);
-
-app.use('/api/customers/me', requireCustomer, storefrontProxies.customers);
-app.use('/api/customers', storefrontProxies.customers);
-app.use('/api/products', storefrontProxies.products);
-app.use('/api/cart', storefrontProxies.cart);
-app.use('/api/checkout', storefrontProxies.checkout);
-app.use('/api/orders', requireCustomer, storefrontProxies.orders);
-app.use('/api/chats', storefrontProxies.chats);
-
-const supportSocketProxy = createServiceProxy(config.serviceUrls.support, {});
-const chatSocketProxy = createServiceProxy(config.serviceUrls.chat, {});
-app.use('/socket.io/support', supportSocketProxy);
-app.use('/socket.io/chat', chatSocketProxy);
-
-const webProxy = createProxyMiddleware({
-  target: config.webAppUrl,
-  changeOrigin: true,
-  ws: true
-});
-
-app.use('/', webProxy);
-
-server.on('upgrade', supportSocketProxy.upgrade);
-server.on('upgrade', chatSocketProxy.upgrade);
-server.on('upgrade', webProxy.upgrade);
-
-server.listen(config.port, () => {
-  logger.info('Gateway listening', {
-    port: config.port,
-    rootDomain: config.rootDomain
+  app.get('/health', async (req, res) => {
+    try {
+      return res.json({
+        service: 'gateway',
+        status: 'ok',
+        cache: await cache.healthCheck()
+      });
+    } catch (error) {
+      return res.status(500).json({
+        service: 'gateway',
+        status: 'error',
+        error: error.message
+      });
+    }
   });
+
+  app.get('/metrics', async (req, res) => {
+    res.setHeader('Content-Type', registry.contentType);
+    res.end(await registry.metrics());
+  });
+
+  app.get('/openapi.json', (req, res) => {
+    res.json(openApiSpec);
+  });
+
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
+    explorer: true,
+    customSiteTitle: 'Aisle Commerce API Docs'
+  }));
+
+  app.use(resolveStoreContext);
+  app.use(attachGatewayContext);
+
+  app.get('/api/platform/billing/plans', createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' }));
+
+  app.post('/api/platform/auth/register', authRateLimiter, asyncHandler(async (req, res) => {
+    const response = await requestJson(`${config.serviceUrls.user}/auth/register`, {
+      method: 'POST',
+      headers: createServiceHeaders(req, {
+        actorType: 'web_gateway',
+        userId: '',
+        actorRole: ''
+      }),
+      body: req.body,
+      timeoutMs: config.requestTimeoutMs
+    });
+
+    if (response.token) {
+      setPlatformTokenCookie(res, response.token, config);
+    }
+
+    return res.status(201).json(response);
+  }));
+
+  app.post('/api/platform/auth/login', authRateLimiter, asyncHandler(async (req, res) => {
+    const response = await requestJson(`${config.serviceUrls.user}/auth/login`, {
+      method: 'POST',
+      headers: createServiceHeaders(req, {
+        actorType: 'web_gateway',
+        userId: '',
+        actorRole: ''
+      }),
+      body: req.body,
+      timeoutMs: config.requestTimeoutMs
+    });
+
+    if (response.token) {
+      setPlatformTokenCookie(res, response.token, config);
+    }
+
+    return res.json(response);
+  }));
+
+  app.post('/api/platform/auth/logout', (req, res) => {
+    clearAuthCookies(res, config);
+    return res.status(204).send();
+  });
+
+  app.post('/api/customers/register', authRateLimiter, asyncHandler(async (req, res) => {
+    const storeId = req.storeContext?.store?.id || req.body.store_id;
+    const response = await requestJson(`${config.serviceUrls.customer}/customers/register`, {
+      method: 'POST',
+      headers: createServiceHeaders(req, {
+        storeId,
+        actorType: 'web_gateway',
+        customerId: '',
+        userId: '',
+        actorRole: ''
+      }),
+      body: {
+        ...req.body,
+        store_id: storeId
+      },
+      timeoutMs: config.requestTimeoutMs
+    });
+
+    if (response.token) {
+      setCustomerTokenCookie(res, response.token, config);
+    }
+
+    return res.status(201).json(response);
+  }));
+
+  app.post('/api/customers/login', authRateLimiter, asyncHandler(async (req, res) => {
+    const storeId = req.storeContext?.store?.id || req.body.store_id;
+    const response = await requestJson(`${config.serviceUrls.customer}/customers/login`, {
+      method: 'POST',
+      headers: createServiceHeaders(req, {
+        storeId,
+        actorType: 'web_gateway',
+        customerId: '',
+        userId: '',
+        actorRole: ''
+      }),
+      body: {
+        ...req.body,
+        store_id: storeId
+      },
+      timeoutMs: config.requestTimeoutMs
+    });
+
+    if (response.token) {
+      setCustomerTokenCookie(res, response.token, config);
+    }
+
+    return res.json(response);
+  }));
+
+  app.post('/api/customers/logout', (req, res) => {
+    clearAuthCookies(res, config);
+    return res.status(204).send();
+  });
+
+  const platformProxy = {
+    auth: createServiceProxy(config.serviceUrls.user, { '^/api/platform': '' }),
+    stores: createServiceProxy(config.serviceUrls.store, { '^/api/platform': '' }),
+    compliance: createServiceProxy(config.serviceUrls.compliance, { '^/api/platform': '' }),
+    support: createServiceProxy(config.serviceUrls.support, { '^/api/platform': '' }),
+    chats: createServiceProxy(config.serviceUrls.chat, { '^/api/platform': '' }),
+    billing: createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' }),
+    notifications: createServiceProxy(config.serviceUrls.notification, { '^/api/platform': '' })
+  };
+
+  const storefrontProxies = {
+    customers: createServiceProxy(config.serviceUrls.customer, {}),
+    products: createServiceProxy(config.serviceUrls.product, {}),
+    cart: createServiceProxy(config.serviceUrls.cart, {}),
+    checkout: createServiceProxy(config.serviceUrls.order, {}),
+    orders: createServiceProxy(config.serviceUrls.order, {}),
+    chats: createServiceProxy(config.serviceUrls.chat, {}),
+    support: createServiceProxy(config.serviceUrls.support, {})
+  };
+
+  const ownerPathRewrite = {
+    '^/api/owner/stores/[^/]+': ''
+  };
+
+  const ownerProxies = {
+    products: createServiceProxy(config.serviceUrls.product, ownerPathRewrite),
+    orders: createServiceProxy(config.serviceUrls.order, ownerPathRewrite),
+    customers: createServiceProxy(config.serviceUrls.customer, ownerPathRewrite),
+    support: createServiceProxy(config.serviceUrls.support, ownerPathRewrite),
+    chats: createServiceProxy(config.serviceUrls.chat, ownerPathRewrite),
+    payments: createServiceProxy(config.serviceUrls.payment, ownerPathRewrite),
+    settings: createServiceProxy(config.serviceUrls.store, ownerPathRewrite),
+    notifications: createServiceProxy(config.serviceUrls.notification, ownerPathRewrite)
+  };
+
+  app.use('/api/platform/auth', platformProxy.auth);
+  app.use('/api/platform/stores', requirePlatformUser(), platformProxy.stores);
+  app.use('/api/platform/compliance', requirePlatformUser([PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT, PLATFORM_ROLES.STORE_OWNER]), platformProxy.compliance);
+  app.use('/api/platform/support', requirePlatformUser([PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT, PLATFORM_ROLES.STORE_OWNER]), platformProxy.support);
+  app.use('/api/platform/chats', requirePlatformUser([PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT, PLATFORM_ROLES.STORE_OWNER]), platformProxy.chats);
+  app.use('/api/platform/billing', requirePlatformUser(), platformProxy.billing);
+  app.use('/api/platform/notifications', requirePlatformUser([PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT, PLATFORM_ROLES.STORE_OWNER]), platformProxy.notifications);
+
+  app.use('/api/owner/stores/:storeId/products', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.products);
+  app.use('/api/owner/stores/:storeId/orders', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.orders);
+  app.use('/api/owner/stores/:storeId/customers', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.customers);
+  app.use('/api/owner/stores/:storeId/support', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.support);
+  app.use('/api/owner/stores/:storeId/chats', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.chats);
+  app.use('/api/owner/stores/:storeId/payments', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER]), ensureOwnerCanAccessStore, ownerProxies.payments);
+  app.use('/api/owner/stores/:storeId/settings', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER]), ensureOwnerCanAccessStore, ownerProxies.settings);
+  app.use('/api/owner/stores/:storeId/notifications', requirePlatformUser([PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT]), ensureOwnerCanAccessStore, ownerProxies.notifications);
+
+  app.use('/api/customers/me', requireCustomer, storefrontProxies.customers);
+  app.use('/api/customers', storefrontProxies.customers);
+  app.use('/api/products', storefrontProxies.products);
+  app.use('/api/cart', storefrontProxies.cart);
+  app.use('/api/checkout', storefrontProxies.checkout);
+  app.use('/api/orders', requireCustomer, storefrontProxies.orders);
+  app.use('/api/chats', storefrontProxies.chats);
+  app.use('/api/support', storefrontProxies.support);
+
+  const supportSocketProxy = createServiceProxy(config.serviceUrls.support, {});
+  const chatSocketProxy = createServiceProxy(config.serviceUrls.chat, {});
+  const publicPaymentProxy = createProxyMiddleware({
+    target: config.serviceUrls.payment,
+    changeOrigin: true,
+    xfwd: true
+  });
+  app.use('/socket.io/support', supportSocketProxy);
+  app.use('/socket.io/chat', chatSocketProxy);
+  app.use('/payments', publicPaymentProxy);
+
+  const webProxy = createProxyMiddleware({
+    target: config.webAppUrl,
+    changeOrigin: true,
+    ws: true,
+    xfwd: true,
+    on: {
+      proxyReq: (proxyReq, req) => {
+        proxyReq.setHeader('x-forwarded-host', req.headers.host || req.publicHost || '');
+        if (req.storeContext?.store?.id) {
+          proxyReq.setHeader('x-store-id', String(req.storeContext.store.id));
+        }
+        if (req.gatewayContext?.auth) {
+          proxyReq.setHeader('x-actor-type', req.gatewayContext.auth.actor_type || '');
+          proxyReq.setHeader('x-actor-role', req.gatewayContext.auth.role || '');
+          proxyReq.setHeader('x-user-id', req.gatewayContext.auth.user_id || '');
+          proxyReq.setHeader('x-customer-id', req.gatewayContext.auth.customer_id || '');
+        }
+      }
+    }
+  });
+
+  app.use('/', webProxy);
+
+  app.use(errorHandler({
+    logger,
+    isProduction: config.isProduction,
+    serviceName: 'gateway'
+  }));
+
+  server.on('upgrade', supportSocketProxy.upgrade);
+  server.on('upgrade', chatSocketProxy.upgrade);
+  server.on('upgrade', webProxy.upgrade);
+
+  server.listen(config.port, () => {
+    logger.info('Gateway listening', {
+      port: config.port,
+      rootDomain: config.rootDomain
+    });
+  });
+
+  const shutdown = async () => {
+    logger.info('Shutting down gateway');
+    server.close(async () => {
+      await cache.close();
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+};
+
+bootstrap().catch((error) => {
+  logger.error('Gateway failed to start', { error });
+  process.exit(1);
 });

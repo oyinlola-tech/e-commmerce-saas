@@ -2,9 +2,13 @@ const schemaStatements = [
   `
     CREATE TABLE IF NOT EXISTS payments (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      order_id BIGINT UNSIGNED NOT NULL,
-      store_id BIGINT UNSIGNED NOT NULL,
+      order_id BIGINT UNSIGNED NULL,
+      store_id BIGINT UNSIGNED NULL,
+      owner_id BIGINT UNSIGNED NULL,
       customer_id BIGINT UNSIGNED NULL,
+      payment_scope VARCHAR(40) NOT NULL DEFAULT 'storefront',
+      entity_type VARCHAR(60) NULL,
+      entity_id VARCHAR(191) NULL,
       amount DECIMAL(12,2) NOT NULL DEFAULT 0,
       currency VARCHAR(10) NOT NULL DEFAULT 'NGN',
       provider VARCHAR(40) NOT NULL DEFAULT 'paystack',
@@ -15,7 +19,11 @@ const schemaStatements = [
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_payments_reference (reference),
-      KEY idx_payments_order_id (order_id)
+      KEY idx_payments_order_id (order_id),
+      KEY idx_payments_store_id (store_id),
+      KEY idx_payments_owner_id (owner_id),
+      KEY idx_payments_scope (payment_scope),
+      KEY idx_payments_entity (entity_type, entity_id)
     )
   `,
   `
@@ -28,7 +36,8 @@ const schemaStatements = [
       status VARCHAR(40) NOT NULL DEFAULT 'inactive',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_payment_provider_configs_store_provider (store_id, provider)
+      UNIQUE KEY uq_payment_provider_configs_store_provider (store_id, provider),
+      KEY idx_payment_provider_configs_store_id (store_id)
     )
   `,
   `
@@ -38,7 +47,8 @@ const schemaStatements = [
       reference VARCHAR(191) NULL,
       payload JSON NULL,
       status VARCHAR(40) NOT NULL DEFAULT 'received',
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_payment_webhooks_reference (reference)
     )
   `
 ];

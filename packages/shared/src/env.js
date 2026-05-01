@@ -6,6 +6,43 @@ const normalizeEnvironment = (value = '') => {
   return String(value).trim().toLowerCase() === 'production' ? 'production' : 'development';
 };
 
+const asBoolean = (value, fallback = false) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'undefined' || value === null || value === '') {
+    return fallback;
+  }
+
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+};
+
+const asNumber = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const asList = (value = '') => {
+  return String(value || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+};
+
+const getEnv = (name, fallback, { requiredInProduction = false, environment = 'development' } = {}) => {
+  const value = process.env[name];
+  if (value !== undefined && value !== '') {
+    return value;
+  }
+
+  if (requiredInProduction && environment === 'production') {
+    throw new Error(`${name} must be set in production.`);
+  }
+
+  return fallback;
+};
+
 const hasWorkspaceRoot = (directory) => {
   const packageJsonPath = path.join(directory, 'package.json');
   if (!fs.existsSync(packageJsonPath)) {
@@ -64,42 +101,69 @@ const createServiceConfig = ({
   defaultDatabase
 }) => {
   const { workspaceRoot, environment } = loadEnvFiles(appRoot);
+  const isProduction = environment === 'production';
 
   return {
     appRoot,
     workspaceRoot,
     environment,
-    isProduction: environment === 'production',
+    isProduction,
     serviceName,
-    port: Number(process.env.PORT || defaultPort),
-    databaseUrl: process.env.DATABASE_URL || `mysql://root:password@127.0.0.1:3306/${defaultDatabase}`,
-    jwtSecret: process.env.JWT_SECRET || 'aisle-jwt-secret',
-    internalSharedSecret: process.env.INTERNAL_SHARED_SECRET || 'aisle-internal-secret',
-    rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://127.0.0.1:5672',
-    redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
-    rootDomain: process.env.PLATFORM_ROOT_DOMAIN || 'aislecommerce.com',
-    eventExchange: process.env.EVENT_EXCHANGE || 'aisle.events',
-    requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS || 5000),
-    webAppUrl: process.env.WEB_APP_URL || 'http://127.0.0.1:3000',
-    gatewayUrl: process.env.GATEWAY_URL || 'http://127.0.0.1:4000',
+    port: asNumber(process.env.PORT, defaultPort),
+    databaseUrl: getEnv('DATABASE_URL', `mysql://root:password@127.0.0.1:3306/${defaultDatabase}`),
+    databaseReadUrls: asList(process.env.DATABASE_READ_URLS),
+    databasePoolMin: asNumber(process.env.DB_POOL_MIN, 2),
+    databasePoolMax: asNumber(process.env.DB_POOL_MAX, 12),
+    databaseIdleTimeoutMs: asNumber(process.env.DB_IDLE_TIMEOUT_MS, 60 * 1000),
+    databaseAcquireTimeoutMs: asNumber(process.env.DB_ACQUIRE_TIMEOUT_MS, 10 * 1000),
+    databaseConnectRetries: asNumber(process.env.DB_CONNECT_RETRIES, 5),
+    databaseRetryDelayMs: asNumber(process.env.DB_CONNECT_RETRY_DELAY_MS, 1000),
+    jwtSecret: getEnv('JWT_SECRET', 'aisle-jwt-secret', {
+      requiredInProduction: true,
+      environment
+    }),
+    jwtAccessTtl: getEnv('JWT_ACCESS_TTL', '1h'),
+    internalSharedSecret: getEnv('INTERNAL_SHARED_SECRET', 'aisle-internal-secret', {
+      requiredInProduction: true,
+      environment
+    }),
+    rabbitmqUrl: getEnv('RABBITMQ_URL', 'amqp://127.0.0.1:5672'),
+    redisUrl: getEnv('REDIS_URL', 'redis://127.0.0.1:6379'),
+    disableRedis: asBoolean(process.env.DISABLE_REDIS, false),
+    rootDomain: getEnv('PLATFORM_ROOT_DOMAIN', 'aislecommerce.com'),
+    eventExchange: getEnv('EVENT_EXCHANGE', 'aisle.events'),
+    requestTimeoutMs: asNumber(process.env.REQUEST_TIMEOUT_MS, 5000),
+    webAppUrl: getEnv('WEB_APP_URL', 'http://127.0.0.1:3000'),
+    gatewayUrl: getEnv('GATEWAY_URL', 'http://127.0.0.1:4000'),
+    cookieSecure: asBoolean(process.env.COOKIE_SECURE, isProduction),
+    cookieDomain: process.env.COOKIE_DOMAIN || '',
+    cookieSameSite: getEnv('COOKIE_SAMESITE', 'strict'),
+    redisPrefix: getEnv('REDIS_PREFIX', `aisle:${serviceName}`),
+    internalRequestMaxAgeMs: asNumber(process.env.INTERNAL_REQUEST_MAX_AGE_MS, 5 * 60 * 1000),
+    internalRequestNonceTtlMs: asNumber(process.env.INTERNAL_REQUEST_NONCE_TTL_MS, 5 * 60 * 1000),
+    pageCacheTtlSeconds: asNumber(process.env.PAGE_CACHE_TTL_SECONDS, 60),
+    staticAssetCacheSeconds: asNumber(process.env.STATIC_ASSET_CACHE_SECONDS, 60 * 60),
     serviceUrls: {
-      user: process.env.USER_SERVICE_URL || 'http://127.0.0.1:4101',
-      store: process.env.STORE_SERVICE_URL || 'http://127.0.0.1:4102',
-      compliance: process.env.COMPLIANCE_SERVICE_URL || 'http://127.0.0.1:4103',
-      customer: process.env.CUSTOMER_SERVICE_URL || 'http://127.0.0.1:4104',
-      product: process.env.PRODUCT_SERVICE_URL || 'http://127.0.0.1:4105',
-      cart: process.env.CART_SERVICE_URL || 'http://127.0.0.1:4106',
-      order: process.env.ORDER_SERVICE_URL || 'http://127.0.0.1:4107',
-      payment: process.env.PAYMENT_SERVICE_URL || 'http://127.0.0.1:4108',
-      billing: process.env.BILLING_SERVICE_URL || 'http://127.0.0.1:4109',
-      support: process.env.SUPPORT_SERVICE_URL || 'http://127.0.0.1:4110',
-      chat: process.env.CHAT_SERVICE_URL || 'http://127.0.0.1:4111',
-      notification: process.env.NOTIFICATION_SERVICE_URL || 'http://127.0.0.1:4112'
+      user: getEnv('USER_SERVICE_URL', 'http://127.0.0.1:4101'),
+      store: getEnv('STORE_SERVICE_URL', 'http://127.0.0.1:4102'),
+      compliance: getEnv('COMPLIANCE_SERVICE_URL', 'http://127.0.0.1:4103'),
+      customer: getEnv('CUSTOMER_SERVICE_URL', 'http://127.0.0.1:4104'),
+      product: getEnv('PRODUCT_SERVICE_URL', 'http://127.0.0.1:4105'),
+      cart: getEnv('CART_SERVICE_URL', 'http://127.0.0.1:4106'),
+      order: getEnv('ORDER_SERVICE_URL', 'http://127.0.0.1:4107'),
+      payment: getEnv('PAYMENT_SERVICE_URL', 'http://127.0.0.1:4108'),
+      billing: getEnv('BILLING_SERVICE_URL', 'http://127.0.0.1:4109'),
+      support: getEnv('SUPPORT_SERVICE_URL', 'http://127.0.0.1:4110'),
+      chat: getEnv('CHAT_SERVICE_URL', 'http://127.0.0.1:4111'),
+      notification: getEnv('NOTIFICATION_SERVICE_URL', 'http://127.0.0.1:4112')
     }
   };
 };
 
 module.exports = {
+  asBoolean,
+  asNumber,
+  asList,
   normalizeEnvironment,
   loadEnvFiles,
   findWorkspaceRoot,

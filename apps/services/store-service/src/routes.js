@@ -1,11 +1,20 @@
+const { param, query, body } = require('express-validator');
 const {
   requireInternalRequest,
   normalizeThemeContract,
   EVENT_NAMES,
   PLATFORM_ROLES,
   buildSignedInternalHeaders,
-  requestJson
+  requestJson,
+  asyncHandler,
+  createHttpError,
+  validate,
+  commonRules,
+  sanitizePlainText,
+  sanitizeSlug
 } = require('../../../../packages/shared');
+
+const STORE_CACHE_TTL_SECONDS = 5 * 60;
 
 const sanitizeStore = (store) => {
   if (!store) {
@@ -32,9 +41,15 @@ const sanitizeStore = (store) => {
   };
 };
 
+const buildRequireInternal = (config) => {
+  return requireInternalRequest(config.internalSharedSecret, {
+    maxAgeMs: config.internalRequestMaxAgeMs,
+    nonceTtlMs: config.internalRequestNonceTtlMs
+  });
+};
+
 const ensureStoreAccess = async (db, storeId, userId, actorRole) => {
-  const rows = await db.query('SELECT * FROM stores WHERE id = ?', [storeId]);
-  const store = rows[0];
+  const store = (await db.query('SELECT * FROM stores WHERE id = ?', [storeId]))[0] || null;
   if (!store) {
     return { allowed: false, store: null };
   }
@@ -49,253 +64,292 @@ const ensureStoreAccess = async (db, storeId, userId, actorRole) => {
   };
 };
 
-const registerRoutes = async ({ app, db, bus, config, logger }) => {
-  const requireInternal = requireInternalRequest(config.internalSharedSecret);
+const buildStoreCacheKey = (suffix) => `store:${suffix}`;
 
-  app.get('/resolve', async (req, res) => {
-    try {
-      const host = String(req.query.host || '').trim().toLowerCase();
-      if (!host) {
-        return res.status(400).json({ error: 'host is required.' });
-      }
+const invalidateStoreCache = async (cache, store) => {
+  await cache.delByPattern('store:*');
+  if (store?.id) {
+    await cache.del(buildStoreCacheKey(`settings:${store.id}`));
+  }
+};
 
+const normalizeDomain = (value = '') => {
+  const clean = sanitizePlainText(value, { maxLength: 190 }).toLowerCase();
+  return clean.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+};
+
+const normalizeSubdomain = (value = '') => {
+  return sanitizeSlug(value).slice(0, 120);
+};
+
+const registerRoutes = async ({ app, db, bus, config, logger, cache }) => {
+  const requireInternal = buildRequireInternal(config);
+
+  app.get('/resolve', validate([
+    query('host').trim().notEmpty().customSanitizer((value) => normalizeDomain(value))
+  ]), asyncHandler(async (req, res) => {
+    const host = String(req.query.host || '').trim().toLowerCase();
+    const cacheKey = buildStoreCacheKey(`resolve:${host}`);
+    const cached = await cache.getOrSetJson(cacheKey, STORE_CACHE_TTL_SECONDS, async () => {
       const baseHost = host.split(':')[0];
       const [subdomain] = baseHost.split('.');
-      const stores = await db.query(
+      const store = (await db.query(
         'SELECT * FROM stores WHERE custom_domain = ? OR subdomain = ? LIMIT 1',
         [baseHost, subdomain]
-      );
-      const store = stores[0];
+      ))[0];
 
       if (!store) {
-        return res.status(404).json({ error: 'Store not found.' });
+        throw createHttpError(404, 'Store not found.', null, { expose: true });
       }
 
-      return res.json({
+      return {
         store: sanitizeStore(store)
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
-    }
-  });
+      };
+    });
 
-  app.get('/stores/:id/access-check', requireInternal, async (req, res) => {
-    try {
-      const result = await ensureStoreAccess(
-        db,
-        req.params.id,
-        req.query.user_id || req.authContext.userId,
-        req.authContext.actorRole
+    res.setHeader('x-cache', cached.cacheHit ? 'hit' : 'miss');
+    return res.json(cached.value);
+  }));
+
+  app.get('/stores/:id/access-check', requireInternal, validate([
+    commonRules.paramId('id'),
+    query('user_id').optional().isInt({ min: 1 }).toInt()
+  ]), asyncHandler(async (req, res) => {
+    const result = await ensureStoreAccess(
+      db,
+      req.params.id,
+      req.query.user_id || req.authContext.userId,
+      req.authContext.actorRole
+    );
+
+    return res.json({
+      allowed: result.allowed,
+      store: sanitizeStore(result.store)
+    });
+  }));
+
+  app.post('/stores', requireInternal, validate([
+    commonRules.plainText('name', 150),
+    body('subdomain').trim().notEmpty().customSanitizer((value) => normalizeSubdomain(value)),
+    body('custom_domain').optional().customSanitizer((value) => normalizeDomain(value)),
+    commonRules.url('logo_url'),
+    commonRules.optionalPlainText('theme_color', 20),
+    commonRules.optionalPlainText('support_email', 190),
+    commonRules.phone('contact_phone'),
+    body('is_active').optional().isBoolean().toBoolean(),
+    commonRules.optionalPlainText('ssl_status', 40)
+  ]), asyncHandler(async (req, res) => {
+    if (![PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER].includes(req.authContext.actorRole)) {
+      throw createHttpError(403, 'Only store owners and platform owners can create stores.', null, { expose: true });
+    }
+
+    const ownerId = Number(req.authContext.userId || req.body.owner_id);
+    if (!ownerId) {
+      throw createHttpError(400, 'owner_id is required.', null, { expose: true });
+    }
+
+    const subscriptionCheckHeaders = buildSignedInternalHeaders({
+      requestId: req.requestId,
+      userId: req.authContext.userId,
+      actorRole: req.authContext.actorRole,
+      actorType: 'platform_user',
+      secret: config.internalSharedSecret
+    });
+    const subscriptionCheck = await requestJson(
+      `${config.serviceUrls.billing}/internal/subscriptions/check?owner_id=${encodeURIComponent(ownerId)}`,
+      {
+        headers: subscriptionCheckHeaders,
+        timeoutMs: config.requestTimeoutMs
+      }
+    );
+
+    if (!subscriptionCheck.allowed) {
+      throw createHttpError(403, 'An active subscription or trial is required before creating a store.', null, { expose: true });
+    }
+
+    const theme = normalizeThemeContract(req.body);
+    const name = String(req.body.name || '').trim();
+    const subdomain = normalizeSubdomain(req.body.subdomain);
+    if (!name || !subdomain) {
+      throw createHttpError(400, 'name and subdomain are required.', null, { expose: true });
+    }
+
+    const duplicate = await db.query(
+      'SELECT id FROM stores WHERE subdomain = ? OR custom_domain = ? LIMIT 1',
+      [subdomain, req.body.custom_domain || null]
+    );
+    if (duplicate.length) {
+      throw createHttpError(409, 'Subdomain or custom domain already exists.', null, { expose: true });
+    }
+
+    const result = await db.execute(
+      `
+        INSERT INTO stores (
+          owner_id, name, subdomain, custom_domain, logo_url, theme_color, store_type,
+          template_key, font_preset, support_email, contact_phone, is_active, ssl_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        ownerId,
+        name,
+        subdomain,
+        req.body.custom_domain || null,
+        req.body.logo_url || null,
+        req.body.theme_color || '#0F766E',
+        theme.store_type,
+        theme.template_key,
+        theme.font_preset,
+        req.body.support_email || null,
+        req.body.contact_phone || null,
+        req.body.is_active === false ? 0 : 1,
+        req.body.ssl_status || 'pending'
+      ]
+    );
+
+    const store = (await db.query('SELECT * FROM stores WHERE id = ?', [result.insertId]))[0];
+    await invalidateStoreCache(cache, store);
+    await bus.publish(EVENT_NAMES.STORE_CREATED, {
+      store_id: store.id,
+      owner_id: store.owner_id,
+      subdomain: store.subdomain
+    });
+
+    return res.status(201).json({
+      store: sanitizeStore(store)
+    });
+  }));
+
+  app.get('/stores', requireInternal, asyncHandler(async (req, res) => {
+    const actorRole = req.authContext.actorRole;
+    let stores = [];
+
+    if ([PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT].includes(actorRole)) {
+      stores = await db.query('SELECT * FROM stores ORDER BY created_at DESC');
+    } else {
+      stores = await db.query(
+        'SELECT * FROM stores WHERE owner_id = ? ORDER BY created_at DESC',
+        [req.authContext.userId]
       );
-
-      return res.json({
-        allowed: result.allowed,
-        store: sanitizeStore(result.store)
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
     }
-  });
 
-  app.post('/stores', requireInternal, async (req, res) => {
-    try {
-      if (![PLATFORM_ROLES.STORE_OWNER, PLATFORM_ROLES.PLATFORM_OWNER].includes(req.authContext.actorRole)) {
-        return res.status(403).json({ error: 'Only store owners and platform owners can create stores.' });
-      }
+    return res.json({
+      stores: stores.map(sanitizeStore)
+    });
+  }));
 
-      const ownerId = Number(req.authContext.userId || req.body.owner_id);
-      if (!ownerId) {
-        return res.status(400).json({ error: 'owner_id is required.' });
-      }
-
-      const subscriptionCheckHeaders = buildSignedInternalHeaders({
-        requestId: req.requestId,
-        userId: req.authContext.userId,
-        actorRole: req.authContext.actorRole,
-        actorType: 'platform_user',
-        secret: config.internalSharedSecret
-      });
-      const subscriptionCheck = await requestJson(
-        `${config.serviceUrls.billing}/internal/subscriptions/check?owner_id=${encodeURIComponent(ownerId)}`,
-        {
-          headers: subscriptionCheckHeaders,
-          timeoutMs: config.requestTimeoutMs
-        }
-      );
-
-      if (!subscriptionCheck.allowed) {
-        return res.status(403).json({ error: 'An active subscription or trial is required before creating a store.' });
-      }
-
-      const theme = normalizeThemeContract(req.body);
-      const name = String(req.body.name || '').trim();
-      const subdomain = String(req.body.subdomain || '').trim().toLowerCase();
-      if (!name || !subdomain) {
-        return res.status(400).json({ error: 'name and subdomain are required.' });
-      }
-
-      const duplicate = await db.query(
-        'SELECT id FROM stores WHERE subdomain = ? OR custom_domain = ? LIMIT 1',
-        [subdomain, req.body.custom_domain || null]
-      );
-      if (duplicate.length) {
-        return res.status(409).json({ error: 'Subdomain or custom domain already exists.' });
-      }
-
-      const result = await db.execute(
-        `
-          INSERT INTO stores (
-            owner_id, name, subdomain, custom_domain, logo_url, theme_color, store_type,
-            template_key, font_preset, support_email, contact_phone, is_active, ssl_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-          ownerId,
-          name,
-          subdomain,
-          req.body.custom_domain || null,
-          req.body.logo_url || null,
-          req.body.theme_color || '#0F766E',
-          theme.store_type,
-          theme.template_key,
-          theme.font_preset,
-          req.body.support_email || null,
-          req.body.contact_phone || null,
-          req.body.is_active === false ? 0 : 1,
-          req.body.ssl_status || 'pending'
-        ]
-      );
-
-      const rows = await db.query('SELECT * FROM stores WHERE id = ?', [result.insertId]);
-      const store = rows[0];
-      await bus.publish(EVENT_NAMES.STORE_CREATED, {
-        store_id: store.id,
-        owner_id: store.owner_id,
-        subdomain: store.subdomain
-      });
-
-      return res.status(201).json({
-        store: sanitizeStore(store)
-      });
-    } catch (error) {
-      logger.error('Failed to create store', { error: error.message });
-      return res.status(error.status || 500).json({ error: error.payload?.error || error.message });
+  app.get('/stores/:id', requireInternal, validate([
+    commonRules.paramId('id')
+  ]), asyncHandler(async (req, res) => {
+    const result = await ensureStoreAccess(db, req.params.id, req.authContext.userId, req.authContext.actorRole);
+    if (!result.store) {
+      throw createHttpError(404, 'Store not found.', null, { expose: true });
     }
-  });
 
-  app.get('/stores', requireInternal, async (req, res) => {
-    try {
-      const actorRole = req.authContext.actorRole;
-      let stores = [];
-
-      if ([PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT].includes(actorRole)) {
-        stores = await db.query('SELECT * FROM stores ORDER BY created_at DESC');
-      } else {
-        stores = await db.query('SELECT * FROM stores WHERE owner_id = ? ORDER BY created_at DESC', [req.authContext.userId]);
-      }
-
-      return res.json({
-        stores: stores.map(sanitizeStore)
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
+    if (!result.allowed) {
+      throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
     }
-  });
 
-  app.get('/stores/:id', requireInternal, async (req, res) => {
-    try {
-      const result = await ensureStoreAccess(db, req.params.id, req.authContext.userId, req.authContext.actorRole);
-      if (!result.store) {
-        return res.status(404).json({ error: 'Store not found.' });
-      }
+    return res.json({
+      store: sanitizeStore(result.store)
+    });
+  }));
 
-      if (!result.allowed) {
-        return res.status(403).json({ error: 'You do not have access to this store.' });
-      }
-
-      return res.json({
-        store: sanitizeStore(result.store)
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
+  app.put('/stores/:id', requireInternal, validate([
+    commonRules.paramId('id'),
+    commonRules.optionalPlainText('name', 150),
+    body('custom_domain').optional().customSanitizer((value) => normalizeDomain(value)),
+    commonRules.url('logo_url'),
+    commonRules.optionalPlainText('theme_color', 20),
+    commonRules.optionalPlainText('support_email', 190),
+    commonRules.phone('contact_phone'),
+    body('is_active').optional().isBoolean().toBoolean(),
+    commonRules.optionalPlainText('ssl_status', 40)
+  ]), asyncHandler(async (req, res) => {
+    const result = await ensureStoreAccess(db, req.params.id, req.authContext.userId, req.authContext.actorRole);
+    if (!result.store) {
+      throw createHttpError(404, 'Store not found.', null, { expose: true });
     }
-  });
 
-  app.put('/stores/:id', requireInternal, async (req, res) => {
-    try {
-      const result = await ensureStoreAccess(db, req.params.id, req.authContext.userId, req.authContext.actorRole);
-      if (!result.store) {
-        return res.status(404).json({ error: 'Store not found.' });
-      }
-
-      if (!result.allowed) {
-        return res.status(403).json({ error: 'You do not have access to this store.' });
-      }
-
-      const theme = normalizeThemeContract({
-        store_type: req.body.store_type || result.store.store_type,
-        template_key: req.body.template_key || result.store.template_key,
-        font_preset: req.body.font_preset || result.store.font_preset
-      });
-
-      await db.execute(
-        `
-          UPDATE stores
-          SET name = ?, custom_domain = ?, logo_url = ?, theme_color = ?, store_type = ?, template_key = ?,
-              font_preset = ?, support_email = ?, contact_phone = ?, is_active = ?, ssl_status = ?
-          WHERE id = ?
-        `,
-        [
-          req.body.name || result.store.name,
-          req.body.custom_domain || result.store.custom_domain,
-          req.body.logo_url || result.store.logo_url,
-          req.body.theme_color || result.store.theme_color,
-          theme.store_type,
-          theme.template_key,
-          theme.font_preset,
-          req.body.support_email || result.store.support_email,
-          req.body.contact_phone || result.store.contact_phone,
-          typeof req.body.is_active === 'undefined' ? result.store.is_active : Number(Boolean(req.body.is_active)),
-          req.body.ssl_status || result.store.ssl_status,
-          req.params.id
-        ]
-      );
-
-      const rows = await db.query('SELECT * FROM stores WHERE id = ?', [req.params.id]);
-      const store = rows[0];
-      await bus.publish(EVENT_NAMES.STORE_UPDATED, {
-        store_id: store.id,
-        owner_id: store.owner_id,
-        custom_domain: store.custom_domain
-      });
-
-      return res.json({
-        store: sanitizeStore(store)
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
+    if (!result.allowed) {
+      throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
     }
-  });
 
-  app.get('/settings', requireInternal, async (req, res) => {
-    try {
-      const result = await ensureStoreAccess(db, req.authContext.storeId, req.authContext.userId, req.authContext.actorRole);
-      if (!result.allowed || !result.store) {
-        return res.status(403).json({ error: 'You do not have access to this store.' });
-      }
+    const theme = normalizeThemeContract({
+      store_type: req.body.store_type || result.store.store_type,
+      template_key: req.body.template_key || result.store.template_key,
+      font_preset: req.body.font_preset || result.store.font_preset
+    });
 
-      return res.json({
-        store: sanitizeStore(result.store)
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
+    await db.execute(
+      `
+        UPDATE stores
+        SET name = ?, custom_domain = ?, logo_url = ?, theme_color = ?, store_type = ?, template_key = ?,
+            font_preset = ?, support_email = ?, contact_phone = ?, is_active = ?, ssl_status = ?
+        WHERE id = ?
+      `,
+      [
+        req.body.name || result.store.name,
+        req.body.custom_domain === undefined ? result.store.custom_domain : req.body.custom_domain,
+        req.body.logo_url === undefined ? result.store.logo_url : req.body.logo_url,
+        req.body.theme_color || result.store.theme_color,
+        theme.store_type,
+        theme.template_key,
+        theme.font_preset,
+        req.body.support_email === undefined ? result.store.support_email : req.body.support_email,
+        req.body.contact_phone === undefined ? result.store.contact_phone : req.body.contact_phone,
+        typeof req.body.is_active === 'undefined' ? result.store.is_active : Number(Boolean(req.body.is_active)),
+        req.body.ssl_status || result.store.ssl_status,
+        req.params.id
+      ]
+    );
+
+    const store = (await db.query('SELECT * FROM stores WHERE id = ?', [req.params.id]))[0];
+    await invalidateStoreCache(cache, store);
+    await bus.publish(EVENT_NAMES.STORE_UPDATED, {
+      store_id: store.id,
+      owner_id: store.owner_id,
+      custom_domain: store.custom_domain
+    });
+
+    return res.json({
+      store: sanitizeStore(store)
+    });
+  }));
+
+  app.get('/settings', requireInternal, asyncHandler(async (req, res) => {
+    const storeId = Number(req.authContext.storeId);
+    const result = await ensureStoreAccess(db, storeId, req.authContext.userId, req.authContext.actorRole);
+    if (!result.allowed || !result.store) {
+      throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
     }
-  });
 
-  app.put('/settings', requireInternal, async (req, res) => {
-    req.params.id = req.authContext.storeId;
+    const cacheKey = buildStoreCacheKey(`settings:${storeId}`);
+    const cached = await cache.getOrSetJson(cacheKey, STORE_CACHE_TTL_SECONDS, async () => ({
+      store: sanitizeStore(result.store)
+    }));
+    res.setHeader('x-cache', cached.cacheHit ? 'hit' : 'miss');
+    return res.json(cached.value);
+  }));
+
+  app.put('/settings', requireInternal, validate([
+    commonRules.optionalPlainText('name', 150),
+    body('custom_domain').optional().customSanitizer((value) => normalizeDomain(value)),
+    commonRules.url('logo_url'),
+    commonRules.optionalPlainText('theme_color', 20),
+    commonRules.optionalPlainText('support_email', 190),
+    commonRules.phone('contact_phone'),
+    body('is_active').optional().isBoolean().toBoolean(),
+    commonRules.optionalPlainText('ssl_status', 40)
+  ]), asyncHandler(async (req, res) => {
+    const storeId = Number(req.authContext.storeId);
+    const result = await ensureStoreAccess(db, storeId, req.authContext.userId, req.authContext.actorRole);
+    if (!result.allowed || !result.store) {
+      throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
+    }
+
+    req.params.id = String(storeId);
     return app._router.handle(req, res, () => undefined);
-  });
+  }));
 };
 
 module.exports = {

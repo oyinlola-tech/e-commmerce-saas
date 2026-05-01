@@ -1,10 +1,15 @@
+const { body } = require('express-validator');
 const {
   hashPassword,
   comparePassword,
   signPlatformToken,
   requireInternalRequest,
   EVENT_NAMES,
-  PLATFORM_ROLES
+  PLATFORM_ROLES,
+  asyncHandler,
+  createHttpError,
+  validate,
+  commonRules
 } = require('../../../../packages/shared');
 
 const allowedRoles = Object.values(PLATFORM_ROLES);
@@ -25,152 +30,135 @@ const sanitizeUser = (user) => {
   };
 };
 
+const buildRequireInternal = (config) => {
+  return requireInternalRequest(config.internalSharedSecret, {
+    maxAgeMs: config.internalRequestMaxAgeMs,
+    nonceTtlMs: config.internalRequestNonceTtlMs
+  });
+};
+
 const registerRoutes = async ({ app, db, bus, config }) => {
-  const requireInternal = requireInternalRequest(config.internalSharedSecret);
+  const requireInternal = buildRequireInternal(config);
 
-  app.post('/auth/register', async (req, res) => {
-    try {
-      const name = String(req.body.name || '').trim();
-      const email = String(req.body.email || '').trim().toLowerCase();
-      const password = String(req.body.password || '');
-      const requestedRole = String(req.body.role || PLATFORM_ROLES.STORE_OWNER).trim().toLowerCase();
-      const role = allowedRoles.includes(requestedRole) ? requestedRole : PLATFORM_ROLES.STORE_OWNER;
+  app.post('/auth/register', validate([
+    commonRules.name('name', 120),
+    commonRules.email(),
+    commonRules.password(),
+    body('role').optional().isIn(allowedRoles)
+  ]), asyncHandler(async (req, res) => {
+    const name = String(req.body.name || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const requestedRole = String(req.body.role || PLATFORM_ROLES.STORE_OWNER).trim().toLowerCase();
+    const role = allowedRoles.includes(requestedRole) ? requestedRole : PLATFORM_ROLES.STORE_OWNER;
 
-      if (!name || !email || password.length < 8) {
-        return res.status(400).json({
-          error: 'Name, email, and a password of at least 8 characters are required.'
-        });
-      }
-
-      const existing = await db.query('SELECT id FROM platform_users WHERE email = ?', [email]);
-      if (existing.length) {
-        return res.status(409).json({ error: 'A platform user with this email already exists.' });
-      }
-
-      const passwordHash = await hashPassword(password);
-      const result = await db.execute(
-        'INSERT INTO platform_users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)',
-        [name, email, passwordHash, role, 'active']
-      );
-      const created = await db.query('SELECT * FROM platform_users WHERE id = ?', [result.insertId]);
-      const user = created[0];
-      const token = signPlatformToken(user, config.jwtSecret);
-
-      if (user.role === PLATFORM_ROLES.STORE_OWNER) {
-        await bus.publish(EVENT_NAMES.USER_REGISTERED, {
-          user_id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
-        });
-      }
-
-      return res.status(201).json({
-        token,
-        user: sanitizeUser(user)
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
+    const existing = await db.query('SELECT id FROM platform_users WHERE email = ?', [email]);
+    if (existing.length) {
+      throw createHttpError(409, 'A platform user with this email already exists.', null, { expose: true });
     }
-  });
 
-  app.post('/auth/login', async (req, res) => {
-    try {
-      const email = String(req.body.email || '').trim().toLowerCase();
-      const password = String(req.body.password || '');
-      const rows = await db.query('SELECT * FROM platform_users WHERE email = ?', [email]);
-      const user = rows[0];
+    const passwordHash = await hashPassword(password);
+    const result = await db.execute(
+      'INSERT INTO platform_users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)',
+      [name, email, passwordHash, role, 'active']
+    );
+    const user = (await db.query('SELECT * FROM platform_users WHERE id = ?', [result.insertId]))[0];
+    const token = signPlatformToken(user, config.jwtSecret, config.jwtAccessTtl);
 
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid email or password.' });
-      }
-
-      const passwordMatches = await comparePassword(password, user.password_hash);
-      if (!passwordMatches) {
-        return res.status(401).json({ error: 'Invalid email or password.' });
-      }
-
-      const token = signPlatformToken(user, config.jwtSecret);
-      return res.json({
-        token,
-        user: sanitizeUser(user)
+    if (user.role === PLATFORM_ROLES.STORE_OWNER) {
+      await bus.publish(EVENT_NAMES.USER_REGISTERED, {
+        user_id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
       });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
     }
-  });
 
-  app.get('/auth/me', requireInternal, async (req, res) => {
-    try {
-      if (!req.authContext.userId) {
-        return res.status(401).json({ error: 'No authenticated platform user.' });
-      }
+    return res.status(201).json({
+      token,
+      user: sanitizeUser(user)
+    });
+  }));
 
-      const rows = await db.query('SELECT * FROM platform_users WHERE id = ?', [req.authContext.userId]);
-      const user = rows[0];
-      if (!user) {
-        return res.status(404).json({ error: 'Platform user not found.' });
-      }
+  app.post('/auth/login', validate([
+    commonRules.email(),
+    body('password').isString().notEmpty().withMessage('Password is required.')
+  ]), asyncHandler(async (req, res) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const user = (await db.query('SELECT * FROM platform_users WHERE email = ?', [email]))[0];
 
-      return res.json({
-        user: sanitizeUser(user)
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
+    if (!user) {
+      throw createHttpError(401, 'Invalid email or password.', null, { expose: true });
     }
-  });
 
-  app.post('/users', requireInternal, async (req, res) => {
-    try {
-      if (req.authContext.actorRole !== PLATFORM_ROLES.PLATFORM_OWNER) {
-        return res.status(403).json({ error: 'Only platform owners can create backoffice users.' });
-      }
-
-      const role = String(req.body.role || '').trim().toLowerCase();
-      if (!allowedRoles.includes(role)) {
-        return res.status(400).json({ error: 'Unsupported platform role.' });
-      }
-
-      const name = String(req.body.name || '').trim();
-      const email = String(req.body.email || '').trim().toLowerCase();
-      const password = String(req.body.password || '');
-      if (!name || !email || password.length < 8) {
-        return res.status(400).json({ error: 'Name, email, and password are required.' });
-      }
-
-      const existing = await db.query('SELECT id FROM platform_users WHERE email = ?', [email]);
-      if (existing.length) {
-        return res.status(409).json({ error: 'A platform user with this email already exists.' });
-      }
-
-      const passwordHash = await hashPassword(password);
-      const result = await db.execute(
-        'INSERT INTO platform_users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)',
-        [name, email, passwordHash, role, 'active']
-      );
-      const created = await db.query('SELECT * FROM platform_users WHERE id = ?', [result.insertId]);
-      return res.status(201).json({
-        user: sanitizeUser(created[0])
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
+    const passwordMatches = await comparePassword(password, user.password_hash);
+    if (!passwordMatches) {
+      throw createHttpError(401, 'Invalid email or password.', null, { expose: true });
     }
-  });
 
-  app.get('/users', requireInternal, async (req, res) => {
-    try {
-      if (![PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT].includes(req.authContext.actorRole)) {
-        return res.status(403).json({ error: 'You do not have access to the platform user directory.' });
-      }
+    return res.json({
+      token: signPlatformToken(user, config.jwtSecret, config.jwtAccessTtl),
+      user: sanitizeUser(user)
+    });
+  }));
 
-      const users = await db.query('SELECT * FROM platform_users ORDER BY created_at DESC');
-      return res.json({
-        users: users.map(sanitizeUser)
-      });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
+  app.get('/auth/me', requireInternal, asyncHandler(async (req, res) => {
+    if (!req.authContext.userId) {
+      throw createHttpError(401, 'No authenticated platform user.', null, { expose: true });
     }
-  });
+
+    const user = (await db.query('SELECT * FROM platform_users WHERE id = ?', [req.authContext.userId]))[0];
+    if (!user) {
+      throw createHttpError(404, 'Platform user not found.', null, { expose: true });
+    }
+
+    return res.json({
+      user: sanitizeUser(user)
+    });
+  }));
+
+  app.post('/users', requireInternal, validate([
+    commonRules.name('name', 120),
+    commonRules.email(),
+    commonRules.password(),
+    body('role').isIn(allowedRoles)
+  ]), asyncHandler(async (req, res) => {
+    if (req.authContext.actorRole !== PLATFORM_ROLES.PLATFORM_OWNER) {
+      throw createHttpError(403, 'Only platform owners can create backoffice users.', null, { expose: true });
+    }
+
+    const role = String(req.body.role || '').trim().toLowerCase();
+    const name = String(req.body.name || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+
+    const existing = await db.query('SELECT id FROM platform_users WHERE email = ?', [email]);
+    if (existing.length) {
+      throw createHttpError(409, 'A platform user with this email already exists.', null, { expose: true });
+    }
+
+    const passwordHash = await hashPassword(password);
+    const result = await db.execute(
+      'INSERT INTO platform_users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)',
+      [name, email, passwordHash, role, 'active']
+    );
+    const user = (await db.query('SELECT * FROM platform_users WHERE id = ?', [result.insertId]))[0];
+    return res.status(201).json({
+      user: sanitizeUser(user)
+    });
+  }));
+
+  app.get('/users', requireInternal, asyncHandler(async (req, res) => {
+    if (![PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT].includes(req.authContext.actorRole)) {
+      throw createHttpError(403, 'You do not have access to the platform user directory.', null, { expose: true });
+    }
+
+    const users = await db.query('SELECT * FROM platform_users ORDER BY created_at DESC');
+    return res.json({
+      users: users.map(sanitizeUser)
+    });
+  }));
 };
 
 module.exports = {

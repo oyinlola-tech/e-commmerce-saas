@@ -9,7 +9,8 @@ const schemaStatements = [
       status VARCHAR(40) NOT NULL DEFAULT 'active',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_platform_users_email (email)
+      UNIQUE KEY uq_platform_users_email (email),
+      KEY idx_platform_users_email (email)
     )
   `
 ];

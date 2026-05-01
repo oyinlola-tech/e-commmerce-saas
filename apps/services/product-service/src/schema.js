@@ -5,6 +5,7 @@ const schemaStatements = [
       store_id BIGINT UNSIGNED NOT NULL,
       title VARCHAR(180) NOT NULL,
       slug VARCHAR(180) NOT NULL,
+      category VARCHAR(120) NULL,
       description TEXT NULL,
       price DECIMAL(12,2) NOT NULL DEFAULT 0,
       compare_at_price DECIMAL(12,2) NULL,
@@ -18,7 +19,10 @@ const schemaStatements = [
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_products_store_slug (store_id, slug),
       UNIQUE KEY uq_products_store_sku (store_id, sku),
-      KEY idx_products_store_status (store_id, status)
+      KEY idx_products_store_status (store_id, status),
+      KEY idx_products_store_slug_lookup (store_id, slug),
+      KEY idx_products_store_created (store_id, created_at),
+      KEY idx_products_category (category)
     )
   `,
   `
@@ -28,7 +32,9 @@ const schemaStatements = [
       order_id BIGINT UNSIGNED NULL,
       status VARCHAR(40) NOT NULL DEFAULT 'reserved',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      KEY idx_inventory_reservations_store_id (store_id),
+      KEY idx_inventory_reservations_order_id (order_id)
     )
   `,
   `
@@ -38,7 +44,8 @@ const schemaStatements = [
       product_id BIGINT UNSIGNED NOT NULL,
       quantity INT NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      KEY idx_inventory_reservation_items_reservation_id (reservation_id)
+      KEY idx_inventory_reservation_items_reservation_id (reservation_id),
+      KEY idx_inventory_reservation_items_product_id (product_id)
     )
   `
 ];

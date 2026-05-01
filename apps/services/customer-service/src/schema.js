@@ -12,7 +12,8 @@ const schemaStatements = [
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_customers_store_email (store_id, email),
-      KEY idx_customers_store_id (store_id)
+      KEY idx_customers_store_id (store_id),
+      KEY idx_customers_email (email)
     )
   `
 ];

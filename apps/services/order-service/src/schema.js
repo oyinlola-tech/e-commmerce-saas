@@ -16,7 +16,9 @@ const schemaStatements = [
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       KEY idx_orders_store_customer (store_id, customer_id),
-      KEY idx_orders_store_status (store_id, status)
+      KEY idx_orders_store_status (store_id, status),
+      KEY idx_orders_store_created (store_id, created_at),
+      KEY idx_orders_customer_id (customer_id)
     )
   `,
   `
@@ -28,7 +30,8 @@ const schemaStatements = [
       price DECIMAL(12,2) NOT NULL DEFAULT 0,
       quantity INT NOT NULL DEFAULT 1,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      KEY idx_order_items_order_id (order_id)
+      KEY idx_order_items_order_id (order_id),
+      KEY idx_order_items_product_id (product_id)
     )
   `
 ];

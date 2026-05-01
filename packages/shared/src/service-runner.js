@@ -14,6 +14,13 @@ const {
 const {
   createBaseApp
 } = require('./express');
+const {
+  createCache
+} = require('./cache');
+const {
+  errorHandler,
+  notFoundHandler
+} = require('./errors');
 
 const startService = async ({
   appRoot,
@@ -34,10 +41,22 @@ const startService = async ({
   const logger = createLogger(serviceName);
   const db = await bootstrapDatabase({
     databaseUrl: config.databaseUrl,
+    readDatabaseUrls: config.databaseReadUrls,
     statements: schemaStatements,
-    logger
+    logger,
+    poolConfig: {
+      min: config.databasePoolMin,
+      max: config.databasePoolMax,
+      idleTimeoutMs: config.databaseIdleTimeoutMs,
+      acquireTimeoutMs: config.databaseAcquireTimeoutMs
+    },
+    retryConfig: {
+      retries: config.databaseConnectRetries,
+      delayMs: config.databaseRetryDelayMs
+    }
   });
   const bus = await createEventBus(config, logger);
+  const cache = await createCache(config, logger);
   const app = createBaseApp({ serviceName, logger });
   const server = http.createServer(app);
   const context = {
@@ -46,18 +65,21 @@ const startService = async ({
     config,
     db,
     bus,
+    cache,
     logger,
     serviceName
   };
 
   app.get('/health', async (req, res) => {
     try {
-      await db.query('SELECT 1 AS ok');
+      const database = await db.healthCheck();
+      const cacheStatus = await cache.healthCheck();
       return res.json({
         service: serviceName,
         status: 'ok',
-        database: 'ok',
-        rabbitmq: bus.connected ? 'connected' : 'noop'
+        database,
+        rabbitmq: bus.connected ? 'connected' : 'noop',
+        cache: cacheStatus
       });
     } catch (error) {
       return res.status(500).json({
@@ -78,6 +100,13 @@ const startService = async ({
     await registerConsumers(context);
   }
 
+  app.use(notFoundHandler);
+  app.use(errorHandler({
+    logger,
+    isProduction: config.isProduction,
+    serviceName
+  }));
+
   server.listen(config.port, () => {
     logger.info('Service listening', {
       port: config.port,
@@ -87,9 +116,14 @@ const startService = async ({
 
   const shutdown = async () => {
     logger.info('Shutting down service');
-    await bus.close();
-    await db.pool.end();
-    server.close(() => process.exit(0));
+    server.close(async () => {
+      await Promise.allSettled([
+        bus.close(),
+        cache.close(),
+        db.close()
+      ]);
+      process.exit(0);
+    });
   };
 
   process.on('SIGINT', shutdown);

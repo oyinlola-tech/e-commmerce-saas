@@ -1,6 +1,7 @@
 module.exports = {
   ...require('./src/constants'),
   ...require('./src/logger'),
+  ...require('./src/errors'),
   ...require('./src/env'),
   ...require('./src/database'),
   ...require('./src/events'),
@@ -9,6 +10,11 @@ module.exports = {
   ...require('./src/http'),
   ...require('./src/passwords'),
   ...require('./src/crypto'),
+  ...require('./src/cache'),
+  ...require('./src/rate-limit'),
+  ...require('./src/auth-cookies'),
+  ...require('./src/sanitization'),
+  ...require('./src/validation'),
   ...require('./src/express'),
   ...require('./src/service-runner')
 };

@@ -9,7 +9,9 @@ const schemaStatements = [
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       KEY idx_carts_store_customer (store_id, customer_id),
-      KEY idx_carts_store_session (store_id, session_id)
+      KEY idx_carts_store_session (store_id, session_id),
+      KEY idx_carts_customer_id (customer_id),
+      KEY idx_carts_session_id (session_id)
     )
   `,
   `
@@ -24,7 +26,8 @@ const schemaStatements = [
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_cart_items_cart_product (cart_id, product_id),
-      KEY idx_cart_items_cart_id (cart_id)
+      KEY idx_cart_items_cart_id (cart_id),
+      KEY idx_cart_items_product_id (product_id)
     )
   `
 ];

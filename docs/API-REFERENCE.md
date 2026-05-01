@@ -7,12 +7,16 @@ This system is not free to use.
 ## Gateway
 
 - `GET /health` - Gateway health response.
+- `GET /metrics` - Prometheus-compatible gateway metrics.
+- `GET /openapi.json` - Aggregated OpenAPI contract for the gateway surface.
+- `GET /docs` - Swagger UI for the gateway and public platform APIs.
 - `POST|GET /api/platform/auth/*` - Proxies platform auth traffic to `user-service`.
 - `ANY /api/platform/stores/*` - Proxies platform store management to `store-service` for authenticated platform users.
 - `ANY /api/platform/compliance/*` - Proxies compliance operations for platform users with owner, support, or store owner roles.
 - `ANY /api/platform/support/*` - Reserved proxy target for `support-service`.
 - `ANY /api/platform/chats/*` - Reserved proxy target for `chat-service`.
 - `ANY /api/platform/billing/*` - Proxies subscription and billing flows to `billing-service`.
+- `GET /api/platform/billing/plans` - Public plan catalog for owner subscriptions.
 - `ANY /api/owner/stores/:storeId/products/*` - Owner-scoped proxy to `product-service`.
 - `ANY /api/owner/stores/:storeId/orders/*` - Owner-scoped proxy to `order-service`.
 - `ANY /api/owner/stores/:storeId/customers/*` - Owner-scoped proxy to `customer-service`.
@@ -26,6 +30,7 @@ This system is not free to use.
 - `POST /api/checkout` - Checkout via `order-service`.
 - `GET /api/orders*` - Customer order lookup via `order-service`.
 - `ANY /api/chats*` - Reserved storefront chat proxy.
+- `ANY /payments/*` - Public-facing mock/provider callback and webhook proxy to `payment-service`.
 
 ## User Service
 
@@ -81,6 +86,7 @@ This system is not free to use.
 - `POST /cart/items` - Adds an item after resolving live product data from `product-service`.
 - `PATCH /cart/items/:productId` - Changes cart item quantity or removes it when quantity becomes `0`.
 - `DELETE /cart/items/:productId` - Removes an item from the cart.
+- `POST /cart/clear` - Clears all items from the current active cart without destroying the cart identity.
 - `POST /cart/merge` - Signed customer-only merge of an anonymous cart into a logged-in customer cart.
 
 ## Order Service
@@ -92,19 +98,22 @@ This system is not free to use.
 
 ## Payment Service
 
-- `POST /payments/create-checkout-session` - Creates a pending payment and returns provider payloads.
+- `POST /payments/create-checkout-session` - Creates a pending storefront or subscription payment and returns provider payloads.
 - `GET /payments/config` - Lists provider config for the signed store.
 - `POST /payments/config` - Upserts one provider config for the signed store and encrypts the secret key.
-- `POST /payments/webhooks/:provider` - Accepts webhook payloads, updates payment status, and publishes success or failure events.
+- `POST /payments/webhooks/:provider` - Accepts webhook payloads, updates payment status, and publishes success or failure events with payment scope metadata.
 - `POST /payments/mock/:provider/:reference` - Convenience path that routes into the webhook flow for local simulation.
 
 ## Billing Service
 
+- `GET /plans` - Returns the platform subscription plan catalog.
 - `GET /subscriptions/me` - Returns the signed owner's subscription.
+- `GET /subscriptions/invoices` - Returns the signed owner's subscription invoices.
+- `POST /subscriptions/checkout-session` - Creates a pending invoice and a subscription payment checkout session.
 - `POST /subscriptions` - Creates or replaces a subscription and publishes `SUBSCRIPTION_CHANGED`.
-- `POST /subscriptions/cancel` - Cancels the signed owner's subscription.
+- `POST /subscriptions/cancel` - Cancels immediately or marks the active subscription to end at the current period boundary.
 - `GET /internal/subscriptions/check` - Returns whether an owner has an active or trialing subscription.
-- `GET /subscriptions/:ownerId` - Platform owner or support agent only. Inspects another owner's subscription.
+- `GET /subscriptions/:ownerId` - Platform owner or support agent only. Inspects another owner's subscription and latest invoice.
 
 ## Web Routes
 
