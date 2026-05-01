@@ -1,16 +1,13 @@
-<%
-  const adminBrandColor = store && store.theme_color ? store.theme_color : '#4F46E5';
-%>
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <%- include('../partials/head', { brandColor: adminBrandColor }) %>
+    <%- include('../partials/head', { brandColor: platformBrand && platformBrand.color ? platformBrand.color : '#0F766E' }) %>
   </head>
-  <body class="admin-shell body-frame min-h-screen text-gray-900 antialiased">
+  <body class="control-shell body-frame min-h-screen text-gray-900 antialiased">
     <div class="min-h-screen">
-      <%- include('../partials/admin-sidebar') %>
-      <div class="lg:pl-72">
-        <%- include('../partials/admin-topbar') %>
+      <%- include('../partials/platform-admin-sidebar') %>
+      <div class="lg:pl-80">
+        <%- include('../partials/platform-admin-topbar') %>
         <%- include('../partials/flash') %>
         <main class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <div class="mx-auto max-w-7xl">

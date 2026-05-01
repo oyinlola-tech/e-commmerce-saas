@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <%- include('../partials/head', { brandColor: '#4F46E5' }) %>
+    <%- include('../partials/head', { brandColor: platformBrand && platformBrand.color ? platformBrand.color : '#0F766E' }) %>
   </head>
-  <body class="min-h-screen bg-gray-50 text-gray-900 antialiased">
+  <body class="platform-shell body-frame min-h-screen text-gray-900 antialiased">
     <div class="flex min-h-screen flex-col">
       <%- include('../partials/platform-navbar') %>
       <%- include('../partials/flash') %>

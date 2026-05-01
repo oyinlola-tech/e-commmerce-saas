@@ -1,128 +1,178 @@
 const express = require('express');
 const path = require('path');
 const expressLayouts = require('express-ejs-layouts');
+const {
+  brand,
+  platformUser,
+  systemAdminUser,
+  getStoreById,
+  getStoreByHost,
+  getOwnerStores,
+  getAllStores,
+  getStoreCustomers,
+  getCustomerById,
+  findCustomerByEmail,
+  getStoreProducts,
+  getPublishedProducts,
+  getStoreCategories,
+  getProductById,
+  getProductBySlug,
+  getStoreOrders,
+  getOrderById,
+  getStoreStats,
+  getPlatformMetrics,
+  getPlatformHighlights,
+  getSupportConversations,
+  getIncidents,
+  getCart,
+  addCartItem,
+  updateCartItemQuantity,
+  removeCartItem,
+  createStore,
+  updateStoreSettings,
+  updateStoreDomain,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  createCustomer,
+  createOrder,
+  updateOrderStatus,
+  replyToSupportConversation,
+  updateSupportConversation,
+  updateIncident
+} = require('./src/lib/state');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const ROOT_DOMAIN = process.env.APP_ROOT_DOMAIN || 'localhost';
 
-const samplePlatformUser = {
-  id: 'owner_1',
-  name: 'Ada Lovelace',
-  email: 'ada@multistore.test'
+const parseCookies = (header = '') => {
+  return String(header)
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((accumulator, pair) => {
+      const [key, ...valueParts] = pair.split('=');
+      if (!key) {
+        return accumulator;
+      }
+
+      accumulator[key] = decodeURIComponent(valueParts.join('=') || '');
+      return accumulator;
+    }, {});
 };
 
-const sampleStore = {
-  id: 'store_1',
-  name: 'Northline Studio',
-  subdomain: 'northline',
-  custom_domain: 'shop.northlinestudio.com',
-  logo: 'https://placehold.co/120x120?text=NS',
-  theme_color: '#0F766E',
-  ssl_status: 'issued',
-  tagline: 'Utility-first essentials for modern daily routines.'
+const isLocalRoot = ROOT_DOMAIN === 'localhost' || ROOT_DOMAIN === '127.0.0.1';
+
+const isPlatformHost = (hostname) => {
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === ROOT_DOMAIN
+    || hostname === `www.${ROOT_DOMAIN}`;
 };
 
-const sampleCustomer = {
-  id: 'customer_1',
-  name: 'Jane Doe',
-  email: 'jane@example.com',
-  address: '17 Marina Road, Victoria Island'
+const isStorefrontHost = (req) => {
+  return !isPlatformHost(req.hostname);
 };
 
-const sampleProducts = [
-  {
-    id: 'prod_1',
-    name: 'Luna Tote',
-    slug: 'luna-tote',
-    price: 89,
-    compare_at_price: 110,
-    image: 'https://placehold.co/800x800?text=Luna+Tote',
-    images: [
-      'https://placehold.co/1000x1000?text=Luna+Tote',
-      'https://placehold.co/1000x1000?text=Interior',
-      'https://placehold.co/1000x1000?text=Strap+Detail'
-    ],
-    description: 'A lightweight tote built for everyday carry, with durable straps and a clean silhouette.',
-    inventory: 36,
-    sku: 'LUNA-001',
-    status: 'Published'
-  },
-  {
-    id: 'prod_2',
-    name: 'Harbor Bottle',
-    slug: 'harbor-bottle',
-    price: 34,
-    compare_at_price: null,
-    image: 'https://placehold.co/800x800?text=Harbor+Bottle',
-    description: 'Double-walled stainless steel bottle with a minimal matte finish.',
-    inventory: 92,
-    sku: 'HB-034',
-    status: 'Published'
-  },
-  {
-    id: 'prod_3',
-    name: 'Transit Pouch',
-    slug: 'transit-pouch',
-    price: 28,
-    compare_at_price: 36,
-    image: 'https://placehold.co/800x800?text=Transit+Pouch',
-    description: 'Compact organizer pouch for cables, tech, and travel essentials.',
-    inventory: 58,
-    sku: 'TP-028',
-    status: 'Draft'
-  },
-  {
-    id: 'prod_4',
-    name: 'Daybreak Journal',
-    slug: 'daybreak-journal',
-    price: 22,
-    compare_at_price: null,
-    image: 'https://placehold.co/800x800?text=Daybreak+Journal',
-    description: 'Thread-bound journal with premium paper for notes, planning, and sketching.',
-    inventory: 104,
-    sku: 'DJ-022',
-    status: 'Published'
+const getDefaultStore = () => {
+  return getOwnerStores(platformUser.id)[0] || getAllStores()[0] || null;
+};
+
+const resolveStore = (req) => {
+  if (isStorefrontHost(req)) {
+    return getStoreByHost(req.hostname) || getDefaultStore();
   }
-];
 
-const sampleOrders = [
-  {
-    id: '1001',
-    status: 'Pending',
-    total: 123,
-    created_at: new Date().toISOString(),
-    customer_name: 'Jane Doe',
-    customer: sampleCustomer,
-    items: [
-      { product_id: 'prod_1', name: 'Luna Tote', price: 89, quantity: 1, image: sampleProducts[0].image },
-      { product_id: 'prod_4', name: 'Daybreak Journal', price: 22, quantity: 1, image: sampleProducts[3].image }
-    ]
-  },
-  {
-    id: '1000',
-    status: 'Shipped',
-    total: 68,
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    customer_name: 'Michael B.',
-    customer: { name: 'Michael B.', email: 'michael@example.com', address: '12 Palm Street' },
-    items: [
-      { product_id: 'prod_2', name: 'Harbor Bottle', price: 34, quantity: 2, image: sampleProducts[1].image }
-    ]
+  return getStoreById(req.query.store || req.cookies.activeStoreId) || getDefaultStore();
+};
+
+const buildStorefrontUrl = (store) => {
+  if (!store) {
+    return '#';
   }
-];
 
-let demoCart = {
-  items: [
-    {
-      product_id: 'prod_1',
-      name: 'Luna Tote',
-      price: 89,
-      quantity: 1,
-      image: sampleProducts[0].image
-    }
-  ],
-  total: 89
+  if (isLocalRoot) {
+    return `http://${store.subdomain}.localhost:${PORT}`;
+  }
+
+  if (store.custom_domain) {
+    return `https://${store.custom_domain}`;
+  }
+
+  return `https://${store.subdomain}.${ROOT_DOMAIN}`;
+};
+
+const buildStoreAdminUrl = (store) => {
+  if (!store) {
+    return '#';
+  }
+
+  if (isLocalRoot) {
+    return `http://localhost:${PORT}/admin?store=${encodeURIComponent(store.id)}`;
+  }
+
+  return `${buildStorefrontUrl(store)}/admin`;
+};
+
+const customerCookieName = (storeId) => `customer_${storeId}`;
+const orderCookieName = (storeId) => `last_order_${storeId}`;
+
+const getCurrentCustomer = (req, storeId) => {
+  if (!storeId || req.query.guest === '1') {
+    return null;
+  }
+
+  const customerId = req.cookies[customerCookieName(storeId)];
+  return customerId ? getCustomerById(storeId, customerId) : null;
+};
+
+const getCustomerOrders = (storeId, customer) => {
+  if (!customer) {
+    return [];
+  }
+
+  return getStoreOrders(storeId).filter((order) => {
+    return String(order.customer?.email || '').toLowerCase() === String(customer.email || '').toLowerCase();
+  });
+};
+
+const renderPlatform = (res, view, payload = {}) => {
+  return res.render(view, {
+    layout: 'layouts/main',
+    ...payload
+  });
+};
+
+const renderStorefront = (req, res, view, payload = {}) => {
+  const store = resolveStore(req);
+  const customer = getCurrentCustomer(req, store?.id);
+  const cart = getCart(store?.id);
+
+  return res.render(view, {
+    layout: 'layouts/store',
+    store,
+    customer,
+    cart,
+    ...payload
+  });
+};
+
+const renderStoreAdmin = (req, res, view, payload = {}) => {
+  const store = resolveStore(req);
+
+  return res.render(view, {
+    layout: 'layouts/admin',
+    store,
+    ...payload
+  });
+};
+
+const renderPlatformAdmin = (res, view, payload = {}) => {
+  return res.render(view, {
+    layout: 'layouts/platform-admin',
+    ...payload
+  });
 };
 
 app.set('view engine', 'ejs');
@@ -133,102 +183,96 @@ app.set('layout', 'layouts/main');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-
-const isPlatformHost = (hostname) => {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === ROOT_DOMAIN;
-};
-
-const isStorefrontHost = (req) => {
-  return !isPlatformHost(req.hostname);
-};
-
-const withTotals = (cart) => {
-  cart.total = cart.items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
-  return cart;
-};
-
-const getCurrentCustomer = (req) => {
-  return req.query.guest === '1' ? null : sampleCustomer;
-};
-
-const getProductById = (id) => {
-  return sampleProducts.find((product) => String(product.id) === String(id));
-};
-
-const getProductBySlug = (slug) => {
-  return sampleProducts.find((product) => product.slug === slug);
-};
+app.use((req, res, next) => {
+  req.cookies = parseCookies(req.headers.cookie);
+  next();
+});
 
 app.use((req, res, next) => {
+  if (req.query.store && getStoreById(req.query.store)) {
+    res.cookie('activeStoreId', req.query.store, { sameSite: 'lax' });
+    req.cookies.activeStoreId = req.query.store;
+  }
+
+  next();
+});
+
+app.use((req, res, next) => {
+  const activeStore = resolveStore(req);
+
   res.locals.pageTitle = '';
   res.locals.metaDescription = '';
   res.locals.currentPath = req.path;
-  res.locals.platformUser = samplePlatformUser;
+  res.locals.platformBrand = brand;
+  res.locals.platformUser = platformUser;
+  res.locals.systemAdminUser = systemAdminUser;
   res.locals.success = req.query.success || null;
   res.locals.error = req.query.error || null;
+  res.locals.currentStore = activeStore;
+  res.locals.storefrontUrl = buildStorefrontUrl(activeStore);
+  res.locals.storeAdminUrl = buildStoreAdminUrl(activeStore);
   next();
 });
 
 app.get('/', (req, res) => {
   if (isStorefrontHost(req)) {
-    return res.render('storefront/home', {
-      layout: 'layouts/store',
-      pageTitle: sampleStore.name,
-      metaDescription: 'Storefront homepage',
-      store: sampleStore,
-      customer: getCurrentCustomer(req),
-      products: sampleProducts,
-      featuredProducts: sampleProducts.slice(0, 4),
-      cart: withTotals({ ...demoCart, items: demoCart.items.map((item) => ({ ...item })) })
+    const store = resolveStore(req);
+    const products = getPublishedProducts(store.id);
+
+    return renderStorefront(req, res, 'storefront/home', {
+      pageTitle: store.name,
+      metaDescription: `${store.name} delivers premium essentials with international fulfillment, fast checkout, and service-led support.`,
+      products,
+      featuredProducts: products.slice(0, 4),
+      stats: getStoreStats(store.id)
     });
   }
 
-  return res.render('platform/index', {
-    layout: 'layouts/main',
-    pageTitle: 'Launch your online store',
-    metaDescription: 'Landing page for the multi-tenant ecommerce SaaS'
+  return renderPlatform(res, 'platform/index', {
+    pageTitle: 'Enterprise Commerce For Global Brands',
+    metaDescription: 'Aisle Commerce Cloud helps modern retail teams launch, operate, and scale international storefronts from one operating system.',
+    metrics: getPlatformMetrics(),
+    stores: getPlatformHighlights().slice(0, 3)
   });
 });
 
 app.get('/signup', (req, res) => {
   if (isStorefrontHost(req)) {
-    return res.render('storefront/register', {
-      layout: 'layouts/store',
-      pageTitle: 'Register',
-      store: sampleStore,
-      customer: null,
-      cart: demoCart,
-      errors: {}
+    return renderStorefront(req, res, 'storefront/register', {
+      pageTitle: 'Create account',
+      errors: {},
+      formData: {}
     });
   }
 
-  return res.render('platform/signup', {
-    layout: 'layouts/main',
-    pageTitle: 'Create account',
+  return renderPlatform(res, 'platform/signup', {
+    pageTitle: 'Create owner account',
     errors: {},
     formData: {}
   });
 });
 
 app.post('/signup', (req, res) => {
-  res.redirect('/dashboard?success=Account created');
+  if (isStorefrontHost(req)) {
+    const store = resolveStore(req);
+    const customer = createCustomer(store.id, req.body);
+    res.cookie(customerCookieName(store.id), customer.id, { sameSite: 'lax' });
+    return res.redirect(req.query.returnTo || '/account?success=Account created');
+  }
+
+  return res.redirect('/dashboard?success=Welcome to Aisle');
 });
 
 app.get('/login', (req, res) => {
   if (isStorefrontHost(req)) {
-    return res.render('storefront/login', {
-      layout: 'layouts/store',
-      pageTitle: 'Login',
-      store: sampleStore,
-      customer: null,
-      cart: demoCart,
+    return renderStorefront(req, res, 'storefront/login', {
+      pageTitle: 'Sign in',
       errors: {},
       formData: {}
     });
   }
 
-  return res.render('platform/login', {
-    layout: 'layouts/main',
+  return renderPlatform(res, 'platform/login', {
     pageTitle: 'Sign in',
     errors: {},
     formData: {}
@@ -237,291 +281,454 @@ app.get('/login', (req, res) => {
 
 app.post('/login', (req, res) => {
   if (isStorefrontHost(req)) {
-    return res.redirect(req.query.returnTo || '/?success=Signed in');
+    const store = resolveStore(req);
+    const customer = findCustomerByEmail(store.id, req.body.email);
+
+    if (!customer) {
+      return res.redirect('/login?error=No customer account was found for this storefront.');
+    }
+
+    res.cookie(customerCookieName(store.id), customer.id, { sameSite: 'lax' });
+    return res.redirect(req.query.returnTo || '/account?success=Signed in');
   }
 
   return res.redirect('/dashboard?success=Welcome back');
 });
 
 app.get('/dashboard', (req, res) => {
-  res.render('platform/dashboard', {
-    layout: 'layouts/main',
-    pageTitle: 'Dashboard',
-    stores: [
-      sampleStore,
-      {
-        id: 'store_2',
-        name: 'Fieldhouse',
-        subdomain: 'fieldhouse',
-        logo: '',
-        theme_color: '#4F46E5'
-      }
-    ]
+  const stores = getOwnerStores(platformUser.id);
+
+  return renderPlatform(res, 'platform/dashboard', {
+    pageTitle: 'Owner dashboard',
+    stores,
+    metrics: getPlatformMetrics()
   });
 });
 
 app.post('/stores', (req, res) => {
-  res.redirect('/dashboard?success=Store created');
+  const store = createStore({
+    name: req.body.name,
+    subdomain: req.body.subdomain,
+    ownerId: platformUser.id
+  });
+
+  return res.redirect(`/dashboard?success=${encodeURIComponent(`${store.name} created successfully`)}`);
 });
 
 app.get('/stores/:id/manage', (req, res) => {
-  const store = req.params.id === sampleStore.id ? sampleStore : sampleStore;
-  const adminUrl = ROOT_DOMAIN === 'localhost'
-    ? `http://${store.subdomain}.localhost:${PORT}/admin`
-    : `https://${store.subdomain}.${ROOT_DOMAIN}/admin`;
+  const store = getStoreById(req.params.id);
+  if (!store) {
+    return res.redirect('/dashboard?error=Store not found');
+  }
 
-  res.redirect(adminUrl);
+  return res.redirect(buildStoreAdminUrl(store));
+});
+
+app.get('/stores/:id/preview', (req, res) => {
+  const store = getStoreById(req.params.id);
+  if (!store) {
+    return res.redirect('/dashboard?error=Store not found');
+  }
+
+  return res.redirect(buildStorefrontUrl(store));
+});
+
+app.get('/platform-admin', (req, res) => {
+  return renderPlatformAdmin(res, 'platform/admin-dashboard', {
+    pageTitle: 'Platform control center',
+    metrics: getPlatformMetrics(),
+    stores: getPlatformHighlights(),
+    supportQueue: getSupportConversations().slice(0, 4),
+    incidents: getIncidents().slice(0, 4)
+  });
+});
+
+app.get('/platform-admin/stores', (req, res) => {
+  return renderPlatformAdmin(res, 'platform/admin-stores', {
+    pageTitle: 'Tenant directory',
+    stores: getPlatformHighlights()
+  });
+});
+
+app.post('/platform-admin/stores/:id/status', (req, res) => {
+  const store = getStoreById(req.params.id);
+  if (!store) {
+    return res.redirect('/platform-admin/stores?error=Store not found');
+  }
+
+  if (req.body.launch_status) {
+    store.launch_status = String(req.body.launch_status).toLowerCase();
+  }
+
+  if (req.body.operational_status) {
+    store.operational_status = String(req.body.operational_status).toLowerCase();
+  }
+
+  return res.redirect('/platform-admin/stores?success=Tenant status updated');
+});
+
+app.get('/platform-admin/support', (req, res) => {
+  return renderPlatformAdmin(res, 'platform/admin-support', {
+    pageTitle: 'Support operations',
+    conversations: getSupportConversations()
+  });
+});
+
+app.post('/platform-admin/support/:id/update', (req, res) => {
+  const conversation = updateSupportConversation(req.params.id, {
+    status: req.body.status,
+    priority: req.body.priority,
+    owner: req.body.owner
+  });
+
+  if (!conversation) {
+    return res.redirect('/platform-admin/support?error=Conversation not found');
+  }
+
+  return res.redirect('/platform-admin/support?success=Support conversation updated');
+});
+
+app.post('/platform-admin/support/:id/reply', (req, res) => {
+  const conversation = replyToSupportConversation(req.params.id, {
+    body: req.body.body,
+    status: req.body.status,
+    priority: req.body.priority,
+    author: systemAdminUser.name,
+    role: 'support'
+  });
+
+  if (!conversation) {
+    return res.redirect('/platform-admin/support?error=Conversation not found');
+  }
+
+  return res.redirect('/platform-admin/support?success=Support reply sent');
+});
+
+app.get('/platform-admin/incidents', (req, res) => {
+  return renderPlatformAdmin(res, 'platform/admin-incidents', {
+    pageTitle: 'Incident center',
+    incidents: getIncidents()
+  });
+});
+
+app.post('/platform-admin/incidents/:id', (req, res) => {
+  const incident = updateIncident(req.params.id, {
+    status: req.body.status,
+    owner: req.body.owner,
+    note: req.body.note,
+    author: systemAdminUser.name
+  });
+
+  if (!incident) {
+    return res.redirect('/platform-admin/incidents?error=Incident not found');
+  }
+
+  return res.redirect('/platform-admin/incidents?success=Incident updated');
 });
 
 app.get('/admin', (req, res) => {
-  res.render('admin/dashboard', {
-    layout: 'layouts/admin',
-    pageTitle: 'Admin dashboard',
-    store: sampleStore,
-    products: sampleProducts,
-    orders: sampleOrders,
-    recentOrders: sampleOrders,
-    stats: {
-      totalProducts: sampleProducts.length,
-      totalOrders: sampleOrders.length,
-      revenue30d: 8420,
-      customersCount: 182
-    }
+  const store = resolveStore(req);
+  const products = getStoreProducts(store.id);
+  const orders = getStoreOrders(store.id);
+
+  return renderStoreAdmin(req, res, 'admin/dashboard', {
+    pageTitle: 'Store admin',
+    products,
+    orders,
+    recentOrders: orders.slice(0, 5),
+    stats: getStoreStats(store.id),
+    supportQueue: getSupportConversations({ storeId: store.id }).slice(0, 4)
   });
 });
 
 app.get('/admin/products', (req, res) => {
-  res.render('admin/products', {
-    layout: 'layouts/admin',
+  const store = resolveStore(req);
+
+  return renderStoreAdmin(req, res, 'admin/products', {
     pageTitle: 'Products',
-    store: sampleStore,
-    products: sampleProducts
+    products: getStoreProducts(store.id)
   });
 });
 
 app.get('/admin/products/new', (req, res) => {
-  res.render('admin/product-form', {
-    layout: 'layouts/admin',
+  return renderStoreAdmin(req, res, 'admin/product-form', {
     pageTitle: 'Add product',
-    store: sampleStore,
     product: null,
     errors: {}
   });
 });
 
 app.get('/admin/products/:id/edit', (req, res) => {
-  const product = getProductById(req.params.id) || sampleProducts[0];
+  const store = resolveStore(req);
+  const product = getProductById(store.id, req.params.id);
 
-  res.render('admin/product-form', {
-    layout: 'layouts/admin',
+  return renderStoreAdmin(req, res, 'admin/product-form', {
     pageTitle: 'Edit product',
-    store: sampleStore,
-    product,
+    product: product || null,
     errors: {}
   });
 });
 
 app.post('/admin/products', (req, res) => {
-  res.redirect('/admin/products?success=Product saved');
+  const store = resolveStore(req);
+  createProduct(store.id, req.body);
+  return res.redirect('/admin/products?success=Product created');
 });
 
 app.post('/admin/products/:id', (req, res) => {
-  res.redirect('/admin/products?success=Product updated');
+  const store = resolveStore(req);
+  const product = updateProduct(store.id, req.params.id, req.body);
+
+  if (!product) {
+    return res.redirect('/admin/products?error=Product not found');
+  }
+
+  return res.redirect('/admin/products?success=Product updated');
 });
 
 app.post('/admin/products/:id/delete', (req, res) => {
-  res.redirect('/admin/products?success=Product deleted');
+  const store = resolveStore(req);
+  const removed = deleteProduct(store.id, req.params.id);
+
+  if (!removed) {
+    return res.redirect('/admin/products?error=Product not found');
+  }
+
+  return res.redirect('/admin/products?success=Product deleted');
 });
 
 app.get('/admin/orders', (req, res) => {
-  res.render('admin/orders', {
-    layout: 'layouts/admin',
+  const store = resolveStore(req);
+
+  return renderStoreAdmin(req, res, 'admin/orders', {
     pageTitle: 'Orders',
-    store: sampleStore,
-    orders: sampleOrders
+    orders: getStoreOrders(store.id)
   });
 });
 
 app.get('/admin/orders/:id', (req, res) => {
-  const order = sampleOrders.find((entry) => entry.id === req.params.id) || sampleOrders[0];
+  const store = resolveStore(req);
+  const order = getOrderById(store.id, req.params.id);
 
-  res.render('admin/order-detail', {
-    layout: 'layouts/admin',
-    pageTitle: `Order #${order.id}`,
-    store: sampleStore,
-    order
+  return renderStoreAdmin(req, res, 'admin/order-detail', {
+    pageTitle: order ? `Order #${order.id}` : 'Order detail',
+    order: order || null
   });
 });
 
 app.post('/admin/orders/:id/status', (req, res) => {
-  res.redirect(`/admin/orders/${req.params.id}?success=Order status updated`);
+  const store = resolveStore(req);
+  const order = updateOrderStatus(store.id, req.params.id, req.body.status);
+
+  if (!order) {
+    return res.redirect('/admin/orders?error=Order not found');
+  }
+
+  return res.redirect(`/admin/orders/${order.id}?success=Order status updated`);
 });
 
 app.get('/admin/settings', (req, res) => {
-  res.render('admin/settings', {
-    layout: 'layouts/admin',
+  return renderStoreAdmin(req, res, 'admin/settings', {
     pageTitle: 'Store settings',
-    store: sampleStore,
     errors: {}
   });
 });
 
 app.post('/admin/settings', (req, res) => {
-  res.redirect('/admin/settings?success=Store settings updated');
+  const store = resolveStore(req);
+  updateStoreSettings(store.id, req.body);
+  return res.redirect('/admin/settings?success=Store settings updated');
 });
 
 app.get('/admin/domain', (req, res) => {
-  res.render('admin/domain', {
-    layout: 'layouts/admin',
+  return renderStoreAdmin(req, res, 'admin/domain', {
     pageTitle: 'Domain setup',
-    store: sampleStore,
     errors: {}
   });
 });
 
 app.post('/admin/domain', (req, res) => {
-  res.redirect('/admin/domain?success=Domain saved for verification');
+  const store = resolveStore(req);
+  updateStoreDomain(store.id, req.body.custom_domain);
+  return res.redirect('/admin/domain?success=Domain settings saved');
 });
 
 app.get('/products', (req, res) => {
-  res.render('storefront/products', {
-    layout: 'layouts/store',
+  const store = resolveStore(req);
+  const category = req.query.category ? decodeURIComponent(req.query.category) : 'All';
+  const products = getStoreProducts(store.id, {
+    publishedOnly: true,
+    category
+  });
+
+  return renderStorefront(req, res, 'storefront/products', {
     pageTitle: 'Products',
-    store: sampleStore,
-    customer: getCurrentCustomer(req),
-    products: sampleProducts,
-    categories: [{ name: 'Accessories', slug: 'accessories' }, { name: 'Journals', slug: 'journals' }],
-    activeCategory: req.query.category ? decodeURIComponent(req.query.category) : 'All',
-    cart: demoCart
+    products,
+    categories: getStoreCategories(store.id),
+    activeCategory: category
   });
 });
 
 app.get('/products/:slug', (req, res) => {
-  const product = getProductBySlug(req.params.slug) || sampleProducts[0];
+  const store = resolveStore(req);
+  const product = getProductBySlug(store.id, req.params.slug);
 
-  res.render('storefront/product', {
-    layout: 'layouts/store',
+  if (!product) {
+    return res.redirect('/products?error=Product not found');
+  }
+
+  const relatedProducts = getPublishedProducts(store.id)
+    .filter((entry) => entry.id !== product.id && entry.category === product.category)
+    .slice(0, 3);
+
+  return renderStorefront(req, res, 'storefront/product', {
     pageTitle: product.name,
-    store: sampleStore,
-    customer: getCurrentCustomer(req),
     product,
-    cart: demoCart
+    relatedProducts
   });
 });
 
 app.get('/cart', (req, res) => {
-  res.render('storefront/cart', {
-    layout: 'layouts/store',
-    pageTitle: 'Cart',
-    store: sampleStore,
-    customer: getCurrentCustomer(req),
-    cart: demoCart
+  return renderStorefront(req, res, 'storefront/cart', {
+    pageTitle: 'Cart'
   });
 });
 
 app.get('/register', (req, res) => {
-  res.render('storefront/register', {
-    layout: 'layouts/store',
-    pageTitle: 'Register',
-    store: sampleStore,
-    customer: null,
-    cart: demoCart,
+  return renderStorefront(req, res, 'storefront/register', {
+    pageTitle: 'Create account',
     errors: {},
     formData: {}
   });
 });
 
 app.post('/register', (req, res) => {
-  res.redirect(req.query.returnTo || '/?success=Account created');
+  const store = resolveStore(req);
+  const customer = createCustomer(store.id, req.body);
+  res.cookie(customerCookieName(store.id), customer.id, { sameSite: 'lax' });
+  return res.redirect(req.query.returnTo || '/account?success=Account created');
+});
+
+app.get('/account', (req, res) => {
+  const store = resolveStore(req);
+  const customer = getCurrentCustomer(req, store.id);
+
+  if (!customer) {
+    return res.redirect('/login?returnTo=/account');
+  }
+
+  return renderStorefront(req, res, 'storefront/account', {
+    pageTitle: 'My account',
+    customerOrders: getCustomerOrders(store.id, customer)
+  });
+});
+
+app.get('/orders', (req, res) => {
+  const store = resolveStore(req);
+  const customer = getCurrentCustomer(req, store.id);
+
+  if (!customer) {
+    return res.redirect('/login?returnTo=/orders');
+  }
+
+  return renderStorefront(req, res, 'storefront/orders', {
+    pageTitle: 'My orders',
+    customerOrders: getCustomerOrders(store.id, customer)
+  });
 });
 
 app.get('/checkout', (req, res) => {
-  const customer = getCurrentCustomer(req);
+  const store = resolveStore(req);
+  const customer = getCurrentCustomer(req, store.id);
+  const cart = getCart(store.id);
+
   if (!customer) {
     return res.redirect('/login?returnTo=/checkout');
   }
 
-  return res.render('storefront/checkout', {
-    layout: 'layouts/store',
+  if (!cart.items.length) {
+    return res.redirect('/cart?error=Your cart is empty');
+  }
+
+  return renderStorefront(req, res, 'storefront/checkout', {
     pageTitle: 'Checkout',
-    store: sampleStore,
-    customer,
-    cart: demoCart,
     errors: {}
   });
 });
 
 app.post('/checkout', (req, res) => {
-  res.redirect('/order-confirmation?success=Order placed');
+  const store = resolveStore(req);
+  const customer = getCurrentCustomer(req, store.id);
+
+  if (!customer) {
+    return res.redirect('/login?returnTo=/checkout');
+  }
+
+  const order = createOrder(store.id, customer, req.body);
+  if (!order) {
+    return res.redirect('/cart?error=Your cart is empty');
+  }
+
+  res.cookie(orderCookieName(store.id), order.id, { sameSite: 'lax' });
+  return res.redirect(`/order-confirmation?order=${order.id}&success=Order placed`);
 });
 
 app.get('/order-confirmation', (req, res) => {
-  res.render('storefront/order-confirmation', {
-    layout: 'layouts/store',
+  const store = resolveStore(req);
+  const orderId = req.query.order || req.cookies[orderCookieName(store.id)];
+  const order = orderId ? getOrderById(store.id, orderId) : null;
+
+  if (!order) {
+    return res.redirect('/products');
+  }
+
+  return renderStorefront(req, res, 'storefront/order-confirmation', {
     pageTitle: 'Order confirmation',
-    store: sampleStore,
-    customer: sampleCustomer,
-    order: {
-      id: '1002',
-      status: 'Pending',
-      total: demoCart.total,
-      estimated_shipping: '3-5 business days',
-      items: demoCart.items
-    },
-    cart: demoCart
+    order
   });
 });
 
 app.post('/cart/add', (req, res) => {
-  const product = getProductById(req.body.productId);
-  const quantity = Math.max(1, Number(req.body.quantity || 1));
+  const store = resolveStore(req);
+  const cart = addCartItem(store.id, req.body.productId, req.body.quantity);
 
-  if (!product) {
+  if (!cart) {
     return res.status(404).json({ error: 'Product not found.' });
   }
 
-  const existingItem = demoCart.items.find((item) => String(item.product_id) === String(product.id));
-  if (existingItem) {
-    existingItem.quantity += quantity;
-  } else {
-    demoCart.items.push({
-      product_id: product.id,
-      name: product.name,
-      price: product.price,
-      quantity,
-      image: product.image
-    });
-  }
-
-  return res.json({ cart: withTotals(demoCart) });
+  return res.json({ cart });
 });
 
 app.patch('/cart/update', (req, res) => {
-  const productId = String(req.body.productId || '');
-  const quantity = Math.max(0, Number(req.body.quantity || 0));
-  const targetItem = demoCart.items.find((item) => String(item.product_id) === productId);
+  const store = resolveStore(req);
+  const cart = updateCartItemQuantity(store.id, req.body.productId, req.body.quantity);
 
-  if (!targetItem) {
+  if (!cart) {
     return res.status(404).json({ error: 'Cart item not found.' });
   }
 
-  if (quantity <= 0) {
-    demoCart.items = demoCart.items.filter((item) => String(item.product_id) !== productId);
-  } else {
-    targetItem.quantity = quantity;
-  }
-
-  return res.json({ cart: withTotals(demoCart) });
+  return res.json({ cart });
 });
 
 app.delete('/cart/remove', (req, res) => {
-  const productId = String(req.body.productId || '');
-  demoCart.items = demoCart.items.filter((item) => String(item.product_id) !== productId);
-  return res.json({ cart: withTotals(demoCart) });
+  const store = resolveStore(req);
+  const cart = removeCartItem(store.id, req.body.productId);
+  return res.json({ cart });
 });
 
 app.get('/logout', (req, res) => {
-  res.redirect('/?success=Signed out');
+  const store = resolveStore(req);
+
+  if (store) {
+    res.clearCookie(customerCookieName(store.id));
+    res.clearCookie(orderCookieName(store.id));
+  }
+
+  if (isPlatformHost(req.hostname)) {
+    res.clearCookie('activeStoreId');
+  }
+
+  return res.redirect('/?success=Signed out');
 });
 
 app.get('/error', (req, res) => {
@@ -532,15 +739,17 @@ app.get('/error', (req, res) => {
 });
 
 app.use((req, res) => {
+  const store = resolveStore(req);
+
   res.status(404).render('errors/404', {
     layout: isStorefrontHost(req) ? 'layouts/store' : 'layouts/main',
     pageTitle: 'Not found',
-    store: sampleStore,
-    customer: getCurrentCustomer(req),
-    cart: demoCart
+    store,
+    customer: getCurrentCustomer(req, store?.id),
+    cart: store ? getCart(store.id) : { items: [], total: 0 }
   });
 });
 
 app.listen(PORT, () => {
-  console.log(`MultiStore frontend preview running on http://localhost:${PORT}`);
+  console.log(`Aisle Commerce Cloud running on http://localhost:${PORT}`);
 });

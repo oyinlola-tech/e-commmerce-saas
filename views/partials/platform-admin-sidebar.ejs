@@ -1,0 +1,76 @@
+<%
+  const adminPath = currentPath || '';
+  const controlUser = systemAdminUser || {};
+  const controlInitials = String(controlUser.name || 'Admin')
+    .split(' ')
+    .map((segment) => segment[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  const navLinkClasses = (matcher) => {
+    return matcher()
+      ? 'bg-white/10 text-white shadow-sm'
+      : 'text-slate-300 hover:bg-white/5 hover:text-white';
+  };
+%>
+<aside data-admin-sidebar class="fixed inset-y-0 left-0 z-50 flex w-80 -translate-x-full flex-col border-r border-white/10 bg-slate-950 px-5 py-6 text-white transition-transform duration-200 lg:translate-x-0">
+  <div class="flex items-center justify-between gap-3">
+    <a href="/platform-admin" class="flex min-w-0 items-center gap-3">
+      <span class="inline-flex h-12 w-12 flex-none items-center justify-center rounded-2xl bg-primary text-lg font-bold text-white shadow-glow">A</span>
+      <span class="min-w-0">
+        <span class="block truncate text-xs uppercase tracking-[0.3em] text-slate-400">Control Center</span>
+        <span class="block truncate text-base font-semibold text-white"><%= platformBrand && platformBrand.platformName ? platformBrand.platformName : 'Aisle' %></span>
+      </span>
+    </a>
+    <button type="button" data-admin-sidebar-close class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-slate-300 lg:hidden" aria-label="Close sidebar">
+      <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+      </svg>
+    </button>
+  </div>
+
+  <div class="mt-8 rounded-3xl border border-white/10 bg-white/5 p-5">
+    <div class="flex items-center gap-3">
+      <span class="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold text-white"><%= controlInitials || 'AA' %></span>
+      <div>
+        <p class="text-sm font-semibold text-white"><%= controlUser.name || 'Platform Admin' %></p>
+        <p class="text-xs text-slate-400"><%= controlUser.role || 'Operations' %></p>
+      </div>
+    </div>
+    <p class="mt-4 text-sm leading-6 text-slate-300">
+      Monitor tenants, resolve incidents, and respond to support from one global operations layer.
+    </p>
+  </div>
+
+  <nav class="mt-8 flex-1 space-y-2">
+    <a href="/platform-admin" class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition <%= navLinkClasses(() => adminPath === '/platform-admin') %>">
+      <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.707 1.707a1 1 0 00-1.414 0l-7 7A1 1 0 003 10.414V17a2 2 0 002 2h3a1 1 0 001-1v-3h2v3a1 1 0 001 1h3a2 2 0 002-2v-6.586a1 1 0 00.293-.707 1 1 0 00-.293-.707l-7-7z"></path></svg>
+      Overview
+    </a>
+    <a href="/platform-admin/stores" class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition <%= navLinkClasses(() => adminPath.startsWith('/platform-admin/stores')) %>">
+      <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M4 4a2 2 0 00-2 2v10a1 1 0 001 1h14a1 1 0 001-1V6a2 2 0 00-2-2H4zm1 3h4v4H5V7zm6 0h4v2h-4V7zm0 4h4v2h-4v-2zM5 13h4v2H5v-2z"></path></svg>
+      Tenant Directory
+    </a>
+    <a href="/platform-admin/support" class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition <%= navLinkClasses(() => adminPath.startsWith('/platform-admin/support')) %>">
+      <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.961L2 17l1.142-3.044A6.649 6.649 0 012 10c0-3.866 3.582-7 8-7s8 3.134 8 7zm-5-1a1 1 0 10-2 0v2a1 1 0 102 0V9zm-4 0a1 1 0 10-2 0v2a1 1 0 102 0V9z" clip-rule="evenodd"></path></svg>
+      Support Ops
+    </a>
+    <a href="/platform-admin/incidents" class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition <%= navLinkClasses(() => adminPath.startsWith('/platform-admin/incidents')) %>">
+      <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.72-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.981-1.742 2.981H4.419c-1.53 0-2.492-1.647-1.742-2.98l5.58-9.92zM11 13a1 1 0 10-2 0 1 1 0 002 0zm-1-7a1 1 0 00-1 1v3a1 1 0 102 0V7a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+      Incident Center
+    </a>
+  </nav>
+
+  <div class="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-4">
+    <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Quick Access</p>
+    <a href="/dashboard" class="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/5 hover:text-white">
+      Owner Workspace
+    </a>
+    <a href="/" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">
+      Marketing Home
+    </a>
+  </div>
+</aside>
+
+<div data-admin-overlay class="fixed inset-0 z-40 hidden bg-slate-950/60 backdrop-blur-sm lg:hidden"></div>

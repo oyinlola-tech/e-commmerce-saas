@@ -1,0 +1,678 @@
+const seed = require('../data/seed');
+
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+const state = clone(seed);
+
+const themePalette = ['#0F766E', '#1D4ED8', '#B45309', '#BE123C', '#0B7285', '#4C1D95'];
+
+const slugify = (value = '') => {
+  return String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+};
+
+const toTitleCase = (value = '') => {
+  return String(value)
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+};
+
+const getStoreById = (storeId) => {
+  return state.stores.find((store) => store.id === storeId) || null;
+};
+
+const getStoreBySubdomain = (subdomain) => {
+  const normalized = String(subdomain || '').toLowerCase();
+  return state.stores.find((store) => String(store.subdomain || '').toLowerCase() === normalized) || null;
+};
+
+const getStoreByDomain = (hostname) => {
+  const normalized = String(hostname || '').toLowerCase();
+  return state.stores.find((store) => String(store.custom_domain || '').toLowerCase() === normalized) || null;
+};
+
+const getStoreByHost = (hostname) => {
+  const customDomainStore = getStoreByDomain(hostname);
+  if (customDomainStore) {
+    return customDomainStore;
+  }
+
+  const normalized = String(hostname || '').toLowerCase();
+  const [subdomain] = normalized.split('.');
+  return getStoreBySubdomain(subdomain);
+};
+
+const getOwnerStores = (ownerId) => {
+  return state.stores.filter((store) => store.owner_id === ownerId);
+};
+
+const getAllStores = () => {
+  return [...state.stores];
+};
+
+const getStoreCustomers = (storeId) => {
+  return state.customers
+    .filter((customer) => customer.store_id === storeId)
+    .sort((a, b) => Number(b.lifetime_value || 0) - Number(a.lifetime_value || 0));
+};
+
+const getCustomerById = (storeId, customerId) => {
+  return state.customers.find((customer) => customer.store_id === storeId && customer.id === customerId) || null;
+};
+
+const findCustomerByEmail = (storeId, email) => {
+  const normalized = String(email || '').trim().toLowerCase();
+  return state.customers.find((customer) => customer.store_id === storeId && String(customer.email || '').toLowerCase() === normalized) || null;
+};
+
+const getStoreProducts = (storeId, options = {}) => {
+  const {
+    publishedOnly = false,
+    category = null
+  } = options;
+
+  return state.products
+    .filter((product) => product.store_id === storeId)
+    .filter((product) => !publishedOnly || String(product.status || '').toLowerCase() === 'published')
+    .filter((product) => {
+      if (!category || category === 'All') {
+        return true;
+      }
+      return slugify(product.category) === slugify(category) || slugify(product.category) === slugify(toTitleCase(category));
+    })
+    .sort((a, b) => {
+      if (Boolean(b.featured) !== Boolean(a.featured)) {
+        return Number(Boolean(b.featured)) - Number(Boolean(a.featured));
+      }
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+};
+
+const getPublishedProducts = (storeId) => {
+  return getStoreProducts(storeId, { publishedOnly: true });
+};
+
+const getStoreCategories = (storeId) => {
+  const unique = new Map();
+  getPublishedProducts(storeId).forEach((product) => {
+    if (!product.category) {
+      return;
+    }
+    unique.set(slugify(product.category), {
+      name: product.category,
+      slug: slugify(product.category)
+    });
+  });
+  return Array.from(unique.values());
+};
+
+const getProductById = (storeId, productId) => {
+  return state.products.find((product) => product.store_id === storeId && String(product.id) === String(productId)) || null;
+};
+
+const getProductBySlug = (storeId, slug) => {
+  return state.products.find((product) => product.store_id === storeId && product.slug === slug) || null;
+};
+
+const getStoreOrders = (storeId) => {
+  return state.orders
+    .filter((order) => order.store_id === storeId)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+};
+
+const getOrderById = (storeId, orderId) => {
+  return state.orders.find((order) => order.store_id === storeId && String(order.id) === String(orderId)) || null;
+};
+
+const getLatestOrder = (storeId) => {
+  return getStoreOrders(storeId)[0] || null;
+};
+
+const getSupportConversations = (options = {}) => {
+  const { storeId = null, status = null } = options;
+  return state.supportConversations
+    .filter((conversation) => !storeId || conversation.store_id === storeId)
+    .filter((conversation) => !status || String(conversation.status).toLowerCase() === String(status).toLowerCase())
+    .sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
+};
+
+const getConversationById = (conversationId) => {
+  return state.supportConversations.find((conversation) => conversation.id === conversationId) || null;
+};
+
+const getIncidents = () => {
+  return [...state.incidents].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+};
+
+const getIncidentById = (incidentId) => {
+  return state.incidents.find((incident) => incident.id === incidentId) || null;
+};
+
+const getStoreStats = (storeId) => {
+  const products = getStoreProducts(storeId);
+  const orders = getStoreOrders(storeId);
+  const customers = getStoreCustomers(storeId);
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const revenue30d = orders
+    .filter((order) => new Date(order.created_at).getTime() >= thirtyDaysAgo)
+    .reduce((sum, order) => sum + Number(order.total || 0), 0);
+
+  return {
+    totalProducts: products.length,
+    publishedProducts: products.filter((product) => String(product.status || '').toLowerCase() === 'published').length,
+    draftProducts: products.filter((product) => String(product.status || '').toLowerCase() !== 'published').length,
+    totalOrders: orders.length,
+    revenue30d,
+    customersCount: customers.length,
+    lowStockProducts: products.filter((product) => Number(product.inventory || 0) <= 10).length,
+    openSupportTickets: getSupportConversations({ storeId, status: 'open' }).length
+  };
+};
+
+const getPlatformMetrics = () => {
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const gmv30d = state.orders
+    .filter((order) => new Date(order.created_at).getTime() >= thirtyDaysAgo)
+    .reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const openTickets = state.supportConversations.filter((conversation) => String(conversation.status || '').toLowerCase() !== 'resolved').length;
+  const unresolvedIncidents = state.incidents.filter((incident) => String(incident.status || '').toLowerCase() !== 'resolved').length;
+  const activeMarkets = new Set(state.stores.flatMap((store) => store.markets || []));
+
+  return {
+    storesCount: state.stores.length,
+    liveStores: state.stores.filter((store) => String(store.launch_status || '').toLowerCase() === 'live').length,
+    gmv30d,
+    openTickets,
+    unresolvedIncidents,
+    customersCount: state.customers.length,
+    activeMarkets: activeMarkets.size
+  };
+};
+
+const getPlatformHighlights = () => {
+  return state.stores
+    .map((store) => ({
+      ...store,
+      stats: getStoreStats(store.id)
+    }))
+    .sort((a, b) => Number(b.monthly_revenue || 0) - Number(a.monthly_revenue || 0));
+};
+
+const nextId = (prefix) => {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const nextOrderNumber = () => {
+  const highest = state.orders.reduce((max, order) => {
+    return Math.max(max, Number(order.id) || 0);
+  }, 4108);
+
+  return String(highest + 1);
+};
+
+const ensureCartTotals = (cart) => {
+  const safeCart = cart || { items: [], total: 0 };
+  safeCart.items = Array.isArray(safeCart.items) ? safeCart.items : [];
+  safeCart.total = safeCart.items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+  return safeCart;
+};
+
+const ensureStoreCart = (storeId) => {
+  if (!state.carts[storeId]) {
+    state.carts[storeId] = { items: [], total: 0 };
+  }
+
+  return ensureCartTotals(state.carts[storeId]);
+};
+
+const getCart = (storeId) => {
+  return clone(ensureStoreCart(storeId));
+};
+
+const addCartItem = (storeId, productId, quantity = 1) => {
+  const product = getProductById(storeId, productId);
+  if (!product) {
+    return null;
+  }
+
+  const cart = ensureStoreCart(storeId);
+  const target = cart.items.find((item) => String(item.product_id) === String(productId));
+  const qty = Math.max(1, Number(quantity || 1));
+
+  if (target) {
+    target.quantity += qty;
+  } else {
+    cart.items.push({
+      product_id: product.id,
+      name: product.name,
+      price: product.price,
+      quantity: qty,
+      image: product.image
+    });
+  }
+
+  return clone(ensureCartTotals(cart));
+};
+
+const updateCartItemQuantity = (storeId, productId, quantity) => {
+  const cart = ensureStoreCart(storeId);
+  const target = cart.items.find((item) => String(item.product_id) === String(productId));
+  if (!target) {
+    return null;
+  }
+
+  const qty = Math.max(0, Number(quantity || 0));
+  if (qty <= 0) {
+    cart.items = cart.items.filter((item) => String(item.product_id) !== String(productId));
+  } else {
+    target.quantity = qty;
+  }
+
+  return clone(ensureCartTotals(cart));
+};
+
+const removeCartItem = (storeId, productId) => {
+  const cart = ensureStoreCart(storeId);
+  cart.items = cart.items.filter((item) => String(item.product_id) !== String(productId));
+  return clone(ensureCartTotals(cart));
+};
+
+const clearCart = (storeId) => {
+  state.carts[storeId] = { items: [], total: 0 };
+  return getCart(storeId);
+};
+
+const makeColorFromName = (name = '') => {
+  const checksum = Array.from(String(name)).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return themePalette[checksum % themePalette.length];
+};
+
+const uniqueSubdomain = (preferredValue) => {
+  const base = slugify(preferredValue) || 'store';
+  let candidate = base;
+  let suffix = 2;
+
+  while (state.stores.some((store) => store.subdomain === candidate)) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+};
+
+const createStore = ({ name, subdomain, ownerId }) => {
+  const cleanName = String(name || '').trim() || 'New Store';
+  const normalizedSubdomain = uniqueSubdomain(subdomain || cleanName);
+  const store = {
+    id: nextId('store'),
+    owner_id: ownerId || state.platformUser.id,
+    name: cleanName,
+    subdomain: normalizedSubdomain,
+    custom_domain: '',
+    logo: '',
+    theme_color: makeColorFromName(cleanName),
+    ssl_status: 'issued',
+    tagline: `A premium storefront operated by ${cleanName}.`,
+    description: `${cleanName} is configured for international selling, modern merchandising, and enterprise-ready customer operations.`,
+    support_email: `support@${normalizedSubdomain}.store`,
+    contact_phone: '+1 000 000 0000',
+    fulfillment_sla: 'Orders ship within 24 hours on business days.',
+    return_window_days: 30,
+    timezone: 'UTC',
+    markets: ['United States'],
+    currencies: ['USD'],
+    launch_status: 'setup',
+    operational_status: 'healthy',
+    health_score: 90,
+    conversion_rate: 0,
+    monthly_revenue: 0,
+    monthly_orders: 0,
+    average_order_value: 0,
+    support_backlog: 0
+  };
+
+  state.stores.unshift(store);
+  state.carts[store.id] = { items: [], total: 0 };
+  return store;
+};
+
+const updateStoreSettings = (storeId, payload = {}) => {
+  const store = getStoreById(storeId);
+  if (!store) {
+    return null;
+  }
+
+  const color = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(payload.theme_color || ''))
+    ? String(payload.theme_color)
+    : store.theme_color;
+
+  store.name = String(payload.name || store.name).trim() || store.name;
+  store.logo = String(payload.logo || '').trim();
+  store.theme_color = color;
+  store.tagline = String(payload.tagline || store.tagline).trim() || store.tagline;
+  store.description = String(payload.description || store.description).trim() || store.description;
+  store.support_email = String(payload.support_email || store.support_email).trim() || store.support_email;
+  store.contact_phone = String(payload.contact_phone || store.contact_phone).trim() || store.contact_phone;
+  store.fulfillment_sla = String(payload.fulfillment_sla || store.fulfillment_sla).trim() || store.fulfillment_sla;
+
+  const parsedReturnWindow = Number(payload.return_window_days);
+  if (Number.isFinite(parsedReturnWindow) && parsedReturnWindow > 0) {
+    store.return_window_days = parsedReturnWindow;
+  }
+
+  return store;
+};
+
+const updateStoreDomain = (storeId, customDomain) => {
+  const store = getStoreById(storeId);
+  if (!store) {
+    return null;
+  }
+
+  store.custom_domain = String(customDomain || '').trim();
+  store.ssl_status = store.custom_domain ? 'pending' : 'issued';
+  return store;
+};
+
+const parseHighlights = (value = '') => {
+  return String(value)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+};
+
+const parseImageList = (value = '') => {
+  return String(value)
+    .split(/\r?\n|,/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+};
+
+const normalizeProductPayload = (payload = {}, existingProduct = null) => {
+  const gallery = parseImageList(payload.gallery || payload.images || '');
+  const primaryImage = String(payload.image || '').trim() || gallery[0] || (existingProduct ? existingProduct.image : '');
+  const mergedImages = primaryImage ? [primaryImage, ...gallery.filter((image) => image !== primaryImage)] : gallery;
+
+  return {
+    name: String(payload.name || existingProduct?.name || '').trim(),
+    slug: slugify(payload.slug || payload.name || existingProduct?.slug || ''),
+    category: String(payload.category || existingProduct?.category || 'General').trim(),
+    price: Number(payload.price || existingProduct?.price || 0),
+    compare_at_price: payload.compare_at_price ? Number(payload.compare_at_price) : null,
+    image: primaryImage,
+    images: mergedImages,
+    description: String(payload.description || existingProduct?.description || '').trim(),
+    highlights: parseHighlights(payload.highlights || ''),
+    inventory: Math.max(0, Number(payload.inventory || existingProduct?.inventory || 0)),
+    sku: String(payload.sku || existingProduct?.sku || '').trim(),
+    status: payload.status ? 'Published' : 'Draft',
+    featured: Boolean(payload.featured)
+  };
+};
+
+const createProduct = (storeId, payload = {}) => {
+  const product = {
+    id: nextId('prod'),
+    store_id: storeId,
+    ...normalizeProductPayload(payload)
+  };
+
+  if (!product.slug) {
+    product.slug = slugify(product.name || product.id);
+  }
+
+  state.products.unshift(product);
+  return product;
+};
+
+const updateProduct = (storeId, productId, payload = {}) => {
+  const product = getProductById(storeId, productId);
+  if (!product) {
+    return null;
+  }
+
+  Object.assign(product, normalizeProductPayload(payload, product));
+  if (!product.slug) {
+    product.slug = slugify(product.name || product.id);
+  }
+
+  return product;
+};
+
+const deleteProduct = (storeId, productId) => {
+  const existingProduct = getProductById(storeId, productId);
+  if (!existingProduct) {
+    return false;
+  }
+
+  state.products = state.products.filter((product) => !(product.store_id === storeId && String(product.id) === String(productId)));
+  if (state.carts[storeId]) {
+    state.carts[storeId].items = state.carts[storeId].items.filter((item) => String(item.product_id) !== String(productId));
+    ensureCartTotals(state.carts[storeId]);
+  }
+
+  return true;
+};
+
+const createCustomer = (storeId, payload = {}) => {
+  const existingCustomer = findCustomerByEmail(storeId, payload.email);
+  if (existingCustomer) {
+    existingCustomer.name = String(payload.name || existingCustomer.name).trim() || existingCustomer.name;
+    existingCustomer.address = String(payload.address || existingCustomer.address || '').trim();
+    existingCustomer.city = String(payload.city || existingCustomer.city || '').trim();
+    existingCustomer.country = String(payload.country || existingCustomer.country || '').trim();
+    existingCustomer.postal_code = String(payload.postal_code || existingCustomer.postal_code || '').trim();
+    return existingCustomer;
+  }
+
+  const customer = {
+    id: nextId('customer'),
+    store_id: storeId,
+    name: String(payload.name || '').trim() || 'Customer',
+    email: String(payload.email || '').trim(),
+    address: String(payload.address || '').trim(),
+    city: String(payload.city || '').trim(),
+    country: String(payload.country || '').trim(),
+    postal_code: String(payload.postal_code || '').trim(),
+    segment: 'New',
+    lifetime_value: 0,
+    orders_count: 0
+  };
+
+  state.customers.unshift(customer);
+  return customer;
+};
+
+const createOrder = (storeId, customer, payload = {}) => {
+  const cart = ensureStoreCart(storeId);
+  if (!cart.items.length) {
+    return null;
+  }
+
+  const activeCustomer = createCustomer(storeId, {
+    ...customer,
+    ...payload
+  });
+
+  const addressParts = [
+    payload.address || activeCustomer.address,
+    payload.city || activeCustomer.city,
+    payload.country || activeCustomer.country,
+    payload.postal_code || activeCustomer.postal_code
+  ].filter(Boolean);
+
+  cart.items.forEach((item) => {
+    const product = getProductById(storeId, item.product_id);
+    if (product) {
+      product.inventory = Math.max(0, Number(product.inventory || 0) - Number(item.quantity || 0));
+    }
+  });
+
+  const order = {
+    id: nextOrderNumber(),
+    store_id: storeId,
+    status: 'Pending',
+    payment_status: 'Authorized',
+    payment_method: toTitleCase(payload.payment_method || 'Card'),
+    created_at: new Date().toISOString(),
+    total: cart.total,
+    customer_name: activeCustomer.name,
+    customer: {
+      name: activeCustomer.name,
+      email: activeCustomer.email,
+      address: addressParts.join(', ')
+    },
+    items: cart.items.map((item) => ({ ...item }))
+  };
+
+  state.orders.unshift(order);
+  activeCustomer.orders_count = Number(activeCustomer.orders_count || 0) + 1;
+  activeCustomer.lifetime_value = Number(activeCustomer.lifetime_value || 0) + Number(order.total || 0);
+  clearCart(storeId);
+
+  return order;
+};
+
+const updateOrderStatus = (storeId, orderId, status) => {
+  const order = getOrderById(storeId, orderId);
+  if (!order) {
+    return null;
+  }
+
+  order.status = toTitleCase(status || order.status);
+  return order;
+};
+
+const updateSupportConversation = (conversationId, payload = {}) => {
+  const conversation = getConversationById(conversationId);
+  if (!conversation) {
+    return null;
+  }
+
+  if (payload.status) {
+    conversation.status = String(payload.status).toLowerCase();
+  }
+
+  if (payload.priority) {
+    conversation.priority = String(payload.priority).toLowerCase();
+  }
+
+  if (payload.owner) {
+    conversation.owner = String(payload.owner).trim();
+  }
+
+  conversation.last_message_at = new Date().toISOString();
+  return conversation;
+};
+
+const replyToSupportConversation = (conversationId, payload = {}) => {
+  const conversation = getConversationById(conversationId);
+  if (!conversation) {
+    return null;
+  }
+
+  const body = String(payload.body || '').trim();
+  if (body) {
+    conversation.messages.push({
+      author: String(payload.author || state.systemAdminUser.name).trim(),
+      role: payload.role || 'support',
+      sent_at: new Date().toISOString(),
+      body
+    });
+  }
+
+  if (payload.status) {
+    conversation.status = String(payload.status).toLowerCase();
+  } else if (body) {
+    conversation.status = 'pending';
+  }
+
+  if (payload.priority) {
+    conversation.priority = String(payload.priority).toLowerCase();
+  }
+
+  conversation.last_message_at = new Date().toISOString();
+  return conversation;
+};
+
+const updateIncident = (incidentId, payload = {}) => {
+  const incident = getIncidentById(incidentId);
+  if (!incident) {
+    return null;
+  }
+
+  if (payload.status) {
+    incident.status = String(payload.status).toLowerCase();
+  }
+
+  if (payload.owner) {
+    incident.owner = String(payload.owner).trim();
+  }
+
+  const note = String(payload.note || '').trim();
+  if (note) {
+    incident.notes.unshift({
+      author: String(payload.author || state.systemAdminUser.name).trim(),
+      created_at: new Date().toISOString(),
+      body: note
+    });
+  }
+
+  incident.updated_at = new Date().toISOString();
+  return incident;
+};
+
+module.exports = {
+  state,
+  brand: state.brand,
+  platformUser: state.platformUser,
+  systemAdminUser: state.systemAdminUser,
+  slugify,
+  getStoreById,
+  getStoreBySubdomain,
+  getStoreByDomain,
+  getStoreByHost,
+  getOwnerStores,
+  getAllStores,
+  getStoreCustomers,
+  getCustomerById,
+  findCustomerByEmail,
+  getStoreProducts,
+  getPublishedProducts,
+  getStoreCategories,
+  getProductById,
+  getProductBySlug,
+  getStoreOrders,
+  getOrderById,
+  getLatestOrder,
+  getStoreStats,
+  getPlatformMetrics,
+  getPlatformHighlights,
+  getSupportConversations,
+  getConversationById,
+  getIncidents,
+  getIncidentById,
+  getCart,
+  addCartItem,
+  updateCartItemQuantity,
+  removeCartItem,
+  clearCart,
+  createStore,
+  updateStoreSettings,
+  updateStoreDomain,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  createCustomer,
+  createOrder,
+  updateOrderStatus,
+  updateSupportConversation,
+  replyToSupportConversation,
+  updateIncident
+};
