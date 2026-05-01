@@ -22,7 +22,7 @@ Aisle Commerce SaaS is a multi-tenant e-commerce platform organized as a Node.js
 | License metadata | `UNLICENSED` |
 | Commercial status | Proprietary, not free to use |
 
-See [LICENSE.md](LICENSE.md) and [NOTICE.md](NOTICE.md) for the repository usage restrictions.
+See [LICENSE.md](LICENSE.md), [NOTICE.md](NOTICE.md), and [SECURITY.md](SECURITY.md) for repository usage and vulnerability reporting guidance.
 
 ## Monorepo Overview
 
