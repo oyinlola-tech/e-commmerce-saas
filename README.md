@@ -132,11 +132,10 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | `npm run start:chat-service` | Reserved for future `chat-service` implementation |
 | `npm run start:notification-service` | Starts `notification-service` |
 | `npm run dev:notification-service` | Starts `notification-service` with `nodemon` |
-| `npm run swagger` | Starts a Swagger UI preview on `http://127.0.0.1:4015`, exports the gateway OpenAPI spec, and exposes the API request collection |
+| `npm run swagger` | Starts a Swagger UI preview on `http://127.0.0.1:4015` and exports the gateway OpenAPI spec |
 | `npm run swagger:export` | Writes the current gateway OpenAPI document to `docs/swagger/gateway.openapi.json` without starting the preview server |
 | `npm run api:request -- --service <name> --path <route>` | Sends a signed internal request directly to a service for endpoints that are not exposed through the gateway |
 | `npm run lint` | Runs the workspace ESLint configuration |
-| `npm run smoke` | Probes health/docs/storefront endpoints for a lightweight end-to-end check |
 
 ## Infrastructure Requirements
 
@@ -228,7 +227,6 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 5. Run `npm run dev` for the full local stack, or use `npm run start:once` when you do not want `nodemon`.
 6. On a fresh database, each implemented service will create its own tables and indexes from its `src/schema.js` file during startup. No separate migration step is required for first-time setup.
 7. Use `npm run dev:browser` if you only want the web app plus gateway, or `npm run dev:services` if you only want the internal service mesh.
-8. Run `npm run smoke` after startup if you want a quick health/docs/storefront probe.
 
 ### API docs and endpoint testing
 
@@ -236,14 +234,12 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 2. Open `http://127.0.0.1:4015` for the standalone Swagger UI preview.
 3. Use the gateway-hosted docs at `http://127.0.0.1:4000/docs` if the gateway is already running.
 4. Download the exported spec from `docs/swagger/gateway.openapi.json` or `http://127.0.0.1:4015/openapi.json`.
-5. Open `tests/aisle-api.http` in a REST Client-compatible editor to exercise the main gateway endpoints with ready-made requests.
-6. Use `npm run api:request -- --service <name> --path <route>` when you need to hit an internal-only service endpoint with the required HMAC headers.
+5. Use `npm run api:request -- --service <name> --path <route>` when you need to hit an internal-only service endpoint with the required HMAC headers.
 
 The Swagger preview also exposes:
 
 - `GET /health` for preview status
 - `GET /service-map` for resolved gateway, web, and downstream service URLs
-- `GET /tests/aisle-api.http` for the bundled request collection
 
 ### Minimal UI preview
 
@@ -334,7 +330,6 @@ Docker-specific files and references are not part of this repository anymore. Lo
 - `GET /payments/config`
 - `POST /payments/config`
 - `POST /payments/webhooks/:provider`
-- `POST /payments/mock/:provider/:reference`
 
 ### Billing service
 
@@ -455,7 +450,6 @@ The tree below reflects the current workspace structure and intentionally exclud
 |   |   |   +-- src
 |   |   |   |   +-- consumers.js
 |   |   |   |   +-- coupons.js
-|   |   |   |   +-- coupons.test.js
 |   |   |   |   +-- routes.js
 |   |   |   |   \-- schema.js
 |   |   |   +-- package.json
@@ -471,7 +465,6 @@ The tree below reflects the current workspace structure and intentionally exclud
 |   |   +-- product-service
 |   |   |   +-- src
 |   |   |   |   +-- pricing.js
-|   |   |   |   +-- pricing.test.js
 |   |   |   |   +-- routes.js
 |   |   |   |   \-- schema.js
 |   |   |   +-- package.json
@@ -643,7 +636,6 @@ The tree below reflects the current workspace structure and intentionally exclud
 |       |   +-- rate-limit.js
 |       |   +-- sanitization.js
 |       |   +-- security.js
-|       |   +-- security.test.js
 |       |   +-- server.js
 |       |   +-- service-runner.js
 |       |   \-- validation.js
@@ -654,9 +646,6 @@ The tree below reflects the current workspace structure and intentionally exclud
 |   +-- internal-request.js
 |   +-- run-stack.js
 |   \-- swagger.js
-+-- tests
-|   +-- aisle-api.http
-|   \-- smoke.js
 +-- uploads
 |   \-- logos
 +-- .env.example
@@ -685,7 +674,7 @@ The tree below reflects the current workspace structure and intentionally exclud
 - Some platform admin sections are intentionally placeholder pages until cross-tenant support, incident, and operations workflows are backed by real permissions and data.
 - Running only `npm run start:frontend` or `npm run dev:frontend` is not enough for most end-to-end commerce flows because the SSR app expects the gateway and backend services to be available.
 - Store logos currently use local disk in development. A shared object-storage adapter is still needed for multi-instance production deployments.
-- The smoke test and request collection improve coverage, but the repository still needs a broader integration and browser test suite for checkout, owner workflows, and payment-state transitions.
+- The repository still needs broader integration and browser coverage for checkout, owner workflows, and payment-state transitions.
 
 ## Documentation Map
 
