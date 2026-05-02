@@ -674,7 +674,7 @@ const bootstrap = async () => {
     return res.json(response);
   }));
 
-  app.post('/api/platform/auth/logout', validate([
+  app.post('/api/platform/auth/logout', gatewayCsrfMiddleware, validate([
     allowBodyFields(['_csrf'])
   ]), (req, res) => {
     clearAuthCookies(req, res, config);
@@ -743,7 +743,7 @@ const bootstrap = async () => {
     return res.json(response);
   }));
 
-  app.post('/api/customers/logout', validate([
+  app.post('/api/customers/logout', gatewayCsrfMiddleware, validate([
     allowBodyFields(['_csrf'])
   ]), (req, res) => {
     clearAuthCookies(req, res, config);
