@@ -75,9 +75,34 @@
       }
     };
 
+    const createToastIcon = (type) => {
+      const svgNamespace = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(svgNamespace, 'svg');
+      const path = document.createElementNS(svgNamespace, 'path');
+
+      svg.setAttribute('class', 'h-4 w-4');
+      svg.setAttribute('viewBox', '0 0 20 20');
+      svg.setAttribute('fill', 'currentColor');
+      svg.setAttribute('aria-hidden', 'true');
+
+      if (type === 'error') {
+        path.setAttribute('fill-rule', 'evenodd');
+        path.setAttribute('clip-rule', 'evenodd');
+        path.setAttribute('d', 'M18 10A8 8 0 112 10a8 8 0 0116 0zm-8-4a1 1 0 00-1 1v3a1 1 0 102 0V7a1 1 0 00-1-1zm0 8a1.25 1.25 0 100-2.5A1.25 1.25 0 0010 14z');
+      } else {
+        path.setAttribute('fill-rule', 'evenodd');
+        path.setAttribute('clip-rule', 'evenodd');
+        path.setAttribute('d', 'M16.704 5.29a1 1 0 010 1.42l-7.2 7.2a1 1 0 01-1.415 0l-3-3a1 1 0 111.414-1.42l2.293 2.294 6.493-6.494a1 1 0 011.415 0z');
+      }
+
+      svg.appendChild(path);
+      return svg;
+    };
+
     window.showToast = (message, type = 'success') => {
       const containerId = 'toast-container';
       let container = document.getElementById(containerId);
+      const isError = type === 'error';
 
       if (!container) {
         container = document.createElement('div');
@@ -87,20 +112,29 @@
       }
 
       const toast = document.createElement('div');
-      toast.className = `toast-enter rounded-2xl border bg-white p-4 shadow-lg ${type === 'error' ? 'border-red-200' : 'border-emerald-200'}`;
-      toast.innerHTML = `
-        <div class="flex items-start gap-3">
-          <span class="mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full ${type === 'error' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}">
-            ${type === 'error'
-              ? '<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M18 10A8 8 0 112 10a8 8 0 0116 0zm-8-4a1 1 0 00-1 1v3a1 1 0 102 0V7a1 1 0 00-1-1zm0 8a1.25 1.25 0 100-2.5A1.25 1.25 0 0010 14z" clip-rule="evenodd"></path></svg>'
-              : '<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.2 7.2a1 1 0 01-1.415 0l-3-3a1 1 0 111.414-1.42l2.293 2.294 6.493-6.494a1 1 0 011.415 0z" clip-rule="evenodd"></path></svg>'}
-          </span>
-          <div class="min-w-0 flex-1">
-            <p class="text-sm font-semibold text-gray-900">${type === 'error' ? 'Unable to continue' : 'Done'}</p>
-            <p class="mt-1 text-sm text-gray-600">${message}</p>
-          </div>
-        </div>
-      `;
+      toast.className = `toast-enter rounded-2xl border bg-white p-4 shadow-lg ${isError ? 'border-red-200' : 'border-emerald-200'}`;
+
+      const content = document.createElement('div');
+      content.className = 'flex items-start gap-3';
+
+      const icon = document.createElement('span');
+      icon.className = `mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full ${isError ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`;
+      icon.appendChild(createToastIcon(type));
+
+      const body = document.createElement('div');
+      body.className = 'min-w-0 flex-1';
+
+      const title = document.createElement('p');
+      title.className = 'text-sm font-semibold text-gray-900';
+      title.textContent = isError ? 'Unable to continue' : 'Done';
+
+      const description = document.createElement('p');
+      description.className = 'mt-1 text-sm text-gray-600';
+      description.textContent = String(message ?? '');
+
+      body.append(title, description);
+      content.append(icon, body);
+      toast.appendChild(content);
 
       container.appendChild(toast);
 
@@ -491,6 +525,9 @@
             const suffix = mode === 'yearly' ? '/year' : '/month';
             const priceNode = card.querySelector('[data-price-value]');
             const suffixNode = card.querySelector('[data-price-suffix]');
+            const yearlyMetaNode = card.querySelector('[data-price-yearly-meta]');
+            const originalNode = card.querySelector('[data-price-original]');
+            const discountNode = card.querySelector('[data-price-discount]');
 
             if (priceNode) {
               priceNode.textContent = value;
@@ -498,6 +535,24 @@
 
             if (suffixNode) {
               suffixNode.textContent = suffix;
+            }
+
+            if (mode === 'yearly') {
+              if (originalNode) {
+                originalNode.textContent = card.dataset.priceYearlyOriginal || '';
+              }
+
+              if (discountNode) {
+                discountNode.textContent = card.dataset.priceYearlyDiscount || '';
+              }
+
+              if (yearlyMetaNode) {
+                yearlyMetaNode.classList.remove('hidden');
+                yearlyMetaNode.classList.add('flex');
+              }
+            } else if (yearlyMetaNode) {
+              yearlyMetaNode.classList.add('hidden');
+              yearlyMetaNode.classList.remove('flex');
             }
           });
 

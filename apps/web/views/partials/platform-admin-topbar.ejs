@@ -22,7 +22,7 @@
         <label for="platform-admin-currency" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Currency</label>
         <select id="platform-admin-currency" name="code" data-submit-on-change class="border-0 bg-transparent pr-6 text-sm font-medium text-slate-700 focus:outline-none focus:ring-0">
           <% availableCurrencies.forEach((entry) => { %>
-            <option value="<%= entry.code %>" <%= selectedCurrency === entry.code ? 'selected' : '' %>><%= entry.code %></option>
+            <option value="<%= entry.code %>" <%= selectedCurrency === entry.code ? 'selected' : '' %>><%= entry.label %></option>
           <% }) %>
         </select>
       </form>

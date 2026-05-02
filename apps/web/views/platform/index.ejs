@@ -15,6 +15,7 @@
           description: 'For teams opening one serious storefront with real admin tools from day one.',
           monthly_amount: 10,
           yearly_amount: 96,
+          yearly_discount_percentage: 20,
           features: ['1 live storefront', 'Owner workspace', 'Domain management', 'Email support'],
           currency: selectedCurrency || 'USD',
           trial_days: 7,
@@ -26,6 +27,7 @@
           description: 'For operators managing multiple stores who want clean workflows and room to expand.',
           monthly_amount: 40,
           yearly_amount: 384,
+          yearly_discount_percentage: 20,
           features: ['Up to 5 storefronts', 'Priority support', 'Advanced analytics', 'Operational flexibility'],
           currency: selectedCurrency || 'USD',
           trial_days: 7,
@@ -37,26 +39,49 @@
           description: 'For multi-brand teams planning custom workflows, governance, and white-glove rollout.',
           monthly_amount: 100,
           yearly_amount: 960,
+          yearly_discount_percentage: 20,
           features: ['Unlimited storefronts', 'Custom onboarding', 'Dedicated support lane', 'Implementation planning'],
           currency: selectedCurrency || 'USD',
           trial_days: 7,
           trial_authorization_amount: 1
         }
       ];
-  const pricingFormatter = new Intl.NumberFormat((currencyContext && currencyContext.locale) || 'en-US', {
+  const pricingLocale = (currencyContext && currencyContext.locale) || 'en-US';
+  const formatPlanAmount = (amount, currency) => new Intl.NumberFormat(pricingLocale, {
     style: 'currency',
-    currency: availableBillingPlans[0] && availableBillingPlans[0].currency ? availableBillingPlans[0].currency : ((selectedCurrency || 'USD'))
+    currency: currency || 'USD'
+  }).format(Number(amount || 0));
+  const trialAuthorizationDisplay = formatPlanAmount(
+    Number((availableBillingPlans[0] && availableBillingPlans[0].trial_authorization_amount) || 1),
+    availableBillingPlans[0] && availableBillingPlans[0].currency ? availableBillingPlans[0].currency : (selectedCurrency || 'USD')
+  );
+  const pricingTiers = availableBillingPlans.map((plan) => {
+    const currencyCode = plan.currency || selectedCurrency || 'USD';
+    const monthlyAmount = Number(plan.monthly_amount || 0);
+    const yearlyAmount = Number(plan.yearly_amount || 0);
+    const yearlyBaseAmount = Number((monthlyAmount * 12).toFixed(2));
+    const derivedDiscount = yearlyBaseAmount > 0
+      ? Number((((1 - (yearlyAmount / yearlyBaseAmount)) * 100)).toFixed(2))
+      : 0;
+    const yearlyDiscountPercentage = Number(
+      plan.yearly_discount_percentage !== undefined && plan.yearly_discount_percentage !== null
+        ? plan.yearly_discount_percentage
+        : derivedDiscount
+    );
+
+    return {
+      code: plan.code,
+      name: plan.name,
+      description: plan.description,
+      monthly: formatPlanAmount(monthlyAmount, currencyCode),
+      yearly: formatPlanAmount(yearlyAmount, currencyCode),
+      yearlyOriginal: formatPlanAmount(yearlyBaseAmount, currencyCode),
+      yearlyDiscountPercentage: Number(yearlyDiscountPercentage.toFixed(2)),
+      yearlyDiscountLabel: `${Number(yearlyDiscountPercentage).toFixed(yearlyDiscountPercentage % 1 === 0 ? 0 : 2)}% off`,
+      features: Array.isArray(plan.features) ? plan.features : [],
+      featured: plan.code === 'scale'
+    };
   });
-  const trialAuthorizationDisplay = pricingFormatter.format(Number((availableBillingPlans[0] && availableBillingPlans[0].trial_authorization_amount) || 1));
-  const pricingTiers = availableBillingPlans.map((plan) => ({
-    code: plan.code,
-    name: plan.name,
-    description: plan.description,
-    monthly: pricingFormatter.format(Number(plan.monthly_amount || 0)),
-    yearly: pricingFormatter.format(Number(plan.yearly_amount || 0)),
-    features: Array.isArray(plan.features) ? plan.features : [],
-    featured: plan.code === 'scale'
-  }));
   const buildStatusCards = [
     {
       label: 'Owner auth',
@@ -279,6 +304,8 @@
           data-price-card
           data-price-monthly="<%= tier.monthly %>"
           data-price-yearly="<%= tier.yearly %>"
+          data-price-yearly-original="<%= tier.yearlyOriginal %>"
+          data-price-yearly-discount="<%= tier.yearlyDiscountLabel %>"
           class="platform-pricing-card flex h-full flex-col rounded-[2rem] border p-8 shadow-sm <%= tier.featured ? 'border-primary bg-slate-950 text-white shadow-glow' : 'border-slate-200 bg-white text-slate-900' %>">
           <div class="min-h-[1.75rem]">
             <% if (tier.featured) { %>
@@ -289,9 +316,15 @@
           </div>
           <h3 class="section-title mt-4 text-3xl font-semibold"><%= tier.name %></h3>
           <p class="mt-3 text-sm leading-6 <%= tier.featured ? 'text-slate-300' : 'text-slate-600' %>"><%= tier.description %></p>
-          <div class="mt-8 flex items-end gap-2">
-            <span data-price-value class="section-title text-4xl font-semibold tracking-tight"><%= tier.monthly %></span>
-            <span data-price-suffix class="pb-1 text-sm <%= tier.featured ? 'text-slate-300' : 'text-slate-500' %>">/month</span>
+          <div class="mt-8 space-y-3">
+            <div data-price-yearly-meta class="hidden min-h-[1.75rem] items-center gap-3">
+              <span data-price-original class="text-sm font-medium line-through text-slate-400"><%= tier.yearlyOriginal %></span>
+              <span data-price-discount class="inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] <%= tier.featured ? 'bg-emerald-400/15 text-emerald-200' : 'bg-emerald-50 text-emerald-700' %>"><%= tier.yearlyDiscountLabel %></span>
+            </div>
+            <div class="flex items-end gap-2">
+              <span data-price-value class="section-title text-4xl font-semibold tracking-tight"><%= tier.monthly %></span>
+              <span data-price-suffix class="pb-1 text-sm <%= tier.featured ? 'text-slate-300' : 'text-slate-500' %>">/month</span>
+            </div>
           </div>
           <ul class="mt-8 flex-1 space-y-3">
             <% tier.features.forEach((feature) => { %>

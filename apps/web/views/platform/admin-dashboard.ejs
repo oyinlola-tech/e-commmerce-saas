@@ -22,6 +22,17 @@
       currency: currency || 'USD'
     }).format(Number(amount || 0));
   };
+  const getCurrencyDisplayLabel = (currencyCode) => {
+    try {
+      const displayNames = new Intl.DisplayNames([locale || 'en-US'], { type: 'currency' });
+      const resolvedLabel = displayNames.of(currencyCode);
+      return resolvedLabel && resolvedLabel !== currencyCode
+        ? `${resolvedLabel} (${currencyCode})`
+        : currencyCode;
+    } catch {
+      return currencyCode;
+    }
+  };
   const formatPercent = (value) => `${Number(value || 0).toFixed(2)}%`;
   const getPricingMap = (plan) => {
     return plan && plan.pricing_by_currency && typeof plan.pricing_by_currency === 'object'
@@ -76,7 +87,7 @@
           </p>
           <% if (highlightCurrencies.length) { %>
             <p class="mt-3 text-sm leading-6 text-slate-500">
-              Fast local pricing coverage includes <strong class="text-slate-900"><%= highlightCurrencies.join(', ') %></strong> alongside <%= baseCurrency %> and other supported currencies.
+              Fast local pricing coverage includes <strong class="text-slate-900"><%= highlightCurrencies.map(getCurrencyDisplayLabel).join(', ') %></strong> alongside <%= getCurrencyDisplayLabel(baseCurrency) %> and other supported currencies.
             </p>
           <% } %>
         </div>
@@ -157,7 +168,7 @@
                     class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     <%= canEditPricing ? '' : 'disabled' %>>
                     <% supportedCurrencies.forEach((currencyCode) => { %>
-                      <option value="<%= currencyCode %>" <%= currencyCode === initialCurrency ? 'selected' : '' %>><%= currencyCode %></option>
+                      <option value="<%= currencyCode %>" <%= currencyCode === initialCurrency ? 'selected' : '' %>><%= getCurrencyDisplayLabel(currencyCode) %></option>
                     <% }) %>
                   </select>
                 </div>
