@@ -223,6 +223,7 @@ const { generateCsrfToken, doubleCsrfProtection, invalidCsrfTokenError } = doubl
   getSessionIdentifier: (req) => extractToken(req) || req.ip || 'anonymous',
   getCsrfTokenFromRequest: (req) => req.body?._csrf || req.headers['x-csrf-token'] || req.headers['csrf-token']
 });
+const parseGatewayCookies = cookieParser(config.internalSharedSecret);
 
 const resolveAuthContext = (req) => {
   const token = extractToken(req);
@@ -371,41 +372,6 @@ const gatewayCors = (req, res, next) => {
     exposedHeaders: ['x-request-id', 'x-cache', 'x-store-cache'],
     maxAge: 600
   })(req, res, next);
-};
-
-const getGatewayRequestPath = (req) => `${req.baseUrl || ''}${req.path || ''}`;
-
-const hasTrustedInternalGatewaySignature = (req) => {
-  return Boolean(verifySignedInternalHeaders(req.headers, config.internalSharedSecret, {
-    maxAgeMs: config.internalRequestMaxAgeMs,
-    nonceTtlMs: config.internalRequestNonceTtlMs
-  }));
-};
-
-const shouldEnforceGatewayCsrf = (req) => {
-  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-    return false;
-  }
-
-  if (getGatewayRequestPath(req).startsWith('/payments/webhooks/')) {
-    return false;
-  }
-
-  if (hasTrustedInternalGatewaySignature(req)) {
-    return false;
-  }
-
-  const authorization = String(req.headers.authorization || '').trim();
-  return !authorization.startsWith('Bearer ');
-};
-
-const gatewayCsrfMiddleware = (req, res, next) => {
-  if (!shouldEnforceGatewayCsrf(req)) {
-    return next();
-  }
-
-  // Security: Browser-facing gateway mutations must present a CSRF token before the request is proxied downstream.
-  return doubleCsrfProtection(req, res, next);
 };
 
 const buildGatewayContext = (req, auth = null) => {
@@ -611,8 +577,8 @@ const bootstrap = async () => {
   app.use(resolveStoreContext);
   app.use(gatewayCors);
   app.use(attachGatewayProxyContext);
-  // Security: Parse cookies before issuing or validating CSRF tokens for browser clients.
-  app.use(cookieParser(config.internalSharedSecret));
+  // Security: Only the gateway API needs parsed auth cookies; keep cookie auth scoped away from public proxies.
+  app.use('/api', parseGatewayCookies);
 
   app.get('/api/csrf-token', (req, res) => {
     return res.json({
@@ -620,14 +586,13 @@ const bootstrap = async () => {
     });
   });
 
-  // Security: Enforce CSRF on browser-facing mutations before cookie auth is promoted into req.gatewayContext.
-  app.use('/api', gatewayCsrfMiddleware);
-  app.use('/payments', gatewayCsrfMiddleware);
+  // Security: Protect cookie-backed gateway API mutations immediately after cookie parsing.
+  app.use('/api', doubleCsrfProtection);
   app.use('/api', attachGatewayAuthContext);
 
   app.get('/api/platform/billing/plans', createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' }));
 
-  app.post('/api/platform/auth/register', gatewayCsrfMiddleware, authRateLimiter, validate([
+  app.post('/api/platform/auth/register', authRateLimiter, validate([
     allowBodyFields(['name', 'email', 'password', 'role', '_csrf']),
     commonRules.name('name', 120),
     commonRules.email(),
@@ -652,7 +617,7 @@ const bootstrap = async () => {
     return res.status(201).json(response);
   }));
 
-  app.post('/api/platform/auth/login', gatewayCsrfMiddleware, authRateLimiter, validate([
+  app.post('/api/platform/auth/login', authRateLimiter, validate([
     allowBodyFields(['email', 'password', '_csrf']),
     commonRules.email(),
     body('password').isString().notEmpty().withMessage('Password is required.')
@@ -675,14 +640,14 @@ const bootstrap = async () => {
     return res.json(response);
   }));
 
-  app.post('/api/platform/auth/logout', gatewayCsrfMiddleware, validate([
+  app.post('/api/platform/auth/logout', validate([
     allowBodyFields(['_csrf'])
   ]), (req, res) => {
     clearAuthCookies(req, res, config);
     return res.status(204).send();
   });
 
-  app.post('/api/customers/register', gatewayCsrfMiddleware, authRateLimiter, validate([
+  app.post('/api/customers/register', authRateLimiter, validate([
     allowBodyFields(['store_id', 'name', 'email', 'password', 'phone', 'addresses', 'metadata', '_csrf']),
     commonRules.name('name', 120),
     commonRules.email(),
@@ -715,7 +680,7 @@ const bootstrap = async () => {
     return res.status(201).json(response);
   }));
 
-  app.post('/api/customers/login', gatewayCsrfMiddleware, authRateLimiter, validate([
+  app.post('/api/customers/login', authRateLimiter, validate([
     allowBodyFields(['store_id', 'email', 'password', '_csrf']),
     commonRules.email(),
     body('password').isString().notEmpty().withMessage('Password is required.')
@@ -744,7 +709,7 @@ const bootstrap = async () => {
     return res.json(response);
   }));
 
-  app.post('/api/customers/logout', gatewayCsrfMiddleware, validate([
+  app.post('/api/customers/logout', validate([
     allowBodyFields(['_csrf'])
   ]), (req, res) => {
     clearAuthCookies(req, res, config);
