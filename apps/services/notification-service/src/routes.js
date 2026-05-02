@@ -1,4 +1,3 @@
-const nodemailer = require('nodemailer');
 const { body } = require('express-validator');
 const {
   requireInternalRequest,
@@ -12,60 +11,39 @@ const {
   sanitizePlainText
 } = require('../../../../packages/shared');
 const { listEmailTemplates } = require('./template-catalog');
-const { renderEmailTemplate } = require('./template-renderer');
-
-let transporterPromise = null;
-
-const resolveSmtpConfig = () => {
-  const host = String(process.env.NOTIFICATION_SERVICE_SMTP_HOST || process.env.SMTP_HOST || '').trim();
-  const port = Number(process.env.NOTIFICATION_SERVICE_SMTP_PORT || process.env.SMTP_PORT || 587);
-  const user = String(process.env.NOTIFICATION_SERVICE_SMTP_USER || process.env.SMTP_USER || '').trim();
-  const pass = String(process.env.NOTIFICATION_SERVICE_SMTP_PASSWORD || process.env.SMTP_PASSWORD || '').trim();
-  const secure = ['1', 'true', 'yes', 'on'].includes(String(process.env.NOTIFICATION_SERVICE_SMTP_SECURE || process.env.SMTP_SECURE || '').trim().toLowerCase());
-  const fromEmail = String(process.env.NOTIFICATION_SERVICE_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || '').trim();
-  const fromName = String(process.env.NOTIFICATION_SERVICE_FROM_NAME || process.env.SMTP_FROM_NAME || 'Aisle').trim() || 'Aisle';
-
-  return {
-    host,
-    port,
-    user,
-    pass,
-    secure,
-    fromEmail,
-    fromName
-  };
-};
-
-const ensureTransporter = async () => {
-  if (transporterPromise) {
-    return transporterPromise;
-  }
-
-  const smtpConfig = resolveSmtpConfig();
-  if (!smtpConfig.host || !smtpConfig.fromEmail) {
-    throw createHttpError(503, 'SMTP is not configured for the notification service.', null, { expose: true });
-  }
-
-  transporterPromise = Promise.resolve(nodemailer.createTransport({
-    host: smtpConfig.host,
-    port: smtpConfig.port,
-    secure: smtpConfig.secure,
-    auth: smtpConfig.user
-      ? {
-          user: smtpConfig.user,
-          pass: smtpConfig.pass
-        }
-      : undefined
-  }));
-
-  return transporterPromise;
-};
+const {
+  renderTemplatedEmail,
+  deliverOutboundEmail
+} = require('./outbound-email');
+const { sanitizeStructuredData } = require('./structured-data');
 
 const buildRequireInternal = (config) => {
   return requireInternalRequest(config.internalSharedSecret, {
     maxAgeMs: config.internalRequestMaxAgeMs,
     nonceTtlMs: config.internalRequestNonceTtlMs
   });
+};
+
+const validateTemplateRequest = ({ requireRecipient = false } = {}) => {
+  const chains = [
+    allowBodyFields(requireRecipient
+      ? ['to', 'subject', 'text', 'html', 'metadata', 'template_key', 'template_data', 'brand', 'store_id']
+      : ['template_key', 'template_data', 'brand', 'store_id']),
+    commonRules.optionalPlainText('template_key', 120),
+    body('template_data').optional().isObject().withMessage('template_data must be an object.'),
+    body('brand').optional().isObject().withMessage('brand must be an object.'),
+    body('store_id').optional().isInt({ min: 1 }).toInt()
+  ];
+
+  if (requireRecipient) {
+    chains.splice(1, 0, body('to').isEmail().customSanitizer((value) => sanitizeEmail(value)));
+    chains.splice(2, 0, commonRules.optionalPlainText('subject', 190));
+    chains.splice(3, 0, body('text').optional().isString());
+    chains.splice(4, 0, body('html').optional().isString());
+    chains.splice(5, 0, commonRules.jsonObject('metadata'));
+  }
+
+  return chains;
 };
 
 const registerRoutes = async ({ app, db, config }) => {
@@ -77,34 +55,46 @@ const registerRoutes = async ({ app, db, config }) => {
     });
   }));
 
-  app.post('/emails/send', requireInternal, validate([
-    allowBodyFields(['to', 'subject', 'text', 'html', 'metadata', 'template_key', 'template_data', 'brand', 'store_id']),
-    body('to').isEmail().customSanitizer((value) => sanitizeEmail(value)),
-    commonRules.optionalPlainText('subject', 190),
-    body('text').optional().isString(),
-    body('html').optional().isString(),
-    commonRules.jsonObject('metadata'),
-    commonRules.optionalPlainText('template_key', 120),
-    commonRules.jsonObject('template_data'),
-    commonRules.jsonObject('brand'),
-    body('store_id').optional().isInt({ min: 1 }).toInt()
-  ]), asyncHandler(async (req, res) => {
-    const smtpConfig = resolveSmtpConfig();
+  app.post('/emails/render', requireInternal, validate(validateTemplateRequest()), asyncHandler(async (req, res) => {
     const templateKey = sanitizePlainText(req.body.template_key || '', { maxLength: 120 });
+    if (!templateKey) {
+      throw createHttpError(400, 'template_key is required for template rendering.', null, { expose: true });
+    }
+
+    const rendered = await renderTemplatedEmail({
+      config,
+      requestId: req.requestId || req.authContext.requestId,
+      templateKey,
+      templateData: sanitizeStructuredData(req.body.template_data || {}) || {},
+      brand: sanitizeStructuredData(req.body.brand || {}) || {},
+      storeId: req.body.store_id || null
+    });
+
+    return res.json({
+      template: rendered.definition,
+      brand: rendered.brand,
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html
+    });
+  }));
+
+  app.post('/emails/send', requireInternal, validate(validateTemplateRequest({ requireRecipient: true })), asyncHandler(async (req, res) => {
+    const templateKey = sanitizePlainText(req.body.template_key || '', { maxLength: 120 });
+    const metadata = sanitizeJsonObject(req.body.metadata || {});
     let subject = sanitizePlainText(req.body.subject || 'Aisle notification', { maxLength: 190 }) || 'Aisle notification';
     let text = String(req.body.text || '').trim();
     let html = String(req.body.html || '').trim();
-    let resolvedTemplate = null;
+    let rendered = null;
 
     if (templateKey) {
       try {
-        resolvedTemplate = await renderEmailTemplate({
+        rendered = await renderTemplatedEmail({
           config,
-          smtpConfig,
           requestId: req.requestId || req.authContext.requestId,
           templateKey,
-          templateData: req.body.template_data || {},
-          brand: req.body.brand || {},
+          templateData: sanitizeStructuredData(req.body.template_data || {}) || {},
+          brand: sanitizeStructuredData(req.body.brand || {}) || {},
           storeId: req.body.store_id || null
         });
       } catch (error) {
@@ -113,85 +103,35 @@ const registerRoutes = async ({ app, db, config }) => {
         });
       }
 
-      subject = sanitizePlainText(resolvedTemplate.subject || subject, { maxLength: 190 }) || subject;
-      text = String(resolvedTemplate.text || '').trim();
-      html = String(resolvedTemplate.html || '').trim();
-    }
-
-    if (!text && !html) {
-      throw createHttpError(400, 'Either text or html email content is required.', null, { expose: true });
-    }
-
-    const metadata = sanitizeJsonObject(req.body.metadata || {});
-    if (templateKey) {
+      subject = sanitizePlainText(rendered.subject || subject, { maxLength: 190 }) || subject;
+      text = String(rendered.text || '').trim();
+      html = String(rendered.html || '').trim();
       metadata.template_key = templateKey;
-      metadata.audience = resolvedTemplate?.definition?.audience || metadata.audience || '';
-      metadata.brand_mode = resolvedTemplate?.definition?.brand_mode || metadata.brand_mode || '';
+      metadata.audience = rendered.definition?.audience || metadata.audience || '';
+      metadata.brand_mode = rendered.definition?.brand_mode || metadata.brand_mode || '';
       if (req.body.store_id) {
         metadata.store_id = Number(req.body.store_id);
       }
     }
 
-    const result = await db.execute(
-      `
-        INSERT INTO outbound_emails (
-          recipient_email, subject, status, metadata, payload
-        ) VALUES (?, ?, 'pending', ?, ?)
-      `,
-      [
-        req.body.to,
-        subject,
-        JSON.stringify(metadata),
-        JSON.stringify({
-          template_key: templateKey || null,
-          template_data: sanitizeJsonObject(req.body.template_data || {}),
-          brand: sanitizeJsonObject(req.body.brand || {}),
-          store_id: req.body.store_id || null,
-          text,
-          html
-        })
-      ]
-    );
-
-    try {
-      const transporter = await ensureTransporter();
-      const info = await transporter.sendMail({
-        from: `"${smtpConfig.fromName}" <${smtpConfig.fromEmail}>`,
-        to: req.body.to,
-        subject,
-        text: text || undefined,
-        html: html || undefined
-      });
-
-      await db.execute(
-        'UPDATE outbound_emails SET status = ?, provider_response = ?, sent_at = CURRENT_TIMESTAMP WHERE id = ?',
-        [
-          'sent',
-          JSON.stringify({
-            messageId: info.messageId || null,
-            accepted: Array.isArray(info.accepted) ? info.accepted : []
-          }),
-          result.insertId
-        ]
-      );
-    } catch (error) {
-      await db.execute(
-        'UPDATE outbound_emails SET status = ?, provider_response = ?, failed_at = CURRENT_TIMESTAMP WHERE id = ?',
-        [
-          'failed',
-          JSON.stringify({
-            message: error.message
-          }),
-          result.insertId
-        ]
-      );
-      throw error;
-    }
-
-    return res.status(201).json({
-      id: result.insertId,
-      status: 'sent'
+    const delivery = await deliverOutboundEmail({
+      db,
+      to: req.body.to,
+      subject,
+      text,
+      html,
+      metadata,
+      payload: templateKey
+        ? {
+            template_key: templateKey,
+            template_data: rendered?.templateData || sanitizeStructuredData(req.body.template_data || {}) || {},
+            brand: rendered?.brandData || sanitizeStructuredData(req.body.brand || {}) || {},
+            store_id: req.body.store_id || null
+          }
+        : {}
     });
+
+    return res.status(201).json(delivery);
   }));
 };
 
