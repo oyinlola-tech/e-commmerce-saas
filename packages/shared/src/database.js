@@ -138,7 +138,26 @@ const bootstrapDatabase = async ({
   }
 
   for (const statement of statements) {
-    await pool.query(statement);
+    const sql = typeof statement === 'string'
+      ? statement
+      : statement?.sql;
+    const ignoreErrorCodes = Array.isArray(statement?.ignoreErrorCodes)
+      ? statement.ignoreErrorCodes
+      : [];
+
+    if (!sql) {
+      continue;
+    }
+
+    try {
+      await pool.query(sql);
+    } catch (error) {
+      if (ignoreErrorCodes.includes(error.code)) {
+        continue;
+      }
+
+      throw error;
+    }
   }
 
   if (logger) {

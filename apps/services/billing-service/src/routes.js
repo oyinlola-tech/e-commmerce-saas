@@ -176,7 +176,7 @@ const ensurePlatformOwnerAccess = (req) => {
   }
 };
 
-const buildPlanPricingPreview = async (plan, currency) => {
+const buildPlanPricingPreview = async (plan, currency, options = {}) => {
   if (!plan) {
     return null;
   }
@@ -201,6 +201,20 @@ const buildPlanPricingPreview = async (plan, currency) => {
 
   const conversion = await convertAmount(plan.monthly_amount, baseCurrency, requestedCurrency);
   const convertedMonthlyAmount = Number(conversion.amount || 0);
+
+  if (conversion.currency !== requestedCurrency && requestedCurrency !== baseCurrency && options.strictCurrency) {
+    return {
+      code: normalizePlanCode(plan.code),
+      currency: requestedCurrency,
+      base_currency: baseCurrency,
+      monthly_amount: 0,
+      yearly_amount: 0,
+      yearly_discount_percentage: Number(plan.yearly_discount_percentage || 0),
+      pricing_source: 'needs-local-price',
+      exchange_rate: null,
+      rate_date: conversion.rateDate
+    };
+  }
 
   return {
     code: normalizePlanCode(plan.code),
@@ -551,7 +565,9 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 
     const plans = await Promise.all((await getResolvedBillingPlans(db)).map(async (plan) => {
       const pricingEntries = await Promise.all(SUPPORTED_BILLING_CURRENCIES.map(async (currencyCode) => {
-        const pricing = await buildPlanPricingPreview(plan, currencyCode);
+        const pricing = await buildPlanPricingPreview(plan, currencyCode, {
+          strictCurrency: true
+        });
         return [currencyCode, pricing];
       }));
 

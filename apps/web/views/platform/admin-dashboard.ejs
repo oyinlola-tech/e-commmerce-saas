@@ -2,17 +2,58 @@
   const overview = metrics || {};
   const tenantList = Array.isArray(stores) ? stores : [];
   const planList = Array.isArray(billingPlans) ? billingPlans : [];
+  const supportedCurrencies = Array.isArray(supportedBillingCurrencies) && supportedBillingCurrencies.length
+    ? supportedBillingCurrencies
+    : [selectedCurrency || 'USD'];
   const canEditPricing = Boolean(editablePricing);
-  const baseCurrency = planList[0] && planList[0].currency ? planList[0].currency : 'USD';
+  const baseCurrency = planList[0] && planList[0].base_currency
+    ? planList[0].base_currency
+    : (planList[0] && planList[0].currency ? planList[0].currency : 'USD');
   const trialDays = Number(overview.trialDays || 7);
   const trialAuthorizationAmount = Number(overview.trialAuthorizationAmount || 1);
   const trialAuthorizationCurrency = overview.trialAuthorizationCurrency || 'USD';
   const locale = (currencyContext && currencyContext.locale) || 'en-US';
+  const previewCurrency = selectedCurrency || baseCurrency;
+  const highlightCurrencies = ['NGN', 'GHS', 'KES', 'ZAR', 'XOF', 'XAF']
+    .filter((code) => supportedCurrencies.includes(code));
   const formatCurrency = (amount, currency, targetLocale = locale) => {
     return new Intl.NumberFormat(targetLocale || 'en-US', {
       style: 'currency',
       currency: currency || 'USD'
     }).format(Number(amount || 0));
+  };
+  const formatPercent = (value) => `${Number(value || 0).toFixed(2)}%`;
+  const getPricingMap = (plan) => {
+    return plan && plan.pricing_by_currency && typeof plan.pricing_by_currency === 'object'
+      ? plan.pricing_by_currency
+      : {};
+  };
+  const getInitialCurrency = (plan) => {
+    const pricingMap = getPricingMap(plan);
+    if (pricingMap[previewCurrency]) {
+      return previewCurrency;
+    }
+
+    if (pricingMap[baseCurrency]) {
+      return baseCurrency;
+    }
+
+    return supportedCurrencies[0] || baseCurrency;
+  };
+  const getSourceLabel = (source = '') => {
+    if (source === 'needs-local-price') {
+      return 'Needs local price';
+    }
+
+    if (source === 'configured') {
+      return 'Direct local price';
+    }
+
+    if (source === 'fx') {
+      return 'FX fallback';
+    }
+
+    return 'Base price';
   };
 %>
 <section class="space-y-8">
@@ -23,16 +64,21 @@
       <div class="space-y-6">
         <span class="eyebrow">Platform Operations</span>
         <div class="space-y-4">
-          <h1 class="section-title max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Set subscription fees from the main control layer.</h1>
-          <p class="max-w-2xl text-lg leading-8 text-slate-600">
-            Adjust Launch, Scale, and Enterprise pricing here, keep the 7-day trial policy visible, and let the storefront pricing surfaces follow the saved values automatically.
+          <h1 class="section-title max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Set local monthly pricing and let yearly totals compute themselves.</h1>
+          <p class="max-w-3xl text-lg leading-8 text-slate-600">
+            Save subscription fees directly in major global and African currencies, keep a clean monthly source of truth, and calculate yearly totals from one discount percentage instead of hand-editing every annual amount.
           </p>
         </div>
         <div class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
           <p class="text-sm font-semibold text-slate-950">Billing policy</p>
           <p class="mt-2 text-sm leading-6 text-slate-600">
-            New subscriptions still start with a <%= trialDays %>-day trial. Paystack verifies the card with <%= formatCurrency(trialAuthorizationAmount, trialAuthorizationCurrency, 'en-US') %>, refunds it after success, then bills the selected plan when the trial ends.
+            New subscriptions still start with a <%= trialDays %>-day trial. Paystack verifies the card with <%= formatCurrency(trialAuthorizationAmount, trialAuthorizationCurrency, 'en-US') %>, refunds it after success, then bills the selected monthly or yearly plan after the trial.
           </p>
+          <% if (highlightCurrencies.length) { %>
+            <p class="mt-3 text-sm leading-6 text-slate-500">
+              Fast local pricing coverage includes <strong class="text-slate-900"><%= highlightCurrencies.join(', ') %></strong> alongside <%= baseCurrency %> and other supported currencies.
+            </p>
+          <% } %>
         </div>
       </div>
 
@@ -40,12 +86,12 @@
         <article class="metric-card rounded-3xl p-5">
           <p class="text-sm font-medium text-slate-500">Plans managed</p>
           <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= overview.planCount || planList.length || 0 %></p>
-          <p class="mt-2 text-sm text-slate-500">The three subscription plans share one pricing control surface.</p>
+          <p class="mt-2 text-sm text-slate-500">Launch, Scale, and Enterprise stay in one control surface.</p>
         </article>
         <article class="metric-card rounded-3xl p-5">
-          <p class="text-sm font-medium text-slate-500">Base billing currency</p>
-          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= baseCurrency %></p>
-          <p class="mt-2 text-sm text-slate-500">Saved fees are stored in base currency and converted for supported regions.</p>
+          <p class="text-sm font-medium text-slate-500">Pricing currencies</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= supportedCurrencies.length %></p>
+          <p class="mt-2 text-sm text-slate-500">Direct local pricing can be saved per currency, with FX fallback when no local override exists.</p>
         </article>
         <article class="metric-card rounded-3xl p-5">
           <p class="text-sm font-medium text-slate-500">Live stores</p>
@@ -53,9 +99,9 @@
           <p class="mt-2 text-sm text-slate-500">Real tenant stores currently available across the platform.</p>
         </article>
         <article class="metric-card rounded-3xl p-5">
-          <p class="text-sm font-medium text-slate-500">Current preview currency</p>
-          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= selectedCurrency || baseCurrency %></p>
-          <p class="mt-2 text-sm text-slate-500">The cards below also show what customers see in this selected currency.</p>
+          <p class="text-sm font-medium text-slate-500">Preview currency</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= previewCurrency %></p>
+          <p class="mt-2 text-sm text-slate-500">The cards below default to the active platform preview currency when a local price exists.</p>
         </article>
       </div>
     </div>
@@ -66,18 +112,21 @@
       <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p class="text-sm font-medium text-slate-500">Subscription pricing</p>
-          <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Fee controls</h2>
+          <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Local fee controls</h2>
         </div>
-        <p class="max-w-xl text-sm leading-6 text-slate-500">
-          Save prices in <%= baseCurrency %>. The public pricing page, owner billing flow, and future recurring charges will use the updated values.
+        <p class="max-w-2xl text-sm leading-6 text-slate-500">
+          Set the monthly fee in any supported currency, then let Aisle compute the yearly charge from monthly x 12 minus the annual discount percentage.
         </p>
       </div>
 
       <div class="mt-6 space-y-4">
         <% planList.forEach((plan) => { %>
-          <% const previewPlan = plan.preview || null; %>
-          <% const previewCurrency = previewPlan && previewPlan.currency ? previewPlan.currency : (selectedCurrency || baseCurrency); %>
-          <form action="/platform-admin/billing/plans" method="post" class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+          <% const pricingMap = getPricingMap(plan); %>
+          <% const initialCurrency = getInitialCurrency(plan); %>
+          <% const initialPricing = pricingMap[initialCurrency] || { monthly_amount: plan.monthly_amount, yearly_amount: plan.yearly_amount, pricing_source: 'base' }; %>
+          <% const configuredCurrencies = Array.isArray(plan.configured_currencies) ? plan.configured_currencies : []; %>
+          <form action="/platform-admin/billing/plans" method="post" class="rounded-[1.75rem] border border-slate-200 bg-white p-5" data-billing-plan-editor data-plan-code="<%= plan.code %>">
+            <script id="plan-pricing-<%= plan.code %>" type="application/json"><%- JSON.stringify(pricingMap).replace(/</g, '\\u003c') %></script>
             <%- include('../partials/csrf-field') %>
             <input type="hidden" name="plan" value="<%= plan.code %>">
 
@@ -86,53 +135,100 @@
                 <div class="flex flex-wrap items-center gap-3">
                   <h3 class="text-xl font-semibold text-slate-950"><%= plan.name %></h3>
                   <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700">
-                    <%= plan.updated_from_default ? 'Custom Fee Active' : 'Default Fee Active' %>
+                    <%= plan.updated_from_default ? 'Local pricing active' : 'Default pricing active' %>
                   </span>
                 </div>
                 <p class="mt-2 text-sm leading-6 text-slate-600"><%= plan.description %></p>
                 <p class="mt-3 text-sm text-slate-500">
-                  Customer preview in <%= previewCurrency %>:
-                  <strong class="text-slate-900"><%= formatCurrency(previewPlan ? previewPlan.monthly_amount : plan.monthly_amount, previewCurrency) %> / month</strong>
+                  Preview in <span class="font-semibold text-slate-900" data-billing-currency-label><%= initialCurrency %></span>:
+                  <strong class="text-slate-900" data-billing-monthly-preview><%= formatCurrency(initialPricing.monthly_amount, initialCurrency) %></strong> / month
                   and
-                  <strong class="text-slate-900"><%= formatCurrency(previewPlan ? previewPlan.yearly_amount : plan.yearly_amount, previewCurrency) %> / year</strong>
+                  <strong class="text-slate-900" data-billing-yearly-preview><%= formatCurrency(initialPricing.yearly_amount, initialCurrency) %></strong> / year.
                 </p>
               </div>
 
-              <div class="grid w-full gap-4 sm:grid-cols-2 lg:max-w-xl">
+              <div class="grid w-full gap-4 sm:grid-cols-3 lg:max-w-4xl">
                 <div>
-                  <label for="monthly-<%= plan.code %>" class="mb-1 block text-sm font-medium text-slate-700">Monthly fee (<%= baseCurrency %>)</label>
+                  <label for="currency-<%= plan.code %>" class="mb-1 block text-sm font-medium text-slate-700">Pricing currency</label>
+                  <select
+                    id="currency-<%= plan.code %>"
+                    name="currency"
+                    data-billing-currency
+                    class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    <%= canEditPricing ? '' : 'disabled' %>>
+                    <% supportedCurrencies.forEach((currencyCode) => { %>
+                      <option value="<%= currencyCode %>" <%= currencyCode === initialCurrency ? 'selected' : '' %>><%= currencyCode %></option>
+                    <% }) %>
+                  </select>
+                </div>
+                <div>
+                  <label for="monthly-<%= plan.code %>" class="mb-1 block text-sm font-medium text-slate-700">Monthly fee</label>
                   <input
                     id="monthly-<%= plan.code %>"
                     name="monthly_amount"
+                    data-billing-monthly
                     type="number"
                     min="0.01"
                     step="0.01"
-                    value="<%= Number(plan.monthly_amount || 0).toFixed(2) %>"
+                    value="<%= Number(initialPricing.monthly_amount || 0).toFixed(2) %>"
                     class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     <%= canEditPricing ? '' : 'disabled' %>>
                 </div>
                 <div>
-                  <label for="yearly-<%= plan.code %>" class="mb-1 block text-sm font-medium text-slate-700">Yearly fee (<%= baseCurrency %>)</label>
+                  <label for="discount-<%= plan.code %>" class="mb-1 block text-sm font-medium text-slate-700">Yearly discount %</label>
                   <input
-                    id="yearly-<%= plan.code %>"
-                    name="yearly_amount"
+                    id="discount-<%= plan.code %>"
+                    name="yearly_discount_percentage"
+                    data-billing-discount
                     type="number"
-                    min="0.01"
+                    min="0"
+                    max="95"
                     step="0.01"
-                    value="<%= Number(plan.yearly_amount || 0).toFixed(2) %>"
+                    value="<%= Number(plan.yearly_discount_percentage || 0).toFixed(2) %>"
                     class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     <%= canEditPricing ? '' : 'disabled' %>>
                 </div>
               </div>
             </div>
 
+            <div class="mt-5 grid gap-4 sm:grid-cols-3">
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Monthly charge</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900" data-billing-monthly-preview-card><%= formatCurrency(initialPricing.monthly_amount, initialCurrency) %></p>
+                <p class="mt-2 text-xs leading-5 text-slate-500">The saved monthly fee for the selected currency.</p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Yearly charge</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900" data-billing-yearly-preview-card><%= formatCurrency(initialPricing.yearly_amount, initialCurrency) %></p>
+                <p class="mt-2 text-xs leading-5 text-slate-500" data-billing-formula>Monthly x 12 with <%= formatPercent(plan.yearly_discount_percentage) %> annual discount.</p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Price source</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900" data-billing-source><%= getSourceLabel(initialPricing.pricing_source) %></p>
+                <p class="mt-2 text-xs leading-5 text-slate-500">Direct local prices override conversion. Otherwise Aisle falls back to FX from <%= baseCurrency %>.</p>
+              </div>
+            </div>
+
+            <div class="mt-4 rounded-[1.5rem] border border-slate-200 bg-white p-4">
+              <p class="text-sm font-semibold text-slate-950">Configured local monthly prices</p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <% if (configuredCurrencies.length) { %>
+                  <% configuredCurrencies.forEach((currencyCode) => { %>
+                    <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= currencyCode %></span>
+                  <% }) %>
+                <% } else { %>
+                  <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= baseCurrency %> default</span>
+                <% } %>
+              </div>
+            </div>
+
             <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="text-sm leading-6 text-slate-500">
-                Current base pricing: <strong class="text-slate-900"><%= formatCurrency(plan.monthly_amount, baseCurrency, 'en-US') %></strong> monthly and <strong class="text-slate-900"><%= formatCurrency(plan.yearly_amount, baseCurrency, 'en-US') %></strong> yearly.
+                Base pricing in <%= baseCurrency %>: <strong class="text-slate-900"><%= formatCurrency(plan.monthly_amount, baseCurrency, 'en-US') %></strong> monthly and <strong class="text-slate-900"><%= formatCurrency(plan.yearly_amount, baseCurrency, 'en-US') %></strong> yearly.
               </div>
               <% if (canEditPricing) { %>
                 <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-dark">
-                  Save Fees
+                  Save Local Fee
                 </button>
               <% } else { %>
                 <p class="text-sm font-medium text-slate-500">Only the platform owner account can save price changes.</p>
@@ -183,7 +279,7 @@
           </div>
         <% } else { %>
           <div class="mt-6 rounded-[1.75rem] border border-slate-200 bg-white p-5">
-            <p class="text-sm leading-6 text-slate-600">No stores have been created yet. Pricing controls are still live, so you can set fees before the first tenant launches.</p>
+            <p class="text-sm leading-6 text-slate-600">No stores have been created yet. Pricing controls are still live, so you can set local fees before the first tenant launches.</p>
           </div>
         <% } %>
       </section>
@@ -193,19 +289,135 @@
         <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">What this dashboard controls today</h2>
         <div class="mt-6 space-y-3">
           <div class="rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4">
-            <p class="text-sm font-semibold text-slate-950">Live pricing source</p>
-            <p class="mt-2 text-sm leading-6 text-slate-600">The prices saved here feed the public pricing page, owner dashboard billing cards, and subscription charges generated by the billing service.</p>
+            <p class="text-sm font-semibold text-slate-950">Direct local pricing</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Each plan can now keep direct monthly pricing by currency, including African currencies such as NGN, GHS, KES, ZAR, XOF, and XAF.</p>
           </div>
           <div class="rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4">
-            <p class="text-sm font-semibold text-slate-950">Geo and currency conversion</p>
-            <p class="mt-2 text-sm leading-6 text-slate-600">Saved prices stay in <%= baseCurrency %>, then the platform converts them for supported currencies such as NGN and the visitor-selected top-bar currency.</p>
+            <p class="text-sm font-semibold text-slate-950">Automatic yearly totals</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Yearly billing is calculated from the monthly fee and annual discount percentage, so the dashboard no longer depends on manually keyed yearly amounts.</p>
           </div>
           <div class="rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4">
-            <p class="text-sm font-semibold text-slate-950">Remaining platform-wide ops</p>
-            <p class="mt-2 text-sm leading-6 text-slate-600">Cross-tenant support and incident tooling are still staged separately, but subscription fee management on this overview page is now live.</p>
+            <p class="text-sm font-semibold text-slate-950">FX fallback remains</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">If a plan does not have a direct local price for the chosen currency, Aisle still falls back to FX conversion from <%= baseCurrency %> instead of leaving the plan unavailable.</p>
           </div>
         </div>
       </section>
     </div>
   </div>
 </section>
+
+<script nonce="<%= cspNonce %>">
+  (() => {
+    const calculateYearlyAmount = (monthlyAmount, discountPercentage) => {
+      const safeMonthlyAmount = Number(monthlyAmount || 0);
+      const safeDiscount = Math.min(95, Math.max(0, Number(discountPercentage || 0)));
+      return safeMonthlyAmount * 12 * (1 - (safeDiscount / 100));
+    };
+
+    const formatMoney = (amount, currency) => {
+      return new Intl.NumberFormat('<%= locale %>', {
+        style: 'currency',
+        currency: currency || 'USD'
+      }).format(Number(amount || 0));
+    };
+
+    const formatSource = (source) => {
+      if (source === 'needs-local-price') {
+        return 'Needs local price';
+      }
+
+      if (source === 'configured') {
+        return 'Direct local price';
+      }
+
+      if (source === 'fx') {
+        return 'FX fallback';
+      }
+
+      return 'Base price';
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('[data-billing-plan-editor]').forEach((form) => {
+        const planCode = form.getAttribute('data-plan-code');
+        const pricingNode = document.getElementById(`plan-pricing-${planCode}`);
+        const currencySelect = form.querySelector('[data-billing-currency]');
+        const monthlyInput = form.querySelector('[data-billing-monthly]');
+        const discountInput = form.querySelector('[data-billing-discount]');
+        const currencyLabel = form.querySelector('[data-billing-currency-label]');
+        const monthlyPreview = form.querySelector('[data-billing-monthly-preview]');
+        const yearlyPreview = form.querySelector('[data-billing-yearly-preview]');
+        const monthlyPreviewCard = form.querySelector('[data-billing-monthly-preview-card]');
+        const yearlyPreviewCard = form.querySelector('[data-billing-yearly-preview-card]');
+        const sourceLabel = form.querySelector('[data-billing-source]');
+        const formulaLabel = form.querySelector('[data-billing-formula]');
+
+        if (!pricingNode || !currencySelect || !monthlyInput || !discountInput) {
+          return;
+        }
+
+        let pricingMap = {};
+        try {
+          pricingMap = JSON.parse(pricingNode.textContent || '{}');
+        } catch {
+          pricingMap = {};
+        }
+
+        const syncComputed = () => {
+          const currencyCode = currencySelect.value || '<%= baseCurrency %>';
+          const monthlyAmount = Number(monthlyInput.value || 0);
+          const discountPercentage = Number(discountInput.value || 0);
+          const yearlyAmount = calculateYearlyAmount(monthlyAmount, discountPercentage);
+          const formattedMonthly = formatMoney(monthlyAmount, currencyCode);
+          const formattedYearly = formatMoney(yearlyAmount, currencyCode);
+
+          if (currencyLabel) {
+            currencyLabel.textContent = currencyCode;
+          }
+
+          if (monthlyPreview) {
+            monthlyPreview.textContent = formattedMonthly;
+          }
+
+          if (yearlyPreview) {
+            yearlyPreview.textContent = formattedYearly;
+          }
+
+          if (monthlyPreviewCard) {
+            monthlyPreviewCard.textContent = formattedMonthly;
+          }
+
+          if (yearlyPreviewCard) {
+            yearlyPreviewCard.textContent = formattedYearly;
+          }
+
+          if (formulaLabel) {
+            formulaLabel.textContent = `Monthly x 12 with ${Number(discountPercentage || 0).toFixed(2)}% annual discount.`;
+          }
+        };
+
+        const syncFromCurrency = () => {
+          const nextPricing = pricingMap[currencySelect.value] || null;
+          if (nextPricing) {
+            monthlyInput.value = Number(nextPricing.monthly_amount || 0).toFixed(2);
+            if (sourceLabel) {
+              sourceLabel.textContent = formatSource(nextPricing.pricing_source);
+            }
+          } else {
+            monthlyInput.value = '0.00';
+            if (sourceLabel) {
+              sourceLabel.textContent = 'Needs local price';
+            }
+          }
+
+          syncComputed();
+        };
+
+        currencySelect.addEventListener('change', syncFromCurrency);
+        monthlyInput.addEventListener('input', syncComputed);
+        discountInput.addEventListener('input', syncComputed);
+        syncComputed();
+      });
+    });
+  })();
+</script>

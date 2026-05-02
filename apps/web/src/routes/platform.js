@@ -161,6 +161,7 @@ const registerPlatformRoutes = (app, deps) => {
       stores,
       metrics,
       billingPlans,
+      supportedBillingCurrencies: adminPricing.supported_currencies,
       editablePricing: String(req.currentPlatformUser?.role || '').trim().toLowerCase() === PLATFORM_ROLES.PLATFORM_OWNER
     });
   };
@@ -737,8 +738,9 @@ const registerPlatformRoutes = (app, deps) => {
 
       await updateAdminBillingPlan(req, req.platformAuth, {
         plan: req.body.plan,
+        currency: req.body.currency,
         monthly_amount: req.body.monthly_amount,
-        yearly_amount: req.body.yearly_amount
+        yearly_discount_percentage: req.body.yearly_discount_percentage
       });
 
       return res.redirect(`/platform-admin?success=${encodeURIComponent('Subscription pricing updated successfully.')}`);

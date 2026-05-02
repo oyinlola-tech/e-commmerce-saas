@@ -13,14 +13,20 @@ const schemaStatements = [
       UNIQUE KEY uq_billing_plan_settings_plan_code (plan_code)
     )
   `,
-  `
-    ALTER TABLE billing_plan_settings
-    ADD COLUMN IF NOT EXISTS monthly_overrides JSON NULL AFTER yearly_amount
-  `,
-  `
-    ALTER TABLE billing_plan_settings
-    ADD COLUMN IF NOT EXISTS yearly_discount_percentage DECIMAL(5,2) NOT NULL DEFAULT 20.00 AFTER monthly_overrides
-  `,
+  {
+    sql: `
+      ALTER TABLE billing_plan_settings
+      ADD COLUMN monthly_overrides JSON NULL AFTER yearly_amount
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE billing_plan_settings
+      ADD COLUMN yearly_discount_percentage DECIMAL(5,2) NOT NULL DEFAULT 20.00 AFTER monthly_overrides
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
   `
     CREATE TABLE IF NOT EXISTS subscriptions (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
