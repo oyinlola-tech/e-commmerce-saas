@@ -13,7 +13,43 @@ This document defines the transactional email matrix for Aisle Commerce so custo
 | Template key | Audience | Brand source | Trigger |
 | --- | --- | --- | --- |
 | `platform.password_reset_otp` | Platform user / store owner | Platform brand | `user-service` password reset request |
+| `platform.owner_welcome` | Store owner | Platform brand | `USER_REGISTERED` |
+| `platform.owner_email_verification_otp` | Store owner | Platform brand | Ready for future verification flow |
+| `platform.owner_login_alert` | Store owner | Platform brand | Ready for future suspicious-login flow |
+| `platform.store_created` | Store owner | Platform brand | `STORE_CREATED` |
+| `platform.subscription_trial_started` | Store owner | Platform brand | `PAYMENT_SUCCEEDED` on subscription trial authorization |
+| `platform.subscription_trial_ending` | Store owner | Platform brand | Render-ready for reminder scheduler |
+| `platform.subscription_trial_ended` | Store owner | Platform brand | Render-ready for expiry workflow |
+| `platform.subscription_invoice_created` | Store owner | Platform brand | Render-ready for invoice creation workflow |
+| `platform.subscription_invoice_paid` | Store owner | Platform brand | `PAYMENT_SUCCEEDED` for invoice entities |
+| `platform.subscription_payment_failed` | Store owner | Platform brand | `PAYMENT_FAILED` for invoice or subscription entities |
+| `platform.subscription_renewed` | Store owner | Platform brand | Render-ready for renewal-specific flow |
+| `platform.subscription_cancellation_scheduled` | Store owner | Platform brand | `SUBSCRIPTION_CHANGED` when `cancel_at_period_end` is true |
+| `platform.subscription_cancelled` | Store owner | Platform brand | `SUBSCRIPTION_CHANGED` when status becomes `cancelled` |
+| `platform.compliance_status_changed` | Store owner | Platform brand | `COMPLIANCE_STATUS_CHANGED` |
 | `store.customer_password_reset_otp` | Customer | Store brand from `store-service` | `customer-service` password reset request |
+| `store.customer_welcome` | Customer | Store brand from `store-service` | `CUSTOMER_REGISTERED` |
+| `store.customer_email_verification_otp` | Customer | Store brand from `store-service` | Ready for future verification flow |
+| `store.customer_login_alert` | Customer | Store brand from `store-service` | Ready for future suspicious-login flow |
+| `store.order_confirmation` | Customer | Store brand from `store-service` | `ORDER_CREATED` |
+| `store.payment_receipt` | Customer | Store brand from `store-service` | `PAYMENT_SUCCEEDED` for order entities |
+| `store.payment_failed` | Customer | Store brand from `store-service` | `PAYMENT_FAILED` for order entities |
+| `store.invoice_issued` | Customer | Store brand from `store-service` | Render-ready for invoice workflow |
+| `store.order_status_processing` | Customer | Store brand from `store-service` | `ORDER_STATUS_CHANGED` |
+| `store.order_status_shipped` | Customer | Store brand from `store-service` | `ORDER_STATUS_CHANGED` when status reaches shipping |
+| `store.order_status_delivered` | Customer | Store brand from `store-service` | `ORDER_STATUS_CHANGED` when status reaches delivery |
+| `store.order_cancelled` | Customer | Store brand from `store-service` | `ORDER_STATUS_CHANGED` when status becomes cancelled |
+| `store.refund_issued` | Customer | Store brand from `store-service` | Render-ready for refund workflow |
+| `store.abandoned_cart_reminder` | Customer | Store brand from `store-service` | Render-ready for cart recovery workflow |
+| `store.wishlist_back_in_stock` | Customer | Store brand from `store-service` | Render-ready for inventory alert workflow |
+| `store.wishlist_price_drop` | Customer | Store brand from `store-service` | Render-ready for merchandising alert workflow |
+| `store.review_request` | Customer | Store brand from `store-service` | Render-ready for post-delivery follow-up |
+
+## Live automation now
+
+- `notification-service` now consumes registration, store creation, order, payment, subscription-state, and compliance events for the templates that already have real data sources.
+- Previewing is supported with `POST /emails/render` in `notification-service` so templates can be inspected without sending a real email.
+- Sending still works through `POST /emails/send`, and template sends now accept `template_key`, `template_data`, `brand`, and `store_id`.
 
 ## Recommended owner and platform emails
 

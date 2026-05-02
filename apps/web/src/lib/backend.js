@@ -848,13 +848,32 @@ const getOwnerSubscription = async (req, auth) => {
   };
 };
 
+const shouldFallbackPublicBillingPlans = (error) => {
+  const status = Number(error?.status || 0);
+  return status >= 500;
+};
+
 const getPublicBillingPlans = async (req, options = {}) => {
   const targetCurrency = String(options.currency || '').trim().toUpperCase();
   const query = targetCurrency
     ? `?currency=${encodeURIComponent(targetCurrency)}`
     : '';
-  const response = await requestPublicJson(req, env.serviceUrls.billing, `/plans${query}`);
-  return Array.isArray(response?.plans) ? response.plans : [];
+
+  try {
+    const response = await requestPublicJson(req, env.serviceUrls.billing, `/plans${query}`);
+    return Array.isArray(response?.plans) ? response.plans : [];
+  } catch (error) {
+    if (!shouldFallbackPublicBillingPlans(error)) {
+      throw error;
+    }
+
+    req.log?.warn('public_billing_plans_unavailable', {
+      serviceUrl: env.serviceUrls.billing,
+      status: error.status,
+      error
+    });
+    return [];
+  }
 };
 
 const getAdminBillingPlans = async (req, auth) => {

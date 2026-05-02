@@ -62,7 +62,7 @@ These variables are read globally by `createServiceConfig()` and, unless overrid
 | `BILLING_SERVICE_URL` | `http://127.0.0.1:4109` | Billing service base URL |
 | `SUPPORT_SERVICE_URL` | `http://127.0.0.1:4110` | Reserved support service URL |
 | `CHAT_SERVICE_URL` | `http://127.0.0.1:4111` | Reserved chat service URL |
-| `NOTIFICATION_SERVICE_URL` | `http://127.0.0.1:4112` | Reserved notification service URL |
+| `NOTIFICATION_SERVICE_URL` | `http://127.0.0.1:4112` | Notification service base URL |
 | `SUBSCRIPTION_DEFAULT_CURRENCY` | `NGN` | Default billing currency for owner plans |
 | `PAYSTACK_PLATFORM_PUBLIC_KEY` | empty | Public key used for platform subscription checkout |
 | `PAYSTACK_PLATFORM_SECRET_KEY` | empty | Secret key used for platform subscription checkout |
@@ -71,7 +71,7 @@ These variables are read globally by `createServiceConfig()` and, unless overrid
 
 ## Service-Scoped Variables
 
-`packages/shared/src/env.js` resolves service-specific variables before global ones. Supported prefixes in this repo include `GATEWAY`, `USER_SERVICE`, `STORE_SERVICE`, `COMPLIANCE_SERVICE`, `CUSTOMER_SERVICE`, `PRODUCT_SERVICE`, `CART_SERVICE`, `ORDER_SERVICE`, `PAYMENT_SERVICE`, and `BILLING_SERVICE`.
+`packages/shared/src/env.js` resolves service-specific variables before global ones. Supported prefixes in this repo include `GATEWAY`, `USER_SERVICE`, `STORE_SERVICE`, `COMPLIANCE_SERVICE`, `CUSTOMER_SERVICE`, `PRODUCT_SERVICE`, `CART_SERVICE`, `ORDER_SERVICE`, `PAYMENT_SERVICE`, `BILLING_SERVICE`, and `NOTIFICATION_SERVICE`.
 
 | Variable Pattern | Purpose |
 | --- | --- |
@@ -171,6 +171,6 @@ The SSR app reads `WEB_*` first, then `WEB_APP_*`, then falls back to unscoped s
 3. Gateway and implemented services
 4. SSR web app
 
-For the browser-facing layer only, `npm start` and `npm run dev` now start the SSR web app plus gateway together.
+For the browser-facing layer only, `npm start`, `npm run start:once`, and `npm run dev` start the SSR web app plus gateway together.
 
 If you only need interface previews, the web app can be run by itself because it uses local state helpers instead of the service mesh.

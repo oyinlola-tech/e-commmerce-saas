@@ -113,7 +113,7 @@ const deliverOutboundEmail = async ({
       safeSubject,
       JSON.stringify(sanitizeJsonObject(metadata || {})),
       JSON.stringify({
-        ...sanitizeStructuredData(payload),
+        ...(sanitizeStructuredData(payload) || {}),
         text: safeText,
         html: safeHtml
       })

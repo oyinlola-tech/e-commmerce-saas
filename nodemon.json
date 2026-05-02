@@ -2,10 +2,16 @@
   "watch": [
     "apps/web",
     "apps/gateway",
+    "apps/services",
     "packages/shared",
-    "scripts"
+    "scripts",
+    ".env",
+    ".env.local",
+    ".env.development",
+    ".env.development.local",
+    "tailwind.config.js"
   ],
-  "ext": "js,json,ejs",
+  "ext": "js,json,ejs,env",
   "ignore": [
     "**/node_modules/**",
     "**/uploads/**",

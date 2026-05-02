@@ -88,14 +88,15 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | Billing service | `apps/services/billing-service` | `4109` | Implemented | Subscription lifecycle and eligibility checks |
 | Support service | `apps/services/support-service` | `4110` | Placeholder package | Planned support workflow service |
 | Chat service | `apps/services/chat-service` | `4111` | Placeholder package | Planned live chat and messaging service |
-| Notification service | `apps/services/notification-service` | `4112` | Placeholder package | Planned outbound notification service |
+| Notification service | `apps/services/notification-service` | `4112` | Implemented | SMTP-backed outbound notification and email delivery service |
 | Shared package | `packages/shared` | n/a | Implemented | Shared infrastructure and utilities |
 
 ## Root Workspace Scripts
 
 | Command | Behavior |
 | --- | --- |
-| `npm start` | Starts the SSR web app and gateway together |
+| `npm start` | Starts the SSR web app and gateway together with `nodemon` restarts |
+| `npm run start:once` | Starts the SSR web app and gateway together without `nodemon` |
 | `npm run dev` | Starts the SSR web app and gateway together with `nodemon` restarts |
 | `npm run start:frontend` | Starts only the SSR web app through the shared launcher |
 | `npm run dev:frontend` | Starts only the SSR web app through the shared launcher with `nodemon` restarts |
@@ -125,7 +126,8 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | `npm run dev:billing-service` | Starts `billing-service` with `nodemon` |
 | `npm run start:support-service` | Reserved for future `support-service` implementation |
 | `npm run start:chat-service` | Reserved for future `chat-service` implementation |
-| `npm run start:notification-service` | Reserved for future `notification-service` implementation |
+| `npm run start:notification-service` | Starts `notification-service` |
+| `npm run dev:notification-service` | Starts `notification-service` with `nodemon` |
 | `npm run swagger` | Starts a Swagger UI preview on `http://127.0.0.1:4015`, exports the gateway OpenAPI spec, and exposes the API request collection |
 | `npm run swagger:export` | Writes the current gateway OpenAPI document to `docs/swagger/gateway.openapi.json` without starting the preview server |
 | `npm run api:request -- --service <name> --path <route>` | Sends a signed internal request directly to a service for endpoints that are not exposed through the gateway |

@@ -15,10 +15,16 @@ const {
 } = require('../../../../packages/shared');
 
 const hydrateOrder = async (db, orderId, storeId) => {
-  const order = (await db.query(
-    'SELECT * FROM orders WHERE id = ? AND store_id = ?',
-    [orderId, storeId]
-  ))[0];
+  const query = storeId
+    ? {
+        sql: 'SELECT * FROM orders WHERE id = ? AND store_id = ?',
+        values: [orderId, storeId]
+      }
+    : {
+        sql: 'SELECT * FROM orders WHERE id = ?',
+        values: [orderId]
+      };
+  const order = (await db.query(query.sql, query.values))[0];
   if (!order) {
     return null;
   }
