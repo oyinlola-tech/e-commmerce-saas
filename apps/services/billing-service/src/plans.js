@@ -1,9 +1,42 @@
 const DEFAULT_CURRENCY = 'USD';
 const TRIAL_DAYS = 7;
 const TRIAL_AUTHORIZATION_BASE_AMOUNT = Number(process.env.SUBSCRIPTION_TRIAL_AUTH_AMOUNT_USD || 1);
+const DEFAULT_YEARLY_DISCOUNT_PERCENTAGE = 20;
 const PLAN_ALIASES = {
   basic: 'launch',
   growth: 'scale'
+};
+
+const roundPlanAmount = (value) => {
+  return Number(Number(value || 0).toFixed(2));
+};
+
+const clampDiscountPercentage = (value, fallback = DEFAULT_YEARLY_DISCOUNT_PERCENTAGE) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return roundPlanAmount(fallback);
+  }
+
+  return roundPlanAmount(Math.min(100, Math.max(0, parsed)));
+};
+
+const calculateYearlyAmount = (monthlyAmount, yearlyDiscountPercentage = DEFAULT_YEARLY_DISCOUNT_PERCENTAGE) => {
+  const safeMonthlyAmount = roundPlanAmount(monthlyAmount);
+  const annualBase = safeMonthlyAmount * 12;
+  const safeDiscount = clampDiscountPercentage(yearlyDiscountPercentage);
+  return roundPlanAmount(annualBase * (1 - (safeDiscount / 100)));
+};
+
+const deriveYearlyDiscountPercentage = (monthlyAmount, yearlyAmount, fallback = DEFAULT_YEARLY_DISCOUNT_PERCENTAGE) => {
+  const safeMonthlyAmount = roundPlanAmount(monthlyAmount);
+  const safeYearlyAmount = roundPlanAmount(yearlyAmount);
+  const annualBase = safeMonthlyAmount * 12;
+
+  if (annualBase <= 0 || safeYearlyAmount <= 0) {
+    return clampDiscountPercentage(fallback);
+  }
+
+  return clampDiscountPercentage((1 - (safeYearlyAmount / annualBase)) * 100, fallback);
 };
 
 const DEFAULT_PLANS = {
@@ -12,7 +45,8 @@ const DEFAULT_PLANS = {
     name: 'Launch',
     description: 'For teams launching one polished storefront with the core Aisle stack.',
     monthly_amount: 10,
-    yearly_amount: 96,
+    yearly_amount: calculateYearlyAmount(10, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE),
+    yearly_discount_percentage: DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
     currency: DEFAULT_CURRENCY,
     trial_eligible: true,
     features: [
@@ -27,7 +61,8 @@ const DEFAULT_PLANS = {
     name: 'Scale',
     description: 'For operators growing across stores, teams, and more complex workflows.',
     monthly_amount: 40,
-    yearly_amount: 384,
+    yearly_amount: calculateYearlyAmount(40, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE),
+    yearly_discount_percentage: DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
     currency: DEFAULT_CURRENCY,
     trial_eligible: true,
     features: [
@@ -42,7 +77,8 @@ const DEFAULT_PLANS = {
     name: 'Enterprise',
     description: 'For larger teams that need higher-touch rollout, support, and controls.',
     monthly_amount: 100,
-    yearly_amount: 960,
+    yearly_amount: calculateYearlyAmount(100, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE),
+    yearly_discount_percentage: DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
     currency: DEFAULT_CURRENCY,
     trial_eligible: true,
     features: [
@@ -98,7 +134,12 @@ module.exports = {
   DEFAULT_CURRENCY,
   TRIAL_DAYS,
   TRIAL_AUTHORIZATION_BASE_AMOUNT,
+  DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
   PLAN_ALIASES,
+  roundPlanAmount,
+  clampDiscountPercentage,
+  calculateYearlyAmount,
+  deriveYearlyDiscountPercentage,
   normalizePlanCode,
   getBillingPlans,
   getBillingPlan,

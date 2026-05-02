@@ -887,6 +887,7 @@ const getAdminBillingPlans = async (req, auth) => {
 
   return {
     plans: Array.isArray(response?.plans) ? response.plans : [],
+    supported_currencies: Array.isArray(response?.supported_currencies) ? response.supported_currencies : [],
     trial_days: Number(response?.trial_days || 0),
     trial_authorization_amount: Number(response?.trial_authorization_amount || 0),
     trial_authorization_currency: response?.trial_authorization_currency || 'USD'
@@ -903,8 +904,9 @@ const updateAdminBillingPlan = async (req, auth, payload = {}) => {
     },
     body: {
       plan: String(payload.plan || '').trim().toLowerCase(),
+      currency: String(payload.currency || '').trim().toUpperCase() || undefined,
       monthly_amount: Number(payload.monthly_amount || 0),
-      yearly_amount: Number(payload.yearly_amount || 0)
+      yearly_discount_percentage: Number(payload.yearly_discount_percentage || 0)
     }
   });
 };

@@ -103,15 +103,19 @@ const createValidations = (context, helpers) => {
   ];
 
   const adminBillingPlanValidation = [
-    allowBodyFields(['plan', 'monthly_amount', 'yearly_amount', '_csrf']),
+    allowBodyFields(['plan', 'currency', 'monthly_amount', 'yearly_discount_percentage', '_csrf']),
     body('plan').isIn(['launch', 'scale', 'enterprise']),
+    body('currency')
+      .optional()
+      .custom((value) => Boolean(normalizeCurrencyCode(value)))
+      .withMessage('Choose a valid billing currency.'),
     body('monthly_amount')
       .isFloat({ min: 0.01, max: 1000000 })
       .withMessage('Monthly fee must be greater than zero.')
       .toFloat(),
-    body('yearly_amount')
-      .isFloat({ min: 0.01, max: 1000000 })
-      .withMessage('Yearly fee must be greater than zero.')
+    body('yearly_discount_percentage')
+      .isFloat({ min: 0, max: 95 })
+      .withMessage('Yearly discount must be between 0 and 95 percent.')
       .toFloat()
   ];
 

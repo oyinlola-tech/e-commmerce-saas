@@ -6,10 +6,20 @@ const schemaStatements = [
       currency VARCHAR(10) NOT NULL DEFAULT 'USD',
       monthly_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
       yearly_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      monthly_overrides JSON NULL,
+      yearly_discount_percentage DECIMAL(5,2) NOT NULL DEFAULT 20.00,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_billing_plan_settings_plan_code (plan_code)
     )
+  `,
+  `
+    ALTER TABLE billing_plan_settings
+    ADD COLUMN IF NOT EXISTS monthly_overrides JSON NULL AFTER yearly_amount
+  `,
+  `
+    ALTER TABLE billing_plan_settings
+    ADD COLUMN IF NOT EXISTS yearly_discount_percentage DECIMAL(5,2) NOT NULL DEFAULT 20.00 AFTER monthly_overrides
   `,
   `
     CREATE TABLE IF NOT EXISTS subscriptions (

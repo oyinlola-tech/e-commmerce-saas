@@ -3,6 +3,7 @@ const {
   requireInternalRequest,
   EVENT_NAMES,
   PLATFORM_ROLES,
+  SUPPORTED_PLATFORM_CURRENCIES,
   buildSignedInternalHeaders,
   requestJson,
   asyncHandler,
@@ -15,20 +16,27 @@ const {
   DEFAULT_CURRENCY,
   TRIAL_DAYS,
   TRIAL_AUTHORIZATION_BASE_AMOUNT,
+  calculateYearlyAmount,
   normalizePlanCode
 } = require('./plans');
 const {
   getKnownPlanCodes,
+  getConfiguredPlanCurrencies,
   getStoragePlanCodes,
   getResolvedBillingPlans,
   getResolvedBillingPlan,
-  getResolvedPlanPrice,
+  getResolvedMonthlyAmountForCurrency,
   upsertPlanSettings
 } = require('./plan-settings');
 const {
   normalizeCurrencyCode,
   convertAmount
 } = require('./currency');
+
+const SUPPORTED_BILLING_CURRENCIES = Array.from(new Set([
+  DEFAULT_CURRENCY,
+  ...SUPPORTED_PLATFORM_CURRENCIES
+]));
 
 const createTrialDates = (baseDate = new Date()) => {
   const now = baseDate instanceof Date ? baseDate : new Date(baseDate);
@@ -148,7 +156,11 @@ const serializeAdminPlan = (plan) => {
     ...plan,
     code: normalizePlanCode(plan.code),
     monthly_amount: Number(plan.monthly_amount || 0),
-    yearly_amount: Number(plan.yearly_amount || 0)
+    yearly_amount: Number(plan.yearly_amount || 0),
+    yearly_discount_percentage: Number(plan.yearly_discount_percentage || 0),
+    monthly_overrides: plan.monthly_overrides && typeof plan.monthly_overrides === 'object'
+      ? plan.monthly_overrides
+      : {}
   };
 };
 
@@ -164,24 +176,67 @@ const ensurePlatformOwnerAccess = (req) => {
   }
 };
 
-const buildNormalizedPricing = async (db, planCode, billingCycle, currency) => {
-  const basePricing = await getResolvedPlanPrice(db, planCode, billingCycle);
-  if (!basePricing) {
+const buildPlanPricingPreview = async (plan, currency) => {
+  if (!plan) {
     return null;
   }
 
-  const requestedCurrency = normalizeCurrencyCode(currency) || basePricing.currency || DEFAULT_CURRENCY;
-  const conversion = await convertAmount(basePricing.amount, basePricing.currency || DEFAULT_CURRENCY, requestedCurrency);
+  const baseCurrency = normalizeCurrencyCode(plan.currency) || DEFAULT_CURRENCY;
+  const requestedCurrency = normalizeCurrencyCode(currency) || baseCurrency;
+  const configuredMonthlyAmount = getResolvedMonthlyAmountForCurrency(plan, requestedCurrency);
+
+  if (configuredMonthlyAmount !== null) {
+    return {
+      code: normalizePlanCode(plan.code),
+      currency: requestedCurrency,
+      base_currency: baseCurrency,
+      monthly_amount: configuredMonthlyAmount,
+      yearly_amount: calculateYearlyAmount(configuredMonthlyAmount, plan.yearly_discount_percentage),
+      yearly_discount_percentage: Number(plan.yearly_discount_percentage || 0),
+      pricing_source: requestedCurrency === baseCurrency ? 'base' : 'configured',
+      exchange_rate: requestedCurrency === baseCurrency ? 1 : null,
+      rate_date: null
+    };
+  }
+
+  const conversion = await convertAmount(plan.monthly_amount, baseCurrency, requestedCurrency);
+  const convertedMonthlyAmount = Number(conversion.amount || 0);
 
   return {
-    ...basePricing,
-    code: normalizePlanCode(basePricing.code),
-    amount: conversion.amount,
+    code: normalizePlanCode(plan.code),
     currency: conversion.currency,
-    base_amount: basePricing.amount,
-    base_currency: basePricing.currency || DEFAULT_CURRENCY,
+    base_currency: baseCurrency,
+    monthly_amount: convertedMonthlyAmount,
+    yearly_amount: calculateYearlyAmount(convertedMonthlyAmount, plan.yearly_discount_percentage),
+    yearly_discount_percentage: Number(plan.yearly_discount_percentage || 0),
+    pricing_source: conversion.currency === baseCurrency ? 'base' : 'fx',
     exchange_rate: conversion.exchangeRate,
     rate_date: conversion.rateDate
+  };
+};
+
+const buildNormalizedPricing = async (db, planCode, billingCycle, currency) => {
+  const resolvedPlan = await getResolvedBillingPlan(db, planCode);
+  if (!resolvedPlan) {
+    return null;
+  }
+
+  const cycle = String(billingCycle || 'monthly').trim().toLowerCase();
+  const pricingPreview = await buildPlanPricingPreview(resolvedPlan, currency);
+  const baseCurrency = normalizeCurrencyCode(resolvedPlan.currency) || DEFAULT_CURRENCY;
+  const baseMonthlyAmount = Number(resolvedPlan.monthly_amount || 0);
+
+  return {
+    ...resolvedPlan,
+    ...pricingPreview,
+    billing_cycle: cycle,
+    amount: cycle === 'yearly'
+      ? pricingPreview.yearly_amount
+      : pricingPreview.monthly_amount,
+    base_amount: cycle === 'yearly'
+      ? calculateYearlyAmount(baseMonthlyAmount, resolvedPlan.yearly_discount_percentage)
+      : baseMonthlyAmount,
+    base_currency: baseCurrency
   };
 };
 
@@ -469,16 +524,17 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     const requestedCurrency = normalizeCurrencyCode(req.query.currency) || DEFAULT_CURRENCY;
     const trialAuthorizationAmount = await getTrialAuthorizationAmount(requestedCurrency);
     const plans = await Promise.all((await getResolvedBillingPlans(db)).map(async (plan) => {
-      const monthly = await buildNormalizedPricing(db, plan.code, 'monthly', requestedCurrency);
-      const yearly = await buildNormalizedPricing(db, plan.code, 'yearly', requestedCurrency);
+      const preview = await buildPlanPricingPreview(plan, requestedCurrency);
 
       return {
         ...plan,
         code: normalizePlanCode(plan.code),
-        currency: requestedCurrency,
-        base_currency: DEFAULT_CURRENCY,
-        monthly_amount: monthly.amount,
-        yearly_amount: yearly.amount,
+        currency: preview.currency,
+        base_currency: preview.base_currency,
+        monthly_amount: preview.monthly_amount,
+        yearly_amount: preview.yearly_amount,
+        yearly_discount_percentage: preview.yearly_discount_percentage,
+        pricing_source: preview.pricing_source,
         trial_days: TRIAL_DAYS,
         trial_authorization_amount: trialAuthorizationAmount.amount,
         trial_authorization_currency: trialAuthorizationAmount.currency
@@ -493,9 +549,22 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   app.get('/admin/plans', requireInternal, asyncHandler(async (req, res) => {
     ensurePlatformStaffAccess(req);
 
-    const plans = await getResolvedBillingPlans(db);
+    const plans = await Promise.all((await getResolvedBillingPlans(db)).map(async (plan) => {
+      const pricingEntries = await Promise.all(SUPPORTED_BILLING_CURRENCIES.map(async (currencyCode) => {
+        const pricing = await buildPlanPricingPreview(plan, currencyCode);
+        return [currencyCode, pricing];
+      }));
+
+      return {
+        ...serializeAdminPlan(plan),
+        configured_currencies: getConfiguredPlanCurrencies(plan),
+        pricing_by_currency: Object.fromEntries(pricingEntries)
+      };
+    }));
+
     return res.json({
-      plans: plans.map(serializeAdminPlan),
+      plans,
+      supported_currencies: SUPPORTED_BILLING_CURRENCIES,
       trial_days: TRIAL_DAYS,
       trial_authorization_amount: Number(TRIAL_AUTHORIZATION_BASE_AMOUNT || 0),
       trial_authorization_currency: DEFAULT_CURRENCY
@@ -503,18 +572,22 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/admin/plans', requireInternal, validate([
-    allowBodyFields(['plan', 'monthly_amount', 'yearly_amount']),
+    allowBodyFields(['plan', 'currency', 'monthly_amount', 'yearly_discount_percentage']),
     body('plan')
       .isString()
       .custom((value) => getKnownPlanCodes().includes(normalizePlanCode(value)))
       .withMessage('Unsupported billing plan.'),
+    body('currency')
+      .optional()
+      .isLength({ min: 3, max: 3 })
+      .withMessage('Choose a valid currency code.'),
     body('monthly_amount')
       .isFloat({ min: 0.01, max: 1000000 })
       .withMessage('Monthly amount must be greater than zero.')
       .toFloat(),
-    body('yearly_amount')
-      .isFloat({ min: 0.01, max: 1000000 })
-      .withMessage('Yearly amount must be greater than zero.')
+    body('yearly_discount_percentage')
+      .isFloat({ min: 0, max: 95 })
+      .withMessage('Yearly discount must be between 0 and 95 percent.')
       .toFloat()
   ]), asyncHandler(async (req, res) => {
     ensurePlatformOwnerAccess(req);
@@ -522,8 +595,9 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     const normalizedCode = normalizePlanCode(req.body.plan);
     const plan = await upsertPlanSettings(db, {
       plan: normalizedCode,
+      currency: req.body.currency,
       monthly_amount: req.body.monthly_amount,
-      yearly_amount: req.body.yearly_amount
+      yearly_discount_percentage: req.body.yearly_discount_percentage
     });
 
     if (!plan) {

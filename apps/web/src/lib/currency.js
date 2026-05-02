@@ -1,11 +1,12 @@
 const env = require('./load-env');
+const { SUPPORTED_PLATFORM_CURRENCIES } = require('../../../../packages/shared');
 
 const geoCache = new Map();
 const ratesCache = new Map();
 
 const GEO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const FX_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const DEFAULT_PLATFORM_CURRENCIES = ['USD', 'EUR', 'GBP', 'NGN', 'CAD', 'AUD', 'AED'];
+const DEFAULT_PLATFORM_CURRENCIES = SUPPORTED_PLATFORM_CURRENCIES;
 
 const normalizeCurrencyCode = (value = '') => {
   const normalized = String(value || '').trim().toUpperCase();

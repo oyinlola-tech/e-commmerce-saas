@@ -67,6 +67,33 @@ const FONT_PRESETS = [
   'studio'
 ];
 
+const SUPPORTED_PLATFORM_CURRENCIES = [
+  'USD',
+  'EUR',
+  'GBP',
+  'CAD',
+  'AUD',
+  'AED',
+  'NGN',
+  'GHS',
+  'KES',
+  'UGX',
+  'TZS',
+  'RWF',
+  'ZAR',
+  'BWP',
+  'ZMW',
+  'MWK',
+  'MUR',
+  'MAD',
+  'TND',
+  'EGP',
+  'ETB',
+  'XOF',
+  'XAF',
+  'SLL'
+];
+
 const PAYMENT_PROVIDERS = ['paystack', 'flutterwave'];
 const SUPPORT_STATUSES = ['open', 'pending', 'resolved', 'closed'];
 const SUPPORT_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
@@ -93,6 +120,7 @@ module.exports = {
   STORE_TYPES,
   TEMPLATE_KEYS,
   FONT_PRESETS,
+  SUPPORTED_PLATFORM_CURRENCIES,
   PAYMENT_PROVIDERS,
   SUPPORT_STATUSES,
   SUPPORT_PRIORITIES,
