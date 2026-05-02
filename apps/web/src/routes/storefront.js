@@ -511,8 +511,9 @@ const registerStorefrontRoutes = (app, deps) => {
   }, checkoutValidation, handleFormValidation((req, res, errors) => {
     return renderCheckoutPage(req, res, errors, 422);
   }), async (req, res, next) => {
+    const store = resolveStore(req);
+
     try {
-      const store = resolveStore(req);
       if (!store) {
         return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
       }

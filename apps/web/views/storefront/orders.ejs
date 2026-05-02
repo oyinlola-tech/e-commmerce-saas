@@ -12,6 +12,7 @@
   <% if (orders.length) { %>
     <div class="mt-10 space-y-5">
       <% orders.forEach((order) => { %>
+        <% const orderDiscount = Number(order.discount_total || 0); %>
         <article class="surface-card rounded-[2rem] p-6">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -34,6 +35,24 @@
                 <p class="text-sm font-semibold text-slate-900"><%= money((item.price || 0) * (item.quantity || 1)) %></p>
               </div>
             <% }) %>
+          </div>
+          <div class="mt-6 grid gap-3 sm:grid-cols-4">
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Subtotal</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900"><%= money(order.subtotal || 0) %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Discount</p>
+              <p class="mt-2 text-sm font-semibold text-emerald-700"><%= orderDiscount > 0 ? `-${money(orderDiscount)}` : money(0) %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Coupon</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900"><%= order.coupon_code || 'None' %></p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Total</p>
+              <p class="mt-2 text-sm font-semibold text-slate-900"><%= money(order.total || 0) %></p>
+            </div>
           </div>
           <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p class="text-sm text-slate-500">Need a quick repeat order? Add these items back to the cart and adjust quantities there.</p>

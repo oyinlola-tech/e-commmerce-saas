@@ -55,6 +55,7 @@
     const getCartDrawer = () => document.querySelector('[data-cart-drawer]');
     const getCartOverlay = () => document.querySelector('[data-cart-overlay]');
     const getCsrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const cartNeedsServerSummaryRefresh = () => Boolean(document.querySelector('[data-cart-server-summary="true"]'));
 
     const normalizeCart = (cartValue) => {
       const cartObject = cartValue && typeof cartValue === 'object' ? cartValue : {};
@@ -223,6 +224,18 @@
       renderCartPage();
     };
 
+    const applyCartUpdate = (updatedCart) => {
+      window.cartState = updatedCart;
+
+      if (cartNeedsServerSummaryRefresh() && document.querySelector('[data-cart-page-items]')) {
+        window.location.reload();
+        return updatedCart;
+      }
+
+      syncCartViews();
+      return updatedCart;
+    };
+
     const syncWishlistViews = () => {
       const count = window.wishlistState.size;
       document.querySelectorAll('[data-wishlist-count]').forEach((node) => {
@@ -357,8 +370,7 @@
         body: JSON.stringify({ productId, quantity })
       });
 
-      window.cartState = updatedCart;
-      syncCartViews();
+      applyCartUpdate(updatedCart);
       window.openCart();
       window.showToast('Item added to cart.');
 
@@ -375,9 +387,7 @@
         body: JSON.stringify({ productId, quantity: newQty })
       });
 
-      window.cartState = updatedCart;
-      syncCartViews();
-      return updatedCart;
+      return applyCartUpdate(updatedCart);
     };
 
     window.removeCartItem = async (productId) => {
@@ -386,8 +396,7 @@
         body: JSON.stringify({ productId })
       });
 
-      window.cartState = updatedCart;
-      syncCartViews();
+      applyCartUpdate(updatedCart);
       window.showToast('Item removed from cart.');
       return updatedCart;
     };
@@ -397,8 +406,7 @@
         method: 'POST'
       });
 
-      window.cartState = updatedCart;
-      syncCartViews();
+      applyCartUpdate(updatedCart);
       window.showToast('Cart cleared.');
       return updatedCart;
     };

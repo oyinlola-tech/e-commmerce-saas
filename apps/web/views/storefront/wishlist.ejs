@@ -40,7 +40,9 @@
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= product.category || 'Collection' %></p>
             <a href="/products/<%= product.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= product.name %></a>
             <p class="mt-2 text-sm leading-6 text-slate-600"><%= product.description %></p>
-            <p class="mt-3 text-base font-semibold text-slate-950"><%= money(product.price || 0) %></p>
+            <div class="mt-3">
+              <%- include('../partials/store-price', { product, money, showLabel: true }) %>
+            </div>
           </div>
           <div class="flex gap-3">
             <button type="button" data-add-to-cart="<%= product.id %>" data-quantity="1" class="inline-flex flex-1 items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">

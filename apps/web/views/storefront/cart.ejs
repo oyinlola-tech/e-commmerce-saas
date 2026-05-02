@@ -2,6 +2,9 @@
   const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const cartItems = cart && Array.isArray(cart.items) ? cart.items : [];
   const cartTotal = cart && typeof cart.total !== 'undefined' ? cart.total : 0;
+  const appliedCouponPreview = couponPreview || null;
+  const discountTotal = Number(appliedCouponPreview && appliedCouponPreview.discount_total ? appliedCouponPreview.discount_total : 0);
+  const discountedCartTotal = Math.max(0, Number(cartTotal || 0) - discountTotal);
 %>
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
   <div class="grid gap-10 xl:grid-cols-[1.1fr_0.9fr]">
@@ -58,6 +61,56 @@
     </div>
 
     <aside class="space-y-6">
+      <section class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm <%= appliedCouponPreview ? 'ring-1 ring-emerald-200' : '' %>" <%= appliedCouponPreview ? 'data-cart-server-summary="true"' : '' %>>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-500">Coupon code</p>
+            <h2 class="mt-1 text-xl font-semibold text-gray-900">Apply store savings</h2>
+            <p class="mt-2 text-sm leading-6 text-gray-600">Coupons work alongside live product discounts when the code is valid for this cart.</p>
+          </div>
+          <% if (appliedCouponPreview && appliedCouponPreview.coupon) { %>
+            <span class="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              <%= appliedCouponPreview.coupon.code %> active
+            </span>
+          <% } %>
+        </div>
+
+        <% if (cartItems.length) { %>
+          <form action="/cart/coupon" method="post" class="mt-5 flex flex-col gap-3 sm:flex-row">
+            <%- include('../partials/csrf-field') %>
+            <input
+              type="text"
+              name="coupon_code"
+              value="<%= appliedCouponPreview && appliedCouponPreview.coupon ? appliedCouponPreview.coupon.code : '' %>"
+              maxlength="40"
+              placeholder="Enter coupon code"
+              class="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+            <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+              Apply
+            </button>
+          </form>
+        <% } %>
+
+        <% if (appliedCouponPreview && appliedCouponPreview.coupon) { %>
+          <div class="mt-5 rounded-[1.75rem] bg-emerald-50 px-5 py-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p class="text-sm font-semibold text-emerald-900"><%= appliedCouponPreview.coupon.code %></p>
+                <p class="mt-1 text-sm leading-6 text-emerald-800"><%= appliedCouponPreview.coupon.description || 'Coupon applied to this cart.' %></p>
+                <p class="mt-2 text-sm font-medium text-emerald-700">Savings: -<%= money(discountTotal) %></p>
+              </div>
+              <form action="/cart/coupon/remove" method="post">
+                <%- include('../partials/csrf-field') %>
+                <button type="submit" class="inline-flex items-center justify-center rounded-2xl border border-emerald-200 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-white">
+                  Remove coupon
+                </button>
+              </form>
+            </div>
+          </div>
+        <% } %>
+      </section>
+
       <section class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
         <p class="text-sm font-medium text-gray-500">Order summary</p>
         <div class="mt-6 space-y-4 text-sm text-gray-600">
@@ -69,6 +122,12 @@
             <span>Subtotal</span>
             <span data-cart-subtotal class="font-semibold text-gray-900"><%= money(cartTotal || 0) %></span>
           </div>
+          <% if (appliedCouponPreview && appliedCouponPreview.coupon) { %>
+            <div class="flex items-center justify-between">
+              <span>Discount (<%= appliedCouponPreview.coupon.code %>)</span>
+              <span class="font-semibold text-emerald-700">-<%= money(discountTotal) %></span>
+            </div>
+          <% } %>
           <div class="flex items-center justify-between">
             <span>Shipping</span>
             <span class="font-medium text-gray-500">Calculated at checkout</span>
@@ -77,7 +136,7 @@
         <div class="mt-6 border-t border-gray-200 pt-6">
           <div class="flex items-center justify-between text-lg font-semibold text-gray-900">
             <span>Total</span>
-            <span data-cart-total><%= money(cartTotal || 0) %></span>
+            <span data-cart-total><%= money(discountedCartTotal || 0) %></span>
           </div>
         </div>
         <div class="mt-6">

@@ -9,6 +9,16 @@ const {
 } = require('../../../../packages/shared');
 const { sendTemplatedEmail } = require('./outbound-email');
 
+const OWNER_STATUS_NOTIFICATION_STATUSES = new Set([
+  'processing',
+  'packed',
+  'shipped',
+  'fulfilled',
+  'delivered',
+  'completed',
+  'cancelled'
+]);
+
 const joinUrl = (baseUrl, relativePath) => {
   try {
     return new URL(relativePath, baseUrl).toString();
@@ -157,6 +167,40 @@ const maybeSend = async ({ db, config, logger, requestId, to, templateKey, templ
   }
 };
 
+const maybeSendMany = async ({ recipients = [], ...options }) => {
+  for (const recipient of recipients) {
+    await maybeSend({
+      ...options,
+      to: recipient
+    });
+  }
+};
+
+const buildAdminOrdersUrl = (config, storeId) => {
+  if (!storeId) {
+    return joinUrl(config.webAppUrl, '/dashboard');
+  }
+
+  return joinUrl(config.webAppUrl, `/admin/orders?store=${encodeURIComponent(storeId)}`);
+};
+
+const buildAdminOrderUrl = (config, storeId, orderId) => {
+  if (!storeId || !orderId) {
+    return buildAdminOrdersUrl(config, storeId);
+  }
+
+  return joinUrl(config.webAppUrl, `/admin/orders/${encodeURIComponent(orderId)}?store=${encodeURIComponent(storeId)}`);
+};
+
+const listStoreNotificationRecipients = ({ user, store }) => {
+  const recipients = [
+    sanitizeEmail(user?.email || ''),
+    sanitizeEmail(store?.support_email || '')
+  ].filter(Boolean);
+
+  return Array.from(new Set(recipients));
+};
+
 const buildOwnerContext = async ({ config, ownerId, requestId, explicitStoreId = null }) => {
   const [user, store] = await Promise.all([
     getPlatformUser({ config, ownerId, requestId }),
@@ -289,16 +333,27 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
 
       const customerSnapshot = order.customer_snapshot || {};
       const orderUrl = joinUrl(buildStorefrontUrl(config, store || {}), '/orders');
+      const adminOrdersUrl = buildAdminOrdersUrl(config, storeId);
+      const adminOrderUrl = buildAdminOrderUrl(config, storeId, order.id);
       const baseData = {
         name: customerSnapshot.name || 'there',
         order_id: order.id,
         amount: Number(order.total || 0),
         currency: order.currency || 'USD',
+        subtotal: Number(order.subtotal || 0),
+        discount_total: Number(order.discount_total || 0),
+        total: Number(order.total || 0),
+        coupon_code: order.coupon_code || '',
+        coupon: order.coupon || null,
         items: Array.isArray(order.items) ? order.items : [],
         shipping_address: order.shipping_address || null,
+        payment_status: order.payment_status || 'pending',
+        customer: customerSnapshot,
         created_at: order.created_at || null,
         updated_at: payload.timestamp || order.updated_at || null,
-        order_url: orderUrl
+        order_url: orderUrl,
+        admin_orders_url: adminOrdersUrl,
+        admin_order_url: adminOrderUrl
       };
 
       if (payload.event === EVENT_NAMES.ORDER_CREATED) {
@@ -319,6 +374,34 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
             event: payload.event,
             order_id: order.id,
             customer_id: Number(order.customer_id || 0)
+          },
+          storeId
+        });
+
+        const ownerUser = store?.owner_id
+          ? await getPlatformUser({
+            config,
+            ownerId: Number(store.owner_id),
+            requestId
+          })
+          : null;
+        const recipients = listStoreNotificationRecipients({ user: ownerUser, store });
+        await maybeSendMany({
+          recipients,
+          db,
+          config,
+          logger,
+          requestId,
+          templateKey: 'store.owner_order_pending',
+          templateData: {
+            ...baseData,
+            placed_at: order.created_at || payload.timestamp
+          },
+          metadata: {
+            kind: 'owner_order_pending',
+            event: payload.event,
+            order_id: order.id,
+            store_id: storeId
           },
           storeId
         });
@@ -363,6 +446,39 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
         },
         storeId
       });
+
+      if (!OWNER_STATUS_NOTIFICATION_STATUSES.has(status)) {
+        return;
+      }
+
+      const ownerUser = store?.owner_id
+        ? await getPlatformUser({
+          config,
+          ownerId: Number(store.owner_id),
+          requestId
+        })
+        : null;
+      const recipients = listStoreNotificationRecipients({ user: ownerUser, store });
+      await maybeSendMany({
+        recipients,
+        db,
+        config,
+        logger,
+        requestId,
+        templateKey: 'store.owner_order_status_changed',
+        templateData: {
+          ...baseData,
+          status
+        },
+        metadata: {
+          kind: 'owner_order_status_changed',
+          event: payload.event,
+          order_id: order.id,
+          store_id: storeId,
+          status
+        },
+        storeId
+      });
     }
   });
 
@@ -392,6 +508,8 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
         }
 
         const customerSnapshot = order.customer_snapshot || {};
+        const adminOrdersUrl = buildAdminOrdersUrl(config, Number(data.store_id));
+        const adminOrderUrl = buildAdminOrderUrl(config, Number(data.store_id), order.id);
         await maybeSend({
           db,
           config,
@@ -406,19 +524,78 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
             order_id: order.id,
             amount: Number(data.amount || order.total || 0),
             currency: data.currency || order.currency || 'USD',
+            subtotal: Number(order.subtotal || 0),
+            discount_total: Number(order.discount_total || 0),
+            total: Number(order.total || 0),
+            coupon_code: order.coupon_code || '',
+            coupon: order.coupon || null,
             items: Array.isArray(order.items) ? order.items : [],
+            customer: customerSnapshot,
+            shipping_address: order.shipping_address || null,
+            payment_status: payload.event === EVENT_NAMES.PAYMENT_SUCCEEDED ? 'paid' : 'failed',
             payment_reference: data.reference || '',
             reference: data.reference || '',
             paid_at: payload.timestamp,
             retry_url: joinUrl(buildStorefrontUrl(config, store || {}), '/checkout'),
             cart_url: joinUrl(buildStorefrontUrl(config, store || {}), '/cart'),
-            order_url: joinUrl(buildStorefrontUrl(config, store || {}), '/orders')
+            order_url: joinUrl(buildStorefrontUrl(config, store || {}), '/orders'),
+            admin_orders_url: adminOrdersUrl,
+            admin_order_url: adminOrderUrl
           },
           metadata: {
             kind: payload.event === EVENT_NAMES.PAYMENT_SUCCEEDED ? 'payment_receipt' : 'payment_failed',
             event: payload.event,
             order_id: Number(data.order_id || 0),
             payment_id: Number(data.payment_id || 0)
+          },
+          storeId: Number(data.store_id)
+        });
+
+        const ownerUser = store?.owner_id
+          ? await getPlatformUser({
+            config,
+            ownerId: Number(store.owner_id),
+            requestId
+          })
+          : null;
+        const recipients = listStoreNotificationRecipients({ user: ownerUser, store });
+        await maybeSendMany({
+          recipients,
+          db,
+          config,
+          logger,
+          requestId,
+          templateKey: payload.event === EVENT_NAMES.PAYMENT_SUCCEEDED
+            ? 'store.owner_order_paid'
+            : 'store.owner_order_payment_failed',
+          templateData: {
+            name: customerSnapshot.name || 'there',
+            order_id: order.id,
+            amount: Number(data.amount || order.total || 0),
+            currency: data.currency || order.currency || 'USD',
+            subtotal: Number(order.subtotal || 0),
+            discount_total: Number(order.discount_total || 0),
+            total: Number(order.total || 0),
+            coupon_code: order.coupon_code || '',
+            coupon: order.coupon || null,
+            items: Array.isArray(order.items) ? order.items : [],
+            customer: customerSnapshot,
+            shipping_address: order.shipping_address || null,
+            payment_status: payload.event === EVENT_NAMES.PAYMENT_SUCCEEDED ? 'paid' : 'failed',
+            payment_reference: data.reference || '',
+            reference: data.reference || '',
+            paid_at: payload.timestamp,
+            created_at: order.created_at || null,
+            updated_at: payload.timestamp || order.updated_at || null,
+            admin_orders_url: adminOrdersUrl,
+            admin_order_url: adminOrderUrl
+          },
+          metadata: {
+            kind: payload.event === EVENT_NAMES.PAYMENT_SUCCEEDED ? 'owner_order_paid' : 'owner_order_payment_failed',
+            event: payload.event,
+            order_id: Number(data.order_id || 0),
+            payment_id: Number(data.payment_id || 0),
+            store_id: Number(data.store_id || 0)
           },
           storeId: Number(data.store_id)
         });

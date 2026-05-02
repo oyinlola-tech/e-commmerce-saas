@@ -195,6 +195,46 @@ const EMAIL_TEMPLATE_CATALOG = [
     required_data: ['name', 'ip_address', 'device', 'location', 'signed_in_at']
   },
   {
+    key: 'store.owner_order_pending',
+    audience: 'platform_user',
+    brand_mode: 'store',
+    category: 'orders',
+    status: TEMPLATE_STATUS.IMPLEMENTED,
+    description: 'Alerts store owners and support inboxes when a new order is created and payment is still pending.',
+    trigger: 'ORDER_CREATED event',
+    required_data: ['order_id', 'amount', 'currency', 'items', 'customer']
+  },
+  {
+    key: 'store.owner_order_paid',
+    audience: 'platform_user',
+    brand_mode: 'store',
+    category: 'payments',
+    status: TEMPLATE_STATUS.IMPLEMENTED,
+    description: 'Alerts store owners and support inboxes when an order payment succeeds.',
+    trigger: 'PAYMENT_SUCCEEDED for order entities',
+    required_data: ['order_id', 'amount', 'currency', 'paid_at', 'customer']
+  },
+  {
+    key: 'store.owner_order_payment_failed',
+    audience: 'platform_user',
+    brand_mode: 'store',
+    category: 'payments',
+    status: TEMPLATE_STATUS.IMPLEMENTED,
+    description: 'Alerts store owners and support inboxes when an order payment fails.',
+    trigger: 'PAYMENT_FAILED for order entities',
+    required_data: ['order_id', 'amount', 'currency', 'customer']
+  },
+  {
+    key: 'store.owner_order_status_changed',
+    audience: 'platform_user',
+    brand_mode: 'store',
+    category: 'orders',
+    status: TEMPLATE_STATUS.IMPLEMENTED,
+    description: 'Alerts store owners and support inboxes when an order moves to a new non-payment fulfillment status.',
+    trigger: 'ORDER_STATUS_CHANGED event',
+    required_data: ['order_id', 'status', 'customer']
+  },
+  {
     key: 'store.order_confirmation',
     audience: 'customer',
     brand_mode: 'store',

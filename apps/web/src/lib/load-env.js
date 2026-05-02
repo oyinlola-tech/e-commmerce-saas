@@ -102,7 +102,6 @@ module.exports = {
   isDevelopment: environment !== 'production',
   port: asNumber(getScopedValue('PORT', 3000), 3000),
   rootDomain,
-  stateSeedOnBoot: asBoolean(getScopedValue('STATE_SEED_ON_BOOT'), false),
   jwtSecret: getScopedValue('JWT_SECRET') || getSecret('JWT_SECRET'),
   jwtAccessTtl: getScopedValue('JWT_ACCESS_TTL', '1h'),
   internalSharedSecret: getScopedValue('INTERNAL_SHARED_SECRET') || getSecret('INTERNAL_SHARED_SECRET'),

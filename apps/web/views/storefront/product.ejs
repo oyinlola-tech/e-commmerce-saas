@@ -40,11 +40,16 @@
           <% } %>
         </div>
         <h1 class="section-title text-4xl font-semibold tracking-tight text-slate-950"><%= productData.name || 'Untitled product' %></h1>
-        <div class="flex items-center gap-3">
-          <span class="section-title text-3xl font-semibold text-slate-950"><%= money(productData.price || 0) %></span>
-          <% if (productData.compare_at_price) { %>
-            <span class="text-lg text-slate-400 line-through"><%= money(productData.compare_at_price) %></span>
-          <% } %>
+        <div>
+          <%- include('../partials/store-price', {
+            product: productData,
+            money,
+            wrapperClass: 'flex flex-wrap items-center gap-3',
+            priceClass: 'section-title text-3xl font-semibold text-slate-950',
+            compareAtClass: 'text-lg text-slate-400 line-through',
+            discountClass: 'inline-flex rounded-full bg-rose-50 px-3 py-1 text-sm font-semibold uppercase tracking-[0.14em] text-rose-700',
+            showLabel: true
+          }) %>
         </div>
         <% if (productData.rating) { %>
           <p class="text-sm font-medium text-slate-500"><%= productData.rating.toFixed(1) %>/5 <% if (productData.review_count) { %>from <%= productData.review_count %> verified customer reviews<% } %></p>
@@ -152,7 +157,15 @@
           <div class="p-5">
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= entry.category %></p>
             <a href="/products/<%= entry.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= entry.name %></a>
-            <p class="mt-3 text-sm font-semibold text-slate-900"><%= money(entry.price || 0) %></p>
+            <div class="mt-3">
+              <%- include('../partials/store-price', {
+                product: entry,
+                money,
+                priceClass: 'text-sm font-semibold text-slate-900',
+                compareAtClass: 'text-xs text-slate-400 line-through',
+                showLabel: true
+              }) %>
+            </div>
           </div>
         </article>
       <% }) %>
@@ -178,7 +191,15 @@
           <div class="p-5">
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= entry.category || 'Collection' %></p>
             <a href="/products/<%= entry.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= entry.name %></a>
-            <p class="mt-3 text-sm font-semibold text-slate-900"><%= money(entry.price || 0) %></p>
+            <div class="mt-3">
+              <%- include('../partials/store-price', {
+                product: entry,
+                money,
+                priceClass: 'text-sm font-semibold text-slate-900',
+                compareAtClass: 'text-xs text-slate-400 line-through',
+                showLabel: true
+              }) %>
+            </div>
           </div>
         </article>
       <% }) %>

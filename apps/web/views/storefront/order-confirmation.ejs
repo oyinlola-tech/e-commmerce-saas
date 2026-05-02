@@ -2,6 +2,7 @@
   const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const orderData = order || {};
   const confirmationItems = Array.isArray(orderData.items) ? orderData.items : [];
+  const discountTotal = Number(orderData.discount_total || 0);
   const nextSteps = [
     orderData.status ? `Order status: ${orderData.status}` : 'Order status: confirmed',
     orderData.payment_status ? `Payment status: ${orderData.payment_status}` : 'Payment status: processing',
@@ -31,6 +32,25 @@
       </div>
       <div>
         <p class="text-sm font-medium text-slate-500">Total</p>
+        <p class="mt-2 text-lg font-semibold text-slate-950"><%= money(orderData.total || 0) %></p>
+      </div>
+    </div>
+
+    <div class="mt-6 grid gap-4 rounded-[2rem] border border-slate-200 p-6 sm:grid-cols-4">
+      <div>
+        <p class="text-sm font-medium text-slate-500">Subtotal</p>
+        <p class="mt-2 text-lg font-semibold text-slate-950"><%= money(orderData.subtotal || 0) %></p>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-slate-500">Discount</p>
+        <p class="mt-2 text-lg font-semibold text-emerald-700"><%= discountTotal > 0 ? `-${money(discountTotal)}` : money(0) %></p>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-slate-500">Coupon</p>
+        <p class="mt-2 text-lg font-semibold text-slate-950"><%= orderData.coupon_code || 'None' %></p>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-slate-500">Final total</p>
         <p class="mt-2 text-lg font-semibold text-slate-950"><%= money(orderData.total || 0) %></p>
       </div>
     </div>

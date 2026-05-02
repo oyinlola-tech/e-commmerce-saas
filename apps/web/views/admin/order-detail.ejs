@@ -2,6 +2,7 @@
   const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
   const orderData = order || {};
   const orderItems = Array.isArray(orderData.items) ? orderData.items : [];
+  const discountTotal = Number(orderData.discount_total || 0);
 %>
 <section class="space-y-8">
   <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -27,6 +28,10 @@
           <div class="rounded-2xl bg-gray-50 p-4">
             <p class="text-xs uppercase tracking-[0.2em] text-gray-400">Shipping address</p>
             <p class="mt-2 leading-6 text-gray-700"><%= orderData.customer && orderData.customer.address ? orderData.customer.address : 'Address pending at checkout' %></p>
+          </div>
+          <div class="rounded-2xl bg-gray-50 p-4">
+            <p class="text-xs uppercase tracking-[0.2em] text-gray-400">Coupon</p>
+            <p class="mt-2 font-semibold text-gray-900"><%= orderData.coupon_code || 'None' %></p>
           </div>
         </div>
       </section>
@@ -83,6 +88,18 @@
         <div class="flex items-center justify-between text-sm text-gray-600">
           <span>Order date</span>
           <span><%= orderData.created_at ? new Date(orderData.created_at).toLocaleString() : 'Just now' %></span>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
+          <span>Subtotal</span>
+          <span><%= money(orderData.subtotal || 0) %></span>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
+          <span>Discount</span>
+          <span class="<%= discountTotal > 0 ? 'font-semibold text-emerald-700' : '' %>"><%= discountTotal > 0 ? `-${money(discountTotal)}` : money(0) %></span>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
+          <span>Payment status</span>
+          <span><%= orderData.payment_status || 'pending' %></span>
         </div>
         <div class="mt-4 flex items-center justify-between text-lg font-semibold text-gray-900">
           <span>Total</span>

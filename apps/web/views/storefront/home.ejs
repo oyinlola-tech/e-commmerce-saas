@@ -83,11 +83,8 @@
                 <div class="space-y-2 p-5">
                   <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= item.category || storeThemeData.storeTypeLabel || storeThemeData.typeLabel || 'Featured' %></p>
                   <h2 class="section-title text-xl font-semibold text-slate-950"><%= item.name %></h2>
-                  <div class="flex items-center gap-2">
-                    <span class="text-base font-semibold text-slate-950"><%= money(item.price || 0) %></span>
-                    <% if (item.compare_at_price) { %>
-                      <span class="text-sm text-slate-400 line-through"><%= money(item.compare_at_price) %></span>
-                    <% } %>
+                  <div class="mt-3">
+                    <%- include('../partials/store-price', { product: item, money, showLabel: true }) %>
                   </div>
                 </div>
               </article>
@@ -202,11 +199,8 @@
             <div>
               <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= product.category || storeThemeData.storeTypeLabel || storeThemeData.typeLabel || 'Collection' %></p>
               <a href="/products/<%= product.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= product.name %></a>
-              <div class="mt-3 flex items-center gap-2">
-                <span class="text-base font-semibold text-slate-950"><%= money(product.price || 0) %></span>
-                <% if (product.compare_at_price) { %>
-                  <span class="text-sm text-slate-400 line-through"><%= money(product.compare_at_price) %></span>
-                <% } %>
+              <div class="mt-3">
+                <%- include('../partials/store-price', { product, money, showLabel: true }) %>
               </div>
             </div>
             <button type="button" data-add-to-cart="<%= product.id %>" data-quantity="1" class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-dark">
@@ -242,7 +236,15 @@
           <div class="p-5">
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"><%= product.category || 'Collection' %></p>
             <a href="/products/<%= product.slug %>" class="mt-2 block text-lg font-semibold text-slate-950 transition hover:text-primary"><%= product.name %></a>
-            <p class="mt-3 text-sm font-semibold text-slate-900"><%= money(product.price || 0) %></p>
+            <div class="mt-3">
+              <%- include('../partials/store-price', {
+                product,
+                money,
+                priceClass: 'text-sm font-semibold text-slate-900',
+                compareAtClass: 'text-xs text-slate-400 line-through',
+                showLabel: true
+              }) %>
+            </div>
           </div>
         </article>
       <% }) %>

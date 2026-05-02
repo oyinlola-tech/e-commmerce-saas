@@ -565,6 +565,102 @@ const renderAddressPanel = ({ brand, address, title }) => {
   });
 };
 
+const normalizeCouponSummary = (coupon = null) => {
+  if (!coupon || typeof coupon !== 'object' || Array.isArray(coupon)) {
+    return null;
+  }
+
+  const code = sanitizeDisplayValue(coupon.code || '', 40);
+  const description = sanitizeDisplayValue(coupon.description || '', 180);
+  if (!code && !description) {
+    return null;
+  }
+
+  return {
+    code,
+    description
+  };
+};
+
+const buildOrderTotalsRows = (templateData = {}) => {
+  const currency = templateData.currency || 'USD';
+  const rows = [];
+  const coupon = normalizeCouponSummary(
+    templateData.coupon || (templateData.coupon_code ? { code: templateData.coupon_code } : null)
+  );
+  const discountTotal = Number(templateData.discount_total || 0);
+
+  if (hasContent(templateData.subtotal)) {
+    rows.push({
+      label: 'Subtotal',
+      value: formatMoney(templateData.subtotal || 0, currency)
+    });
+  }
+
+  if (discountTotal > 0) {
+    rows.push({
+      label: coupon?.code ? `Discount (${coupon.code})` : 'Discount',
+      value: `-${formatMoney(discountTotal, currency)}`
+    });
+  }
+
+  rows.push({
+    label: 'Total',
+    value: formatMoney(templateData.amount ?? templateData.total ?? 0, currency)
+  });
+
+  return {
+    rows,
+    coupon
+  };
+};
+
+const renderOrderTotalsPanel = ({ brand, templateData, title = 'Pricing summary', eyebrow = 'Totals' }) => {
+  const { rows, coupon } = buildOrderTotalsRows(templateData);
+  if (!rows.length) {
+    return '';
+  }
+
+  return renderPanel({
+    brand,
+    title,
+    eyebrow,
+    bodyHtml: `
+      ${renderKeyValueRows(rows)}
+      ${coupon?.description ? `<p style="margin:14px 0 0;font-size:13px;line-height:1.7;color:${DEFAULT_MUTED_TEXT_COLOR}">${coupon.description}</p>` : ''}
+    `
+  });
+};
+
+const buildOrderTotalsTextLines = (templateData = {}) => {
+  const { rows, coupon } = buildOrderTotalsRows(templateData);
+  return rows.map((row) => `${row.label}: ${row.value}`)
+    .concat(coupon?.description ? [`Coupon note: ${coupon.description}`] : []);
+};
+
+const renderCustomerSummaryPanel = ({ brand, customer, title = 'Customer details', eyebrow = 'Customer' }) => {
+  if (!customer || typeof customer !== 'object' || Array.isArray(customer)) {
+    return '';
+  }
+
+  const rows = [
+    { label: 'Name', value: sanitizeDisplayValue(customer.name || '', 140) },
+    { label: 'Email', value: sanitizeDisplayValue(customer.email || '', 180) },
+    { label: 'Phone', value: sanitizeDisplayValue(customer.phone || '', 60) }
+  ].filter((entry) => entry.value);
+
+  if (!rows.length) {
+    return '';
+  }
+
+  return renderPanel({
+    brand,
+    title,
+    eyebrow,
+    bodyHtml: renderKeyValueRows(rows)
+  });
+};
+
 const renderShell = ({ brand, preheader, eyebrow, title, intro, bodyHtml, footerNote, actions = [] }) => {
   const safePreheader = sanitizeDisplayValue(preheader, 180);
   const safeEyebrow = sanitizeDisplayValue(eyebrow, 80);
@@ -1355,6 +1451,218 @@ const templateRenderers = {
       ])
     };
   },
+  'store.owner_order_pending': async ({ brand, templateData, config }) => {
+    const orderId = sanitizeDisplayValue(templateData.order_id || 'Pending', 60, 'Pending');
+    const customerName = sanitizeDisplayValue(templateData.customer?.name || templateData.name || 'Customer', 140, 'Customer');
+    const adminOrderUrl = sanitizeOptionalUrl(templateData.admin_order_url || joinUrl(config.webAppUrl, '/dashboard'));
+    const adminOrdersUrl = sanitizeOptionalUrl(templateData.admin_orders_url || joinUrl(config.webAppUrl, '/dashboard'));
+    const lineItems = normalizeLineItems(templateData.items);
+
+    return {
+      subject: `New pending order at ${brand.storeName}: ${orderId}`,
+      html: renderShell({
+        brand,
+        preheader: `Order ${orderId} needs review in the store workspace.`,
+        eyebrow: 'Order alert',
+        title: 'A new order just came in',
+        intro: `A customer placed a new order at ${brand.storeName}. Review the order details, confirm the payment state, and keep fulfillment moving while purchase intent is fresh.`,
+        actions: [
+          { label: 'Open order', href: adminOrderUrl, tone: 'primary' },
+          { label: 'All orders', href: adminOrdersUrl, tone: 'secondary' }
+        ],
+        bodyHtml: `
+          ${renderHighlightCards([
+            { label: 'Order', value: `#${orderId}`, note: 'New order record created.' },
+            { label: 'Customer', value: customerName, note: sanitizeDisplayValue(templateData.customer?.email || '', 180) || 'Customer contact is on file.' },
+            { label: 'Placed', value: formatDateTime(templateData.placed_at || templateData.created_at), note: 'Review payment and fulfillment timing next.' }
+          ], brand)}
+          ${renderOrderTotalsPanel({ brand, templateData, title: 'Order totals' })}
+          ${renderCustomerSummaryPanel({ brand, customer: templateData.customer })}
+          ${renderAddressPanel({
+            brand,
+            address: templateData.shipping_address,
+            title: 'Delivery address'
+          })}
+          ${renderLineItems(lineItems, templateData.currency || 'USD', brand)}
+          ${renderNotice({
+            brand,
+            title: 'Recommended next step',
+            body: 'Confirm whether payment is still pending or already settled, then keep the order visible in your fulfillment queue so the customer gets a fast follow-through.',
+            tone: 'warning'
+          })}
+        `,
+        footerNote: 'This alert is sent as soon as the order record is created so store operators can respond quickly.'
+      }),
+      text: buildTextBlock([
+        `New order at ${brand.storeName}.`,
+        '',
+        `Order: #${orderId}`,
+        `Customer: ${customerName}`,
+        `Placed: ${formatDateTime(templateData.placed_at || templateData.created_at)}`,
+        ...buildOrderTotalsTextLines(templateData),
+        '',
+        ...lineItems.map((item) => `- ${item.name} x${item.quantity}: ${formatMoney(item.total, templateData.currency || 'USD')}`),
+        ...(formatAddress(templateData.shipping_address) ? ['', `Delivery address: ${formatAddress(templateData.shipping_address)}`] : []),
+        '',
+        `Open order: ${adminOrderUrl}`,
+        `All orders: ${adminOrdersUrl}`
+      ])
+    };
+  },
+  'store.owner_order_paid': async ({ brand, templateData, config }) => {
+    const orderId = sanitizeDisplayValue(templateData.order_id || 'Paid order', 60, 'Paid order');
+    const customerName = sanitizeDisplayValue(templateData.customer?.name || templateData.name || 'Customer', 140, 'Customer');
+    const adminOrderUrl = sanitizeOptionalUrl(templateData.admin_order_url || joinUrl(config.webAppUrl, '/dashboard'));
+    const adminOrdersUrl = sanitizeOptionalUrl(templateData.admin_orders_url || joinUrl(config.webAppUrl, '/dashboard'));
+    const paymentReference = sanitizeDisplayValue(templateData.payment_reference || templateData.reference || '', 140);
+    const lineItems = normalizeLineItems(templateData.items);
+
+    return {
+      subject: `Paid order at ${brand.storeName}: ${orderId}`,
+      html: renderShell({
+        brand,
+        preheader: `Payment cleared for order ${orderId}.`,
+        eyebrow: 'Payment cleared',
+        title: 'Payment was received successfully',
+        intro: `Order ${orderId} is now paid and ready for the next fulfillment step. This is a good time to pick, pack, or hand off the order so the customer experience stays strong.`,
+        actions: [
+          { label: 'Open order', href: adminOrderUrl, tone: 'primary' },
+          { label: 'All orders', href: adminOrdersUrl, tone: 'secondary' }
+        ],
+        bodyHtml: `
+          ${renderHighlightCards([
+            { label: 'Order', value: `#${orderId}`, note: 'Payment confirmed.' },
+            { label: 'Amount paid', value: formatMoney(templateData.amount || 0, templateData.currency || 'USD'), note: paymentReference || 'Reference available in the payment record.' },
+            { label: 'Customer', value: customerName, note: sanitizeDisplayValue(templateData.customer?.email || '', 180) || 'Customer contact is on file.' }
+          ], brand)}
+          ${renderOrderTotalsPanel({ brand, templateData, title: 'Paid totals' })}
+          ${renderCustomerSummaryPanel({ brand, customer: templateData.customer })}
+          ${renderAddressPanel({
+            brand,
+            address: templateData.shipping_address,
+            title: 'Delivery address'
+          })}
+          ${renderLineItems(lineItems, templateData.currency || 'USD', brand)}
+          ${renderNotice({
+            brand,
+            title: 'Fulfillment cue',
+            body: 'Inventory is already reserved for this order, so the main job now is moving it into packing and shipment without delay.',
+            tone: 'success'
+          })}
+        `,
+        footerNote: 'This email confirms the checkout payment event succeeded for a store order.'
+      }),
+      text: buildTextBlock([
+        `Payment received for ${brand.storeName} order #${orderId}.`,
+        `Customer: ${customerName}`,
+        `Paid at: ${formatDateTime(templateData.paid_at)}`,
+        ...(paymentReference ? [`Reference: ${paymentReference}`] : []),
+        ...buildOrderTotalsTextLines(templateData),
+        '',
+        ...lineItems.map((item) => `- ${item.name} x${item.quantity}: ${formatMoney(item.total, templateData.currency || 'USD')}`),
+        '',
+        `Open order: ${adminOrderUrl}`,
+        `All orders: ${adminOrdersUrl}`
+      ])
+    };
+  },
+  'store.owner_order_payment_failed': async ({ brand, templateData, config }) => {
+    const orderId = sanitizeDisplayValue(templateData.order_id || 'Pending order', 60, 'Pending order');
+    const customerName = sanitizeDisplayValue(templateData.customer?.name || templateData.name || 'Customer', 140, 'Customer');
+    const adminOrderUrl = sanitizeOptionalUrl(templateData.admin_order_url || joinUrl(config.webAppUrl, '/dashboard'));
+    const adminOrdersUrl = sanitizeOptionalUrl(templateData.admin_orders_url || joinUrl(config.webAppUrl, '/dashboard'));
+    const lineItems = normalizeLineItems(templateData.items);
+
+    return {
+      subject: `Payment failed for ${brand.storeName} order ${orderId}`,
+      html: renderShell({
+        brand,
+        preheader: `Payment failed for order ${orderId}.`,
+        eyebrow: 'Payment issue',
+        title: 'An order needs payment follow-up',
+        intro: `Payment did not complete for order ${orderId}. Review the order, decide whether outreach is needed, and keep the customer from slipping away if recovery is possible.`,
+        actions: [
+          { label: 'Open order', href: adminOrderUrl, tone: 'primary' },
+          { label: 'All orders', href: adminOrdersUrl, tone: 'secondary' }
+        ],
+        bodyHtml: `
+          ${renderHighlightCards([
+            { label: 'Order', value: `#${orderId}`, note: 'Payment did not go through.' },
+            { label: 'Attempted amount', value: formatMoney(templateData.amount || 0, templateData.currency || 'USD'), note: sanitizeDisplayValue(templateData.payment_reference || templateData.reference || '', 140) || 'Reference may be available from the payment service.' },
+            { label: 'Customer', value: customerName, note: sanitizeDisplayValue(templateData.customer?.email || '', 180) || 'Customer contact is on file.' }
+          ], brand)}
+          ${renderOrderTotalsPanel({ brand, templateData, title: 'Attempted totals' })}
+          ${renderCustomerSummaryPanel({ brand, customer: templateData.customer })}
+          ${renderLineItems(lineItems, templateData.currency || 'USD', brand)}
+          ${renderNotice({
+            brand,
+            title: 'Recovery suggestion',
+            body: 'If the customer is important to the store, consider following up with a payment reminder or alternate payment instructions while the order intent is still recent.',
+            tone: 'danger'
+          })}
+        `,
+        footerNote: 'This alert is sent immediately after the payment failure event for order recovery visibility.'
+      }),
+      text: buildTextBlock([
+        `Payment failed for ${brand.storeName} order #${orderId}.`,
+        `Customer: ${customerName}`,
+        `Attempted amount: ${formatMoney(templateData.amount || 0, templateData.currency || 'USD')}`,
+        ...buildOrderTotalsTextLines(templateData),
+        '',
+        ...lineItems.map((item) => `- ${item.name} x${item.quantity}: ${formatMoney(item.total, templateData.currency || 'USD')}`),
+        '',
+        `Open order: ${adminOrderUrl}`,
+        `All orders: ${adminOrdersUrl}`
+      ])
+    };
+  },
+  'store.owner_order_status_changed': async ({ brand, templateData, config }) => {
+    const orderId = sanitizeDisplayValue(templateData.order_id || 'Order', 60, 'Order');
+    const statusLabel = titleCase(templateData.status || 'updated');
+    const adminOrderUrl = sanitizeOptionalUrl(templateData.admin_order_url || joinUrl(config.webAppUrl, '/dashboard'));
+    const adminOrdersUrl = sanitizeOptionalUrl(templateData.admin_orders_url || joinUrl(config.webAppUrl, '/dashboard'));
+    const customerName = sanitizeDisplayValue(templateData.customer?.name || templateData.name || 'Customer', 140, 'Customer');
+
+    return {
+      subject: `${brand.storeName} order ${orderId} is now ${statusLabel.toLowerCase()}`,
+      html: renderShell({
+        brand,
+        preheader: `Order ${orderId} status changed to ${statusLabel.toLowerCase()}.`,
+        eyebrow: 'Status update',
+        title: 'An order status changed',
+        intro: `Order ${orderId} was updated to ${statusLabel.toLowerCase()}. This notification helps keep store leadership and support inboxes aligned on fulfillment progress.`,
+        actions: [
+          { label: 'Open order', href: adminOrderUrl, tone: 'primary' },
+          { label: 'All orders', href: adminOrdersUrl, tone: 'secondary' }
+        ],
+        bodyHtml: `
+          ${renderHighlightCards([
+            { label: 'Order', value: `#${orderId}`, note: 'Status changed in the admin workspace.' },
+            { label: 'Status', value: statusLabel, note: `Payment: ${titleCase(templateData.payment_status || 'pending')}` },
+            { label: 'Customer', value: customerName, note: sanitizeDisplayValue(templateData.customer?.email || '', 180) || 'Customer contact is on file.' }
+          ], brand)}
+          ${renderOrderTotalsPanel({ brand, templateData, title: 'Order totals' })}
+          ${renderNotice({
+            brand,
+            title: 'Keep momentum',
+            body: 'Use this update to confirm the next operational handoff is clear, especially when support, fulfillment, and ownership do not share the same inbox.',
+            tone: 'primary'
+          })}
+        `,
+        footerNote: 'This email tracks non-payment order status changes for store operators.'
+      }),
+      text: buildTextBlock([
+        `${brand.storeName} order #${orderId} is now ${statusLabel.toLowerCase()}.`,
+        `Customer: ${customerName}`,
+        `Updated at: ${formatDateTime(templateData.updated_at)}`,
+        `Payment status: ${titleCase(templateData.payment_status || 'pending')}`,
+        ...buildOrderTotalsTextLines(templateData),
+        '',
+        `Open order: ${adminOrderUrl}`,
+        `All orders: ${adminOrdersUrl}`
+      ])
+    };
+  },
   'store.customer_password_reset_otp': async ({ brand, templateData }) => {
     return renderOtpEmail({
       brand,
@@ -1448,6 +1756,7 @@ const templateRenderers = {
             { label: 'Placed', value: formatDateTime(templateData.placed_at || templateData.created_at), note: 'Recorded in your order history.' }
           ], brand)}
           ${renderLineItems(lineItems, templateData.currency || 'USD', brand)}
+          ${renderOrderTotalsPanel({ brand, templateData, title: 'Order totals' })}
           ${renderAddressPanel({
             brand,
             address: templateData.shipping_address,
@@ -1470,6 +1779,7 @@ const templateRenderers = {
         `Placed: ${formatDateTime(templateData.placed_at || templateData.created_at)}`,
         '',
         ...lineItems.map((item) => `- ${item.name} x${item.quantity}: ${formatMoney(item.total, templateData.currency || 'USD')}`),
+        ...buildOrderTotalsTextLines(templateData),
         ...(formatAddress(templateData.shipping_address) ? ['', `Delivery details: ${formatAddress(templateData.shipping_address)}`] : []),
         '',
         `View orders: ${orderUrl}`
@@ -1499,6 +1809,7 @@ const templateRenderers = {
             { label: 'Paid at', value: formatDateTime(templateData.paid_at), note: sanitizeDisplayValue(templateData.payment_reference || templateData.reference || '', 120) || 'Payment reference available on request.' }
           ], brand)}
           ${renderLineItems(items, templateData.currency || 'USD', brand)}
+          ${renderOrderTotalsPanel({ brand, templateData, title: 'Payment totals' })}
         `,
         footerNote: 'Keep this receipt for your records if you track purchases manually.'
       }),
@@ -1511,6 +1822,7 @@ const templateRenderers = {
         `Reference: ${sanitizeDisplayValue(templateData.payment_reference || templateData.reference || '', 120) || 'Available on request'}`,
         '',
         ...items.map((item) => `- ${item.name} x${item.quantity}: ${formatMoney(item.total, templateData.currency || 'USD')}`),
+        ...buildOrderTotalsTextLines(templateData),
         '',
         `View orders: ${orderUrl}`
       ])

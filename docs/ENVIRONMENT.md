@@ -109,8 +109,7 @@ The SSR app reads `WEB_*` first, then `WEB_APP_*`, then falls back to unscoped s
 | --- | --- | --- |
 | `WEB_PORT` | `3000` | Web app port |
 | `PLATFORM_ROOT_DOMAIN` or `APP_ROOT_DOMAIN` | `localhost` | Hostname used to distinguish platform versus storefront routes |
-| `STATE_SEED_ON_BOOT` | `false` | Toggles demo state seeding |
-| `JWT_SECRET` | Generated in development, required in production | SSR demo token secret |
+| `JWT_SECRET` | Generated in development, required in production | JWT secret used by the SSR app for signed auth flows |
 | `INTERNAL_SHARED_SECRET` | Generated in development, required in production | Shared signing secret when the web app talks to services directly |
 | `COOKIE_SECRET` | Generated in development, required in production | Secret for signed SSR cookies |
 | `CSRF_SECRET` | Generated in development, required in production | Secret used by the double-submit CSRF middleware |
@@ -175,4 +174,4 @@ For the full local stack, `npm start`, `npm run start:once`, and `npm run dev` s
 
 For the browser-facing layer only, use `npm run start:browser` or `npm run dev:browser`.
 
-If you only need interface previews, the web app can be run by itself with `npm run start:frontend` or `npm run dev:frontend` because it uses local state helpers instead of the service mesh.
+`npm run start:frontend` and `npm run dev:frontend` start only the SSR process. They are useful for view-layer and asset work, but most commerce flows still need the gateway and backend services running.

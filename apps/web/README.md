@@ -14,16 +14,17 @@ This package is not free to use.
 - Entry point: `app.js`
 - Views: `views/`
 - Public assets: `public/`
-- Demo state helpers: `src/lib/state.js`
+- App bootstrap: `src/create-app.js`
 
 ## Main Responsibilities
 
 - Host-based storefront versus platform rendering.
 - Owner dashboard, store admin, and platform admin screens.
-- Local demo cart, order, customer, support, and incident flows.
+- Service-backed storefront catalog, cart, checkout, account, and owner flows.
 - Currency selection and display helpers.
+- Presentation metadata overlays for store and product content.
 
 ## Notes
 
-- This app currently behaves like a prototype because it relies on local state helpers rather than the service mesh.
+- The app renders the browser experience but depends on the gateway and backend services for most commerce flows.
 - Environment details live in [../../docs/ENVIRONMENT.md](../../docs/ENVIRONMENT.md).
