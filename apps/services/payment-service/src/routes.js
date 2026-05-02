@@ -67,7 +67,7 @@ const serializeProviderConfig = (row) => ({
   has_secret_key: hasConfiguredStoreSecret(row)
 });
 
-const buildProviderPayloads = ({ amount, currency, reference, storeId, configs, gatewayUrl, paymentScope }) => {
+const buildProviderPayloads = ({ configs, paymentScope }) => {
   const platformProviderConfigs = getPlatformProviderConfigs();
 
   return PAYMENT_PROVIDERS.flatMap((provider) => {
@@ -87,8 +87,7 @@ const buildProviderPayloads = ({ amount, currency, reference, storeId, configs, 
     return {
       provider,
       inline: true,
-      public_key: publicKey,
-      checkout_url: `${gatewayUrl}/payments/mock/${provider}/${reference}?store_id=${storeId || ''}&amount=${amount}&currency=${currency}&scope=${paymentScope}`
+      public_key: publicKey
     };
   });
 };
@@ -484,12 +483,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       ? await db.query('SELECT * FROM payment_provider_configs WHERE store_id = ?', [storeId])
       : [];
     const availableProviders = buildProviderPayloads({
-      amount,
-      currency,
-      reference,
-      storeId,
       configs,
-      gatewayUrl: config.gatewayUrl,
       paymentScope
     });
     const sanitizedMetadata = sanitizeJsonObject(req.body.metadata || {});
@@ -797,27 +791,6 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     return processWebhook({ req, res, db, bus, config });
   }));
 
-  app.post('/payments/mock/:provider/:reference', validate([
-    param('provider').isIn(PAYMENT_PROVIDERS),
-    commonRules.optionalPlainText('status', 40)
-  ]), asyncHandler(async (req, res) => {
-    const payment = await getPaymentByReference(db, req.params.reference);
-    if (!payment) {
-      return res.status(404).json({ error: 'Payment not found.' });
-    }
-
-    const normalizedStatus = normalizePaymentStatus(req.query.status || 'success');
-    await persistPaymentOutcome({
-      db,
-      bus,
-      payment,
-      normalizedStatus,
-      providerReference: payment.reference,
-      providerSessionId: payment.provider_session_id
-    });
-
-    return res.json({ received: true });
-  }));
 };
 
 module.exports = {

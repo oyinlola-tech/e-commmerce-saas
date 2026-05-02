@@ -227,8 +227,7 @@ const createGatewayOpenApiSpec = (config) => {
           properties: {
             provider: { type: 'string' },
             inline: { type: 'boolean' },
-            public_key: { type: 'string', nullable: true },
-            checkout_url: { type: 'string', format: 'uri' }
+            public_key: { type: 'string', nullable: true }
           }
         }
       }
@@ -1781,36 +1780,6 @@ const createGatewayOpenApiSpec = (config) => {
           }
         }
       },
-      '/payments/mock/{provider}/{reference}': {
-        post: {
-          tags: ['Payments'],
-          summary: 'Trigger the mock payment callback flow',
-          parameters: [
-            {
-              name: 'provider',
-              in: 'path',
-              required: true,
-              schema: { type: 'string', enum: ['paystack', 'flutterwave'] }
-            },
-            {
-              name: 'reference',
-              in: 'path',
-              required: true,
-              schema: { type: 'string' }
-            },
-            {
-              name: 'status',
-              in: 'query',
-              schema: { type: 'string', example: 'success' }
-            }
-          ],
-          responses: {
-            '200': {
-              description: 'Mock callback processed'
-            }
-          }
-        }
-      }
     }
   };
 };

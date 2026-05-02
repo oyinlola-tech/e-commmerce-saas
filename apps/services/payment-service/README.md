@@ -25,4 +25,4 @@ This package is not free to use.
 ## Notes
 
 - Supported providers are currently `paystack` and `flutterwave`.
-- The service includes a mock webhook path for local testing.
+- The service accepts provider webhooks and records verified payment outcomes.

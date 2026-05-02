@@ -23,7 +23,7 @@ This package is not free to use.
 - Swagger and OpenAPI delivery through `/docs` and `/openapi.json`.
 - Gateway metrics exposure through `/metrics`.
 - Proxying for platform APIs, storefront APIs, and reserved socket paths.
-- Public payment callback and mock-checkout proxying through `/payments/*`.
+- Public payment webhook proxying through `/payments/*`.
 
 ## Notes
 

@@ -30,7 +30,7 @@ This system is not free to use.
 - `POST /api/checkout` - Checkout via `order-service`.
 - `GET /api/orders*` - Customer order lookup via `order-service`.
 - `ANY /api/chats*` - Reserved storefront chat proxy.
-- `ANY /payments/*` - Public-facing mock/provider callback and webhook proxy to `payment-service`.
+- `ANY /payments/*` - Public-facing payment webhook proxy to `payment-service`.
 
 ## User Service
 
@@ -102,7 +102,6 @@ This system is not free to use.
 - `GET /payments/config` - Lists provider config for the signed store.
 - `POST /payments/config` - Upserts one provider config for the signed store and encrypts the secret key.
 - `POST /payments/webhooks/:provider` - Accepts webhook payloads, updates payment status, and publishes success or failure events with payment scope metadata.
-- `POST /payments/mock/:provider/:reference` - Convenience path that routes into the webhook flow for local simulation.
 
 ## Billing Service
 

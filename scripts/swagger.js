@@ -9,7 +9,6 @@ const { createGatewayOpenApiSpec } = require('../apps/gateway/src/openapi');
 const gatewayAppRoot = path.join(__dirname, '..', 'apps', 'gateway');
 const outputDirectory = path.join(__dirname, '..', 'docs', 'swagger');
 const outputPath = path.join(outputDirectory, 'gateway.openapi.json');
-const httpCollectionPath = path.join(__dirname, '..', 'tests', 'aisle-api.http');
 
 const gatewayConfig = createServiceConfig({
   appRoot: gatewayAppRoot,
@@ -51,7 +50,6 @@ const startSwaggerServer = () => {
       service: 'swagger-preview',
       status: 'ok',
       exportedSpec: exportedPath,
-      httpCollection: '/tests/aisle-api.http',
       gatewayDocs: `${gatewayConfig.gatewayUrl}/docs`
     });
   });
@@ -66,10 +64,6 @@ const startSwaggerServer = () => {
       webAppUrl: gatewayConfig.webAppUrl,
       services: gatewayConfig.serviceUrls
     });
-  });
-
-  app.get('/tests/aisle-api.http', (req, res) => {
-    return res.type('text/plain').send(fs.readFileSync(httpCollectionPath, 'utf8'));
   });
 
   app.use('/', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
@@ -91,12 +85,10 @@ const startSwaggerServer = () => {
   app.listen(swaggerPort, () => {
     console.log(`Swagger playground available at http://127.0.0.1:${swaggerPort}`);
     console.log(`OpenAPI spec exported to ${exportedPath}`);
-    console.log(`HTTP request collection available at http://127.0.0.1:${swaggerPort}/tests/aisle-api.http`);
     console.log(`Resolved service map available at http://127.0.0.1:${swaggerPort}/service-map`);
     console.log('Use the server selector in Swagger UI:');
     console.log('- Platform APIs: http://localhost:4000');
     console.log('- Storefront APIs: http://{storeSubdomain}.localhost:4000');
-    console.log('For direct request samples, open tests/aisle-api.http in your editor.');
     console.log('For internal-only endpoints, use: npm run api:request -- --service <name> --path <route>');
   });
 };

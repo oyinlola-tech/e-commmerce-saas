@@ -151,7 +151,6 @@ The SSR app reads `WEB_*` first, then `WEB_APP_*`, then falls back to unscoped s
 ## API Testing Notes
 
 - `npm run swagger` starts a standalone Swagger UI preview on `http://127.0.0.1:4015` and exports `docs/swagger/gateway.openapi.json`.
-- `tests/aisle-api.http` contains ready-made gateway requests for health, auth, compliance, billing, customer, cart, checkout, and owner flows.
 - `npm run api:request -- --service <name> --path <route>` sends signed internal requests directly to a service when the route is intentionally not gateway-exposed.
 - If you change `SWAGGER_PORT`, the standalone preview URLs move with it, but the gateway-hosted docs remain at `/docs` on the gateway base URL.
 
@@ -160,7 +159,7 @@ The SSR app reads `WEB_*` first, then `WEB_APP_*`, then falls back to unscoped s
 - MySQL is required for implemented services.
 - RabbitMQ is optional but enables event-driven automation.
 - Redis now backs cache plus gateway and shared-service rate limiting when available, with an in-memory fallback for local development.
-- The payment service still uses mock checkout/webhook URLs, but now supports both storefront payments and platform subscription billing flows.
+- The payment service supports provider configuration, payment verification, and webhook-driven status updates for storefront and subscription billing flows.
 - For first-time environments, the implemented services bootstrap their own tables and indexes from `apps/services/*/src/schema.js` when they start.
 
 ## Recommended Local Startup Order

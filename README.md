@@ -28,7 +28,7 @@ See [LICENSE.md](LICENSE.md), [NOTICE.md](NOTICE.md), and [SECURITY.md](SECURITY
 
 | Path | Role |
 | --- | --- |
-| `apps/web` | Express SSR storefront, store admin, and platform admin prototype |
+| `apps/web` | Express SSR storefront, store owner admin, and platform admin application |
 | `apps/gateway` | API gateway, tenant resolver, and reverse proxy |
 | `apps/services/*` | Domain microservices grouped by bounded context |
 | `packages/shared` | Shared runtime package used by gateway and services |
@@ -75,7 +75,7 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 
 | Component | Path | Default port | Status | Responsibility |
 | --- | --- | --- | --- | --- |
-| Web app | `apps/web` | `3000` | Implemented | SSR storefront, owner dashboard, and platform admin prototype |
+| Web app | `apps/web` | `3000` | Implemented | SSR storefront, store owner admin, and platform admin UI |
 | Gateway | `apps/gateway` | `4000` | Implemented | Host-aware reverse proxy and auth context bridge |
 | User service | `apps/services/user-service` | `4101` | Implemented | Platform registration, login, and staff directory |
 | Store service | `apps/services/store-service` | `4102` | Implemented | Store provisioning, lookup, domain resolution, and settings |
@@ -182,7 +182,7 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | `BILLING_SERVICE_URL` | `http://127.0.0.1:4109` | Billing service URL |
 | `SUPPORT_SERVICE_URL` | `http://127.0.0.1:4110` | Planned support service URL |
 | `CHAT_SERVICE_URL` | `http://127.0.0.1:4111` | Planned chat service URL |
-| `NOTIFICATION_SERVICE_URL` | `http://127.0.0.1:4112` | Planned notification service URL |
+| `NOTIFICATION_SERVICE_URL` | `http://127.0.0.1:4112` | Notification service URL |
 
 ### Web app variables
 
@@ -191,7 +191,6 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 | `NODE_ENV` | `development` | Runtime mode |
 | `PORT` | `3000` | SSR web port |
 | `PLATFORM_ROOT_DOMAIN` or `APP_ROOT_DOMAIN` | `localhost` | Hostname used to distinguish platform vs storefront requests |
-| `STATE_SEED_ON_BOOT` | `false` | Demo state boot seeding flag |
 | `COOKIE_SECRET` | Generated in development, required in production | Signed cookie secret for SSR state cookies |
 | `CSRF_SECRET` | Generated in development, required in production | Double-submit CSRF secret for SSR forms |
 | `IP_GEOLOCATION_API_BASE` | `https://ipapi.co` | Geolocation API base URL |
@@ -215,8 +214,8 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 
 - Store owners can upload a logo during signup or store settings updates, and the asset is served from `/logos/*` with long-lived cache headers.
 - The storefront now includes a working wishlist flow, lazy-loaded commerce images, cached browser currency context, quick search, category and tag discovery, recently viewed products, and buy-again order actions.
-- New demo merchandising templates and sample data are available for skincare, haircare, women-focused fashion, and unisex lifestyle storefronts so the customer experience feels more intentional for those categories.
-- Platform admin pages, owner dashboards, and error pages are wired to usable placeholder data so demo navigation does not dead-end.
+- Store and product presentation overrides are persisted in `apps/web/src/data/presentation-state.json`, but the main web app code no longer ships bundled seed customers, orders, carts, or product datasets.
+- Platform admin areas that are not backed by real cross-tenant workflows stay as honest placeholders instead of pretending to be live operational data.
 
 ## How to Run the Repository
 
@@ -248,7 +247,7 @@ The Swagger preview also exposes:
 
 ### Minimal UI preview
 
-If you only want to preview the interface, use `npm run dev:browser` for the SSR app plus gateway, or `npm run dev:frontend` for just the SSR app with local state helpers and sample data.
+If you only want to work on the browser layer, use `npm run dev:browser` for the SSR app plus gateway. `npm run dev:frontend` starts only the SSR process and is best for template or asset work; most commerce flows still need the gateway and backend services running.
 
 ### Deployment note
 
@@ -385,12 +384,12 @@ Docker-specific files and references are not part of this repository anymore. Lo
 | `views/platform` | Platform dashboard and platform admin views |
 | `views/layouts` | Layout shells for main, store, admin, and platform admin modes |
 | `views/partials` | Shared EJS partials |
-| `src/lib` | Currency, env, theme, and runtime state helpers |
-| `src/data` | Seed and runtime data files for the SSR prototype |
+| `src/lib` | Currency, env, rendering, SEO, upload, and backend integration helpers |
+| `src/data` | SSR presentation metadata persisted for store and product display overrides |
 
 ## Complete Folder Structure
 
-The tree below reflects the current project-owned repository structure and intentionally excludes `.git/` internals and `node_modules/` dependencies.
+The tree below reflects the current workspace structure and intentionally excludes `.git/`, `node_modules/`, the local root `.env`, and generated runtime state files.
 
 ```text
 .
@@ -399,6 +398,8 @@ The tree below reflects the current project-owned repository structure and inten
 |       \-- codeql.yml
 +-- apps
 |   +-- gateway
+|   |   +-- src
+|   |   |   \-- openapi.js
 |   |   +-- package.json
 |   |   +-- README.md
 |   |   \-- server.js
@@ -406,6 +407,9 @@ The tree below reflects the current project-owned repository structure and inten
 |   |   +-- billing-service
 |   |   |   +-- src
 |   |   |   |   +-- consumers.js
+|   |   |   |   +-- currency.js
+|   |   |   |   +-- plans.js
+|   |   |   |   +-- plan-settings.js
 |   |   |   |   +-- routes.js
 |   |   |   |   \-- schema.js
 |   |   |   +-- package.json
@@ -436,11 +440,22 @@ The tree below reflects the current project-owned repository structure and inten
 |   |   |   +-- README.md
 |   |   |   \-- server.js
 |   |   +-- notification-service
+|   |   |   +-- src
+|   |   |   |   +-- consumers.js
+|   |   |   |   +-- outbound-email.js
+|   |   |   |   +-- routes.js
+|   |   |   |   +-- schema.js
+|   |   |   |   +-- structured-data.js
+|   |   |   |   +-- template-catalog.js
+|   |   |   |   \-- template-renderer.js
 |   |   |   +-- package.json
-|   |   |   \-- README.md
+|   |   |   +-- README.md
+|   |   |   \-- server.js
 |   |   +-- order-service
 |   |   |   +-- src
 |   |   |   |   +-- consumers.js
+|   |   |   |   +-- coupons.js
+|   |   |   |   +-- coupons.test.js
 |   |   |   |   +-- routes.js
 |   |   |   |   \-- schema.js
 |   |   |   +-- package.json
@@ -455,6 +470,8 @@ The tree below reflects the current project-owned repository structure and inten
 |   |   |   \-- server.js
 |   |   +-- product-service
 |   |   |   +-- src
+|   |   |   |   +-- pricing.js
+|   |   |   |   +-- pricing.test.js
 |   |   |   |   +-- routes.js
 |   |   |   |   \-- schema.js
 |   |   |   +-- package.json
@@ -479,35 +496,67 @@ The tree below reflects the current project-owned repository structure and inten
 |   |       \-- server.js
 |   \-- web
 |       +-- public
+|       |   +-- brand
+|       |   |   +-- aisle-logo.svg
+|       |   |   +-- aisle-mark.svg
+|       |   |   \-- favicon.svg
 |       |   +-- js
 |       |   \-- styles
+|       |       +-- app.css
 |       |       \-- theme.css
 |       +-- src
 |       |   +-- config
+|       |   |   \-- app-context.js
 |       |   +-- data
-|       |   |   +-- empty-state.js
-|       |   |   +-- runtime-state.json
-|       |   |   \-- seed.js
+|       |   |   \-- presentation-state.json
 |       |   +-- lib
+|       |   |   +-- app-helpers.js
+|       |   |   +-- backend.js
 |       |   |   +-- currency.js
+|       |   |   +-- legal-content.js
 |       |   |   +-- load-env.js
-|       |   |   +-- state.js
-|       |   |   \-- store-themes.js
+|       |   |   +-- presentation-state.js
+|       |   |   +-- renderers.js
+|       |   |   +-- security.js
+|       |   |   +-- seo.js
+|       |   |   +-- store-themes.js
+|       |   |   +-- uploads.js
+|       |   |   \-- validation.js
 |       |   +-- middleware
+|       |   |   +-- configure-app.js
+|       |   |   \-- request-context.js
 |       |   +-- routes
-|       |   \-- services
+|       |   |   +-- admin.js
+|       |   |   +-- errors.js
+|       |   |   +-- platform.js
+|       |   |   +-- storefront.js
+|       |   |   \-- validations.js
+|       |   +-- services
+|       |   |   \-- payment-provider-configs.js
+|       |   +-- styles
+|       |   |   \-- tailwind.css
+|       |   \-- create-app.js
 |       +-- views
 |       |   +-- admin
 |       |   |   +-- dashboard.ejs
 |       |   |   +-- domain.ejs
+|       |   |   +-- marketing.ejs
 |       |   |   +-- order-detail.ejs
 |       |   |   +-- orders.ejs
 |       |   |   +-- product-form.ejs
 |       |   |   +-- products.ejs
 |       |   |   \-- settings.ejs
 |       |   +-- errors
+|       |   |   +-- _error-page.ejs
+|       |   |   +-- 400.ejs
+|       |   |   +-- 401.ejs
+|       |   |   +-- 403.ejs
 |       |   |   +-- 404.ejs
-|       |   |   \-- 500.ejs
+|       |   |   +-- 422.ejs
+|       |   |   +-- 429.ejs
+|       |   |   +-- 500.ejs
+|       |   |   +-- 502.ejs
+|       |   |   \-- 503.ejs
 |       |   +-- layouts
 |       |   |   +-- admin.ejs
 |       |   |   +-- main.ejs
@@ -517,6 +566,7 @@ The tree below reflects the current project-owned repository structure and inten
 |       |   |   +-- admin-scripts.ejs
 |       |   |   +-- admin-sidebar.ejs
 |       |   |   +-- admin-topbar.ejs
+|       |   |   +-- csrf-field.ejs
 |       |   |   +-- flash.ejs
 |       |   |   +-- form-error.ejs
 |       |   |   +-- head.ejs
@@ -527,46 +577,62 @@ The tree below reflects the current project-owned repository structure and inten
 |       |   |   +-- scripts.ejs
 |       |   |   +-- shared-scripts.ejs
 |       |   |   +-- store-footer.ejs
-|       |   |   \-- store-header.ejs
+|       |   |   +-- store-header.ejs
+|       |   |   \-- store-price.ejs
 |       |   +-- platform
 |       |   |   +-- admin-dashboard.ejs
 |       |   |   +-- admin-incidents.ejs
+|       |   |   +-- admin-login.ejs
 |       |   |   +-- admin-stores.ejs
 |       |   |   +-- admin-support.ejs
+|       |   |   +-- control-placeholder.ejs
 |       |   |   +-- dashboard.ejs
+|       |   |   +-- forgot-password.ejs
 |       |   |   +-- index.ejs
 |       |   |   +-- login.ejs
+|       |   |   +-- reset-password.ejs
 |       |   |   \-- signup.ejs
 |       |   +-- platform-admin
+|       |   +-- shared
+|       |   |   \-- legal.ejs
 |       |   \-- storefront
 |       |       +-- account.ejs
 |       |       +-- cart.ejs
 |       |       +-- checkout.ejs
+|       |       +-- forgot-password.ejs
 |       |       +-- home.ejs
 |       |       +-- login.ejs
 |       |       +-- order-confirmation.ejs
 |       |       +-- orders.ejs
 |       |       +-- product.ejs
 |       |       +-- products.ejs
-|       |       \-- register.ejs
+|       |       +-- register.ejs
+|       |       +-- reset-password.ejs
+|       |       \-- wishlist.ejs
 |       +-- .env.development
 |       +-- .env.production
 |       +-- app.js
 |       +-- package.json
 |       \-- README.md
 +-- docs
+|   +-- swagger
+|   |   \-- gateway.openapi.json
 |   +-- API-REFERENCE.md
 |   +-- ARCHITECTURE.md
 |   +-- DATA-MODEL.md
+|   +-- EMAIL-TEMPLATES.md
 |   +-- ENVIRONMENT.md
 |   \-- KNOWN-GAPS.md
 +-- packages
 |   \-- shared
 |       +-- src
+|       |   +-- auth-cookies.js
+|       |   +-- cache.js
 |       |   +-- constants.js
 |       |   +-- crypto.js
 |       |   +-- database.js
 |       |   +-- env.js
+|       |   +-- errors.js
 |       |   +-- events.js
 |       |   +-- express.js
 |       |   +-- http.js
@@ -574,28 +640,50 @@ The tree below reflects the current project-owned repository structure and inten
 |       |   +-- jwt.js
 |       |   +-- logger.js
 |       |   +-- passwords.js
-|       |   \-- service-runner.js
+|       |   +-- rate-limit.js
+|       |   +-- sanitization.js
+|       |   +-- security.js
+|       |   +-- security.test.js
+|       |   +-- server.js
+|       |   +-- service-runner.js
+|       |   \-- validation.js
 |       +-- index.js
 |       +-- package.json
 |       \-- README.md
++-- scripts
+|   +-- internal-request.js
+|   +-- run-stack.js
+|   \-- swagger.js
++-- tests
+|   +-- aisle-api.http
+|   \-- smoke.js
++-- uploads
+|   \-- logos
++-- .env.example
 +-- .gitignore
++-- eslint.config.js
 +-- LICENSE.md
++-- nodemon.json
 +-- NOTICE.md
 +-- package.json
 +-- package-lock.json
-\-- README.md
++-- README.md
++-- SECURITY.md
+\-- tailwind.config.js
 ```
 
 ### Structure notes
 
-- `apps/web/public/js`, `apps/web/src/config`, `apps/web/src/middleware`, `apps/web/src/routes`, `apps/web/src/services`, and `apps/web/views/platform-admin` currently exist as directories but do not yet contain committed implementation files in this snapshot.
-- `apps/services/chat-service`, `apps/services/support-service`, and `apps/services/notification-service` are currently metadata-plus-documentation placeholders only.
+- `apps/services/chat-service` and `apps/services/support-service` remain placeholder packages without runnable service code.
+- `apps/web/views/platform-admin` and `apps/web/public/js` exist today as empty directories reserved for future implementation detail.
+- `uploads/logos` is the local development storage target for uploaded store assets.
 
 ## Known Gaps and Current Risks
 
-- `support-service`, `chat-service`, and `notification-service` do not yet have runnable service code.
+- `support-service` and `chat-service` do not yet have runnable service code.
 - The gateway already proxies support and chat routes, so those flows are not fully operational yet.
-- `apps/web/app.js` is a prototype backed by local state helpers, not a full end-to-end gateway-backed interface for every flow.
+- Some platform admin sections are intentionally placeholder pages until cross-tenant support, incident, and operations workflows are backed by real permissions and data.
+- Running only `npm run start:frontend` or `npm run dev:frontend` is not enough for most end-to-end commerce flows because the SSR app expects the gateway and backend services to be available.
 - Store logos currently use local disk in development. A shared object-storage adapter is still needed for multi-instance production deployments.
 - The smoke test and request collection improve coverage, but the repository still needs a broader integration and browser test suite for checkout, owner workflows, and payment-state transitions.
 
