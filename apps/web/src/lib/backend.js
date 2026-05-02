@@ -522,7 +522,7 @@ const mergeCartIntoCustomer = async (req, store, customerId, sessionId) => {
 };
 
 const listStoreProducts = async (req, store, options = {}) => {
-  const query = new URLSearchParams({
+  const query = new globalThis.URLSearchParams({
     page: '1',
     limit: String(Number(options.limit || 100))
   });
@@ -855,6 +855,39 @@ const getPublicBillingPlans = async (req, options = {}) => {
     : '';
   const response = await requestPublicJson(req, env.serviceUrls.billing, `/plans${query}`);
   return Array.isArray(response?.plans) ? response.plans : [];
+};
+
+const getAdminBillingPlans = async (req, auth) => {
+  const response = await requestServiceJson(req, env.serviceUrls.billing, '/admin/plans', {
+    auth: {
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    }
+  });
+
+  return {
+    plans: Array.isArray(response?.plans) ? response.plans : [],
+    trial_days: Number(response?.trial_days || 0),
+    trial_authorization_amount: Number(response?.trial_authorization_amount || 0),
+    trial_authorization_currency: response?.trial_authorization_currency || 'USD'
+  };
+};
+
+const updateAdminBillingPlan = async (req, auth, payload = {}) => {
+  return requestServiceJson(req, env.serviceUrls.billing, '/admin/plans', {
+    method: 'POST',
+    auth: {
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    },
+    body: {
+      plan: String(payload.plan || '').trim().toLowerCase(),
+      monthly_amount: Number(payload.monthly_amount || 0),
+      yearly_amount: Number(payload.yearly_amount || 0)
+    }
+  });
 };
 
 const createOwnerSubscriptionCheckout = async (req, auth, payload = {}) => {
@@ -1236,6 +1269,7 @@ module.exports = {
   ensureStorefrontSession,
   getAdminStoreOrderById,
   getAdminStoreProductById,
+  getAdminBillingPlans,
   getPublicBillingPlans,
   getCartForStore,
   getCurrentCustomer,
@@ -1273,6 +1307,7 @@ module.exports = {
   requestServiceJson,
   addToCart,
   updateAdminStoreOrderStatus,
+  updateAdminBillingPlan,
   updateAdminStoreProduct,
   updatePlatformStore,
   updateCartItem,

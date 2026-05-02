@@ -98,6 +98,7 @@ module.exports = {
   DEFAULT_CURRENCY,
   TRIAL_DAYS,
   TRIAL_AUTHORIZATION_BASE_AMOUNT,
+  PLAN_ALIASES,
   normalizePlanCode,
   getBillingPlans,
   getBillingPlan,

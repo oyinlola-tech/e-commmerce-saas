@@ -1,9 +1,11 @@
+const rateLimit = require('express-rate-limit');
 const { body, param } = require('express-validator');
 
 const registerStorefrontRoutes = (app, deps) => {
   const { context, helpers, validations, renderers } = deps;
   const {
     authRateLimiter,
+    env,
     handleFormValidation,
     addToCart,
     checkoutStorefrontCart,
@@ -590,7 +592,12 @@ const registerStorefrontRoutes = (app, deps) => {
     });
   });
 
-  app.post('/logout', validate([
+  app.post('/logout', rateLimit({
+    windowMs: env.mutationRateLimitWindowMs,
+    limit: env.mutationRateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false
+  }), validate([
     allowBodyFields(['_csrf'])
   ]), (req, res) => {
     const store = resolveStore(req);

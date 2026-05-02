@@ -610,9 +610,8 @@ const bootstrap = async () => {
   app.use(resolveStoreContext);
   app.use(gatewayCors);
   app.use(attachGatewayProxyContext);
-  // Security: Add cookie parser with secret for CSRF protection
+  // Security: Parse cookies before issuing or validating CSRF tokens for browser clients.
   app.use(cookieParser(config.internalSharedSecret));
-  app.use('/api', attachGatewayAuthContext);
 
   app.get('/api/csrf-token', (req, res) => {
     return res.json({
@@ -620,13 +619,10 @@ const bootstrap = async () => {
     });
   });
 
-  app.use('/api', (req, res, next) => {
-    if (req.path === '/csrf-token') {
-      return next();
-    }
-    return gatewayCsrfMiddleware(req, res, next);
-  });
+  // Security: Enforce CSRF on browser-facing mutations before cookie auth is promoted into req.gatewayContext.
+  app.use('/api', gatewayCsrfMiddleware);
   app.use('/payments', gatewayCsrfMiddleware);
+  app.use('/api', attachGatewayAuthContext);
 
   app.get('/api/platform/billing/plans', createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' }));
 

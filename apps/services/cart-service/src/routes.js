@@ -14,7 +14,7 @@ const {
   isSecureRequest
 } = require('../../../../packages/shared');
 
-const buildSessionCookieOptions = (req, config) => {
+const buildSessionCookieOptions = (config) => {
   // Security: Session identifiers must always be marked Secure.
   return buildCookieOptions(config, {
     sameSite: 'lax',
@@ -30,7 +30,12 @@ const setSessionCookie = (req, res, config, sessionId) => {
     return;
   }
 
-  res.cookie('aisle_session_id', sessionId, buildSessionCookieOptions(req, config));
+  res.cookie('aisle_session_id', sessionId, {
+    ...buildSessionCookieOptions(config),
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax'
+  });
 };
 
 const resolveIdentity = (req) => {

@@ -102,6 +102,19 @@ const createValidations = (context, helpers) => {
     body('billing_cycle').optional().isIn(['monthly', 'yearly'])
   ];
 
+  const adminBillingPlanValidation = [
+    allowBodyFields(['plan', 'monthly_amount', 'yearly_amount', '_csrf']),
+    body('plan').isIn(['launch', 'scale', 'enterprise']),
+    body('monthly_amount')
+      .isFloat({ min: 0.01, max: 1000000 })
+      .withMessage('Monthly fee must be greater than zero.')
+      .toFloat(),
+    body('yearly_amount')
+      .isFloat({ min: 0.01, max: 1000000 })
+      .withMessage('Yearly fee must be greater than zero.')
+      .toFloat()
+  ];
+
   const storeCreationValidation = [
     allowBodyFields(['name', 'subdomain', 'store_type', 'template_key', 'template_picker', 'theme_color', 'font_preset', '_csrf']),
     commonRules.name('name', 150),
@@ -273,6 +286,7 @@ const createValidations = (context, helpers) => {
     passwordResetRequestValidation,
     passwordResetConfirmValidation,
     subscriptionCheckoutValidation,
+    adminBillingPlanValidation,
     storeCreationValidation,
     storeSettingsValidation,
     domainValidation,

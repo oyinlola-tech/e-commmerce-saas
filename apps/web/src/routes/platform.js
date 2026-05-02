@@ -1,3 +1,5 @@
+const rateLimit = require('express-rate-limit');
+
 const buildPlatformAbsoluteUrl = (req, pathname = '/') => {
   const protocol = String(req.headers['x-forwarded-proto'] || '')
     .split(',')[0]
@@ -15,6 +17,8 @@ const registerPlatformRoutes = (app, deps) => {
   const {
     authRateLimiter,
     authPageRateLimiter,
+    env,
+    PLATFORM_ROLES,
     buildCurrencyContext,
     normalizeCurrencyCode,
     handleFormValidation,
@@ -35,6 +39,9 @@ const registerPlatformRoutes = (app, deps) => {
     createOwnerSubscriptionCheckout,
     verifyOwnerSubscriptionCheckout,
     getPublicBillingPlans,
+    getAdminBillingPlans,
+    updateAdminBillingPlan,
+    listPlatformStores,
     createPlatformStore,
     getPlatformStoreById,
     clearWebAuthCookies
@@ -65,6 +72,7 @@ const registerPlatformRoutes = (app, deps) => {
     passwordResetRequestValidation,
     passwordResetConfirmValidation,
     subscriptionCheckoutValidation,
+    adminBillingPlanValidation,
     storeCreationValidation
   } = validations;
   const {
@@ -83,6 +91,35 @@ const registerPlatformRoutes = (app, deps) => {
     renderPlatformAdmin,
     renderErrorPage
   } = renderers;
+
+  const renderPlatformAdminOverview = async (req, res) => {
+    const stores = (await listPlatformStores(req, req.platformAuth)).map((store) => mergeStorePresentation(store));
+    const adminPricing = await getAdminBillingPlans(req, req.platformAuth);
+    const publicPricing = await getPublicBillingPlans(req, {
+      currency: res.locals.selectedCurrency || 'USD'
+    });
+    const publicPricingMap = new Map(publicPricing.map((plan) => [String(plan.code || '').trim().toLowerCase(), plan]));
+    const billingPlans = adminPricing.plans.map((plan) => ({
+      ...plan,
+      preview: publicPricingMap.get(String(plan.code || '').trim().toLowerCase()) || null
+    }));
+    const metrics = {
+      storesCount: stores.length,
+      liveStores: stores.filter((store) => store.is_active).length,
+      planCount: billingPlans.length,
+      trialDays: adminPricing.trial_days,
+      trialAuthorizationAmount: adminPricing.trial_authorization_amount,
+      trialAuthorizationCurrency: adminPricing.trial_authorization_currency
+    };
+
+    return renderPlatformAdmin(res, 'platform/admin-dashboard', {
+      pageTitle: 'Platform operations',
+      stores,
+      metrics,
+      billingPlans,
+      editablePricing: String(req.currentPlatformUser?.role || '').trim().toLowerCase() === PLATFORM_ROLES.PLATFORM_OWNER
+    });
+  };
 
   app.post('/preferences/currency', currencyValidation, handleFormValidation((req, res) => {
     return res.redirect('/?error=Update the currency selection and try again.');
@@ -260,7 +297,12 @@ const registerPlatformRoutes = (app, deps) => {
     }
   );
 
-  app.get('/login', authPageRateLimiter, (req, res) => {
+  app.get('/login', rateLimit({
+    windowMs: env.authPageRateLimitWindowMs,
+    limit: env.authPageRateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false
+  }), (req, res) => {
     if (isStorefrontHost(req)) {
       if (!resolveStore(req)) {
         return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
@@ -276,7 +318,12 @@ const registerPlatformRoutes = (app, deps) => {
     return renderOwnerLogin(req, res);
   });
 
-  app.post('/login', authRateLimiter, ownerLoginValidation, handleFormValidation((req, res, errors) => {
+  app.post('/login', rateLimit({
+    windowMs: env.authRateLimitWindowMs,
+    limit: env.authRateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false
+  }), ownerLoginValidation, handleFormValidation((req, res, errors) => {
     if (isStorefrontHost(req)) {
       return renderCustomerLogin(req, res, errors, 422);
     }
@@ -418,7 +465,12 @@ const registerPlatformRoutes = (app, deps) => {
     }
   });
 
-  app.get('/platform-admin/login', authPageRateLimiter, (req, res) => {
+  app.get('/platform-admin/login', rateLimit({
+    windowMs: env.authPageRateLimitWindowMs,
+    limit: env.authPageRateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false
+  }), (req, res) => {
     if (req.platformAuth && req.currentPlatformUser && isPlatformAdminUser(req.currentPlatformUser)) {
       return res.redirect('/platform-admin');
     }
@@ -426,7 +478,12 @@ const registerPlatformRoutes = (app, deps) => {
     return renderPlatformAdminLogin(req, res);
   });
 
-  app.post('/platform-admin/login', authRateLimiter, ownerLoginValidation, handleFormValidation((req, res, errors) => {
+  app.post('/platform-admin/login', rateLimit({
+    windowMs: env.authRateLimitWindowMs,
+    limit: env.authRateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false
+  }), ownerLoginValidation, handleFormValidation((req, res, errors) => {
     return renderPlatformAdminLogin(req, res, errors, 422);
   }), async (req, res, next) => {
     try {
@@ -481,7 +538,12 @@ const registerPlatformRoutes = (app, deps) => {
     }
   });
 
-  app.get('/billing/callback', authRateLimiter, async (req, res, next) => {
+  app.get('/billing/callback', rateLimit({
+    windowMs: env.authRateLimitWindowMs,
+    limit: env.authRateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false
+  }), async (req, res, next) => {
     try {
       if (requirePlatformUser(req, res)) {
         return;
@@ -597,22 +659,44 @@ const registerPlatformRoutes = (app, deps) => {
     }
   });
 
-  app.get('/platform-admin', (req, res) => {
-    if (requirePlatformAdmin(req, res)) {
-      return;
-    }
+  app.post('/platform-admin/billing/plans', adminBillingPlanValidation, handleFormValidation((req, res) => {
+    return res.redirect('/platform-admin?error=Review the subscription fee fields and try again.');
+  }), async (req, res, next) => {
+    try {
+      if (requirePlatformAdmin(req, res)) {
+        return;
+      }
 
-    return renderPlatformAdmin(res, 'platform/control-placeholder', {
-      pageTitle: 'Operations preview',
-      placeholderEyebrow: 'Operations preview',
-      placeholderTitle: 'Platform operations are not enabled in this build.',
-      placeholderBody: 'Aisle no longer ships fake tenant data, seeded support queues, or fabricated incident dashboards. This workspace stays intentionally empty until the real multi-tenant operations layer is ready.',
-      placeholderHighlights: [
-        'Owner accounts, store creation, storefronts, and store admin are live.',
-        'Platform-wide support, incident management, and tenant oversight are reserved for a later release.',
-        'You will see an honest placeholder here instead of demo records that look production-ready.'
-      ]
-    });
+      if (String(req.currentPlatformUser?.role || '').trim().toLowerCase() !== PLATFORM_ROLES.PLATFORM_OWNER) {
+        return res.redirect('/platform-admin?error=Only the platform owner can change subscription pricing.');
+      }
+
+      await updateAdminBillingPlan(req, req.platformAuth, {
+        plan: req.body.plan,
+        monthly_amount: req.body.monthly_amount,
+        yearly_amount: req.body.yearly_amount
+      });
+
+      return res.redirect(`/platform-admin?success=${encodeURIComponent('Subscription pricing updated successfully.')}`);
+    } catch (error) {
+      if ([400, 403, 404, 422].includes(Number(error.status))) {
+        return res.redirect(`/platform-admin?error=${encodeURIComponent(error.message || 'Unable to update subscription pricing right now.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.get('/platform-admin', async (req, res, next) => {
+    try {
+      if (requirePlatformAdmin(req, res)) {
+        return;
+      }
+
+      return await renderPlatformAdminOverview(req, res);
+    } catch (error) {
+      return next(error);
+    }
   });
 
   app.get('/platform-admin/stores', (req, res) => {

@@ -1,29 +1,18 @@
 <%
   const overview = metrics || {};
   const tenantList = Array.isArray(stores) ? stores : [];
-  const ticketList = Array.isArray(supportQueue) ? supportQueue : [];
-  const incidentList = Array.isArray(incidents) ? incidents : [];
-  const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
-  const healthBadge = (status) => {
-    switch ((status || '').toLowerCase()) {
-      case 'attention':
-        return 'bg-amber-50 text-amber-700';
-      case 'watch':
-        return 'bg-sky-50 text-sky-700';
-      case 'healthy':
-      default:
-        return 'bg-emerald-50 text-emerald-700';
-    }
-  };
-  const severityBadge = (severity) => {
-    switch ((severity || '').toLowerCase()) {
-      case 'critical':
-        return 'bg-rose-50 text-rose-700';
-      case 'major':
-        return 'bg-amber-50 text-amber-700';
-      default:
-        return 'bg-slate-100 text-slate-700';
-    }
+  const planList = Array.isArray(billingPlans) ? billingPlans : [];
+  const canEditPricing = Boolean(editablePricing);
+  const baseCurrency = planList[0] && planList[0].currency ? planList[0].currency : 'USD';
+  const trialDays = Number(overview.trialDays || 7);
+  const trialAuthorizationAmount = Number(overview.trialAuthorizationAmount || 1);
+  const trialAuthorizationCurrency = overview.trialAuthorizationCurrency || 'USD';
+  const locale = (currencyContext && currencyContext.locale) || 'en-US';
+  const formatCurrency = (amount, currency, targetLocale = locale) => {
+    return new Intl.NumberFormat(targetLocale || 'en-US', {
+      style: 'currency',
+      currency: currency || 'USD'
+    }).format(Number(amount || 0));
   };
 %>
 <section class="space-y-8">
@@ -34,86 +23,122 @@
       <div class="space-y-6">
         <span class="eyebrow">Platform Operations</span>
         <div class="space-y-4">
-          <h1 class="section-title max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">One command layer for storefront growth, support, and reliability.</h1>
+          <h1 class="section-title max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Set subscription fees from the main control layer.</h1>
           <p class="max-w-2xl text-lg leading-8 text-slate-600">
-            Watch tenant performance, clear support backlog, and close incidents before they become revenue problems.
+            Adjust Launch, Scale, and Enterprise pricing here, keep the 7-day trial policy visible, and let the storefront pricing surfaces follow the saved values automatically.
           </p>
         </div>
-        <div class="flex flex-wrap gap-3">
-          <a href="/platform-admin/support" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">Open support queue</a>
-          <a href="/platform-admin/incidents" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary">Review incidents</a>
+        <div class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+          <p class="text-sm font-semibold text-slate-950">Billing policy</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">
+            New subscriptions still start with a <%= trialDays %>-day trial. Paystack verifies the card with <%= formatCurrency(trialAuthorizationAmount, trialAuthorizationCurrency, 'en-US') %>, refunds it after success, then bills the selected plan when the trial ends.
+          </p>
         </div>
       </div>
 
       <div class="grid gap-4 sm:grid-cols-2">
         <article class="metric-card rounded-3xl p-5">
-          <p class="text-sm font-medium text-slate-500">Stores online</p>
-          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= overview.liveStores || 0 %>/<%= overview.storesCount || 0 %></p>
-          <p class="mt-2 text-sm text-slate-500">Live tenants currently serving customers.</p>
+          <p class="text-sm font-medium text-slate-500">Plans managed</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= overview.planCount || planList.length || 0 %></p>
+          <p class="mt-2 text-sm text-slate-500">The three subscription plans share one pricing control surface.</p>
         </article>
         <article class="metric-card rounded-3xl p-5">
-          <p class="text-sm font-medium text-slate-500">GMV (30 days)</p>
-          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= money(overview.gmv30d || 0) %></p>
-          <p class="mt-2 text-sm text-slate-500">Platform-wide transaction volume across all regions.</p>
+          <p class="text-sm font-medium text-slate-500">Base billing currency</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= baseCurrency %></p>
+          <p class="mt-2 text-sm text-slate-500">Saved fees are stored in base currency and converted for supported regions.</p>
         </article>
         <article class="metric-card rounded-3xl p-5">
-          <p class="text-sm font-medium text-slate-500">Open tickets</p>
-          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= overview.openTickets || 0 %></p>
-          <p class="mt-2 text-sm text-slate-500">Conversations still awaiting action or customer closure.</p>
+          <p class="text-sm font-medium text-slate-500">Live stores</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= overview.liveStores || 0 %>/<%= overview.storesCount || tenantList.length || 0 %></p>
+          <p class="mt-2 text-sm text-slate-500">Real tenant stores currently available across the platform.</p>
         </article>
         <article class="metric-card rounded-3xl p-5">
-          <p class="text-sm font-medium text-slate-500">Unresolved incidents</p>
-          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= overview.unresolvedIncidents || 0 %></p>
-          <p class="mt-2 text-sm text-slate-500">Operational issues currently under investigation or monitoring.</p>
+          <p class="text-sm font-medium text-slate-500">Current preview currency</p>
+          <p class="metric-value mt-3 text-3xl font-semibold tracking-tight text-slate-950"><%= selectedCurrency || baseCurrency %></p>
+          <p class="mt-2 text-sm text-slate-500">The cards below also show what customers see in this selected currency.</p>
         </article>
       </div>
     </div>
   </div>
 
-  <div class="grid gap-8 xl:grid-cols-[1.08fr_0.92fr]">
+  <div class="grid gap-8 xl:grid-cols-[1.06fr_0.94fr]">
     <section class="surface-card rounded-[2rem] p-6">
-      <div class="flex items-center justify-between gap-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p class="text-sm font-medium text-slate-500">Tenant health</p>
-          <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Performance at a glance</h2>
+          <p class="text-sm font-medium text-slate-500">Subscription pricing</p>
+          <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Fee controls</h2>
         </div>
-        <a href="/platform-admin/stores" class="text-sm font-semibold text-primary transition hover:underline">View all tenants</a>
+        <p class="max-w-xl text-sm leading-6 text-slate-500">
+          Save prices in <%= baseCurrency %>. The public pricing page, owner billing flow, and future recurring charges will use the updated values.
+        </p>
       </div>
+
       <div class="mt-6 space-y-4">
-        <% tenantList.slice(0, 4).forEach((store) => { %>
-          <article class="lift-on-hover rounded-3xl border border-slate-200 bg-white p-5">
+        <% planList.forEach((plan) => { %>
+          <% const previewPlan = plan.preview || null; %>
+          <% const previewCurrency = previewPlan && previewPlan.currency ? previewPlan.currency : (selectedCurrency || baseCurrency); %>
+          <form action="/platform-admin/billing/plans" method="post" class="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+            <%- include('../partials/csrf-field') %>
+            <input type="hidden" name="plan" value="<%= plan.code %>">
+
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
+              <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-3">
-                  <h3 class="text-lg font-semibold text-slate-950"><%= store.name %></h3>
-                  <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize <%= healthBadge(store.operational_status) %>"><%= store.operational_status || 'healthy' %></span>
+                  <h3 class="text-xl font-semibold text-slate-950"><%= plan.name %></h3>
+                  <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700">
+                    <%= plan.updated_from_default ? 'Custom Fee Active' : 'Default Fee Active' %>
+                  </span>
                 </div>
-                <p class="mt-2 text-sm leading-6 text-slate-600"><%= store.tagline %></p>
+                <p class="mt-2 text-sm leading-6 text-slate-600"><%= plan.description %></p>
+                <p class="mt-3 text-sm text-slate-500">
+                  Customer preview in <%= previewCurrency %>:
+                  <strong class="text-slate-900"><%= formatCurrency(previewPlan ? previewPlan.monthly_amount : plan.monthly_amount, previewCurrency) %> / month</strong>
+                  and
+                  <strong class="text-slate-900"><%= formatCurrency(previewPlan ? previewPlan.yearly_amount : plan.yearly_amount, previewCurrency) %> / year</strong>
+                </p>
               </div>
-              <div class="flex flex-wrap gap-2">
-                <a href="/stores/<%= store.id %>/preview" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Storefront</a>
-                <a href="/stores/<%= store.id %>/manage" class="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-dark">Open admin</a>
+
+              <div class="grid w-full gap-4 sm:grid-cols-2 lg:max-w-xl">
+                <div>
+                  <label for="monthly-<%= plan.code %>" class="mb-1 block text-sm font-medium text-slate-700">Monthly fee (<%= baseCurrency %>)</label>
+                  <input
+                    id="monthly-<%= plan.code %>"
+                    name="monthly_amount"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value="<%= Number(plan.monthly_amount || 0).toFixed(2) %>"
+                    class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    <%= canEditPricing ? '' : 'disabled' %>>
+                </div>
+                <div>
+                  <label for="yearly-<%= plan.code %>" class="mb-1 block text-sm font-medium text-slate-700">Yearly fee (<%= baseCurrency %>)</label>
+                  <input
+                    id="yearly-<%= plan.code %>"
+                    name="yearly_amount"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value="<%= Number(plan.yearly_amount || 0).toFixed(2) %>"
+                    class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    <%= canEditPricing ? '' : 'disabled' %>>
+                </div>
               </div>
             </div>
-            <div class="mt-5 grid gap-3 sm:grid-cols-4">
-              <div class="rounded-2xl bg-slate-50 p-4">
-                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Revenue</p>
-                <p class="mt-2 text-lg font-semibold text-slate-950"><%= money(store.monthly_revenue || 0) %></p>
+
+            <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="text-sm leading-6 text-slate-500">
+                Current base pricing: <strong class="text-slate-900"><%= formatCurrency(plan.monthly_amount, baseCurrency, 'en-US') %></strong> monthly and <strong class="text-slate-900"><%= formatCurrency(plan.yearly_amount, baseCurrency, 'en-US') %></strong> yearly.
               </div>
-              <div class="rounded-2xl bg-slate-50 p-4">
-                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Orders</p>
-                <p class="mt-2 text-lg font-semibold text-slate-950"><%= store.monthly_orders || 0 %></p>
-              </div>
-              <div class="rounded-2xl bg-slate-50 p-4">
-                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Health score</p>
-                <p class="mt-2 text-lg font-semibold text-slate-950"><%= store.health_score || 0 %></p>
-              </div>
-              <div class="rounded-2xl bg-slate-50 p-4">
-                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Backlog</p>
-                <p class="mt-2 text-lg font-semibold text-slate-950"><%= store.support_backlog || 0 %></p>
-              </div>
+              <% if (canEditPricing) { %>
+                <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-dark">
+                  Save Fees
+                </button>
+              <% } else { %>
+                <p class="text-sm font-medium text-slate-500">Only the platform owner account can save price changes.</p>
+              <% } %>
             </div>
-          </article>
+          </form>
         <% }) %>
       </div>
     </section>
@@ -122,46 +147,63 @@
       <section class="surface-card rounded-[2rem] p-6">
         <div class="flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-medium text-slate-500">Support queue</p>
-            <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Customers waiting on action</h2>
+            <p class="text-sm font-medium text-slate-500">Tenant snapshot</p>
+            <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Real stores on the platform</h2>
           </div>
-          <a href="/platform-admin/support" class="text-sm font-semibold text-primary transition hover:underline">Open queue</a>
+          <a href="/platform-admin/stores" class="text-sm font-semibold text-primary transition hover:underline">Open directory</a>
         </div>
-        <div class="mt-6 space-y-4">
-          <% ticketList.forEach((conversation) => { %>
-            <article class="rounded-3xl border border-slate-200 bg-white p-4">
-              <div class="flex items-start justify-between gap-4">
-                <div>
-                  <p class="text-sm font-semibold text-slate-950"><%= conversation.subject %></p>
-                  <p class="mt-1 text-sm text-slate-500"><%= conversation.customer_name %> • <%= conversation.channel %> • <%= conversation.region %></p>
+
+        <% if (tenantList.length) { %>
+          <div class="mt-6 space-y-4">
+            <% tenantList.slice(0, 5).forEach((store) => { %>
+              <article class="rounded-3xl border border-slate-200 bg-white p-4">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold text-slate-950"><%= store.name %></p>
+                    <p class="mt-1 truncate text-sm text-slate-500"><%= store.custom_domain || `${store.subdomain}.${platformBrand && platformBrand.website ? platformBrand.website : 'aisle.so'}` %></p>
+                  </div>
+                  <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= store.is_active ? 'Live' : 'Paused' %></span>
                 </div>
-                <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= conversation.priority %></span>
-              </div>
-            </article>
-          <% }) %>
-        </div>
+                <div class="mt-3 grid gap-3 sm:grid-cols-3">
+                  <div class="rounded-2xl bg-slate-50 p-3">
+                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Type</p>
+                    <p class="mt-1 text-sm font-medium text-slate-900"><%= store.store_type || 'General' %></p>
+                  </div>
+                  <div class="rounded-2xl bg-slate-50 p-3">
+                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Template</p>
+                    <p class="mt-1 text-sm font-medium text-slate-900"><%= store.template_key || 'Default' %></p>
+                  </div>
+                  <div class="rounded-2xl bg-slate-50 p-3">
+                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">SSL</p>
+                    <p class="mt-1 text-sm font-medium text-slate-900"><%= store.ssl_status || 'Pending' %></p>
+                  </div>
+                </div>
+              </article>
+            <% }) %>
+          </div>
+        <% } else { %>
+          <div class="mt-6 rounded-[1.75rem] border border-slate-200 bg-white p-5">
+            <p class="text-sm leading-6 text-slate-600">No stores have been created yet. Pricing controls are still live, so you can set fees before the first tenant launches.</p>
+          </div>
+        <% } %>
       </section>
 
       <section class="surface-card rounded-[2rem] p-6">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <p class="text-sm font-medium text-slate-500">Reliability</p>
-            <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">Active incident watch</h2>
+        <p class="text-sm font-medium text-slate-500">Platform notes</p>
+        <h2 class="section-title mt-1 text-2xl font-semibold text-slate-950">What this dashboard controls today</h2>
+        <div class="mt-6 space-y-3">
+          <div class="rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4">
+            <p class="text-sm font-semibold text-slate-950">Live pricing source</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">The prices saved here feed the public pricing page, owner dashboard billing cards, and subscription charges generated by the billing service.</p>
           </div>
-          <a href="/platform-admin/incidents" class="text-sm font-semibold text-primary transition hover:underline">Manage incidents</a>
-        </div>
-        <div class="mt-6 space-y-4">
-          <% incidentList.forEach((incident) => { %>
-            <article class="rounded-3xl border border-slate-200 bg-white p-4">
-              <div class="flex items-start justify-between gap-4">
-                <div>
-                  <p class="text-sm font-semibold text-slate-950"><%= incident.area %></p>
-                  <p class="mt-1 text-sm leading-6 text-slate-500"><%= incident.summary %></p>
-                </div>
-                <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] <%= severityBadge(incident.severity) %>"><%= incident.severity %></span>
-              </div>
-            </article>
-          <% }) %>
+          <div class="rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4">
+            <p class="text-sm font-semibold text-slate-950">Geo and currency conversion</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Saved prices stay in <%= baseCurrency %>, then the platform converts them for supported currencies such as NGN and the visitor-selected top-bar currency.</p>
+          </div>
+          <div class="rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4">
+            <p class="text-sm font-semibold text-slate-950">Remaining platform-wide ops</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Cross-tenant support and incident tooling are still staged separately, but subscription fee management on this overview page is now live.</p>
+          </div>
         </div>
       </section>
     </div>

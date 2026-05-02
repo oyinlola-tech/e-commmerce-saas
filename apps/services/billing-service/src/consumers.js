@@ -5,9 +5,11 @@ const {
 } = require('../../../../packages/shared');
 const {
   normalizePlanCode,
-  getPlanPrice,
   getPeriodEnd
 } = require('./plans');
+const {
+  getResolvedPlanPrice
+} = require('./plan-settings');
 const {
   getSubscriptionById,
   applyTrialAuthorizationSuccess,
@@ -49,7 +51,7 @@ const publishSubscriptionChanged = async (bus, subscription) => {
 };
 
 const createPlaceholderSubscription = async (db, ownerId) => {
-  const launchPlan = getPlanPrice('launch', 'monthly');
+  const launchPlan = await getResolvedPlanPrice(db, 'launch', 'monthly');
   await db.execute(
     `
       INSERT INTO subscriptions (
@@ -362,7 +364,7 @@ const registerConsumers = async ({ bus, db, logger, config }) => {
     }
   };
 
-  const interval = setInterval(() => {
+  const interval = globalThis.setInterval(() => {
     void runScheduler();
   }, BILLING_SCHEDULER_INTERVAL_MS);
 

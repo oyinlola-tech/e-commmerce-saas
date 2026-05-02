@@ -15,12 +15,16 @@ const {
   DEFAULT_CURRENCY,
   TRIAL_DAYS,
   TRIAL_AUTHORIZATION_BASE_AMOUNT,
-  normalizePlanCode,
-  getBillingPlans,
-  getBillingPlan,
-  getPlanPrice,
-  getPeriodEnd
+  normalizePlanCode
 } = require('./plans');
+const {
+  getKnownPlanCodes,
+  getStoragePlanCodes,
+  getResolvedBillingPlans,
+  getResolvedBillingPlan,
+  getResolvedPlanPrice,
+  upsertPlanSettings
+} = require('./plan-settings');
 const {
   normalizeCurrencyCode,
   convertAmount
@@ -135,8 +139,33 @@ const buildServiceHeaders = ({ requestId, ownerId, actorRole, config }) => {
   });
 };
 
-const buildNormalizedPricing = async (planCode, billingCycle, currency) => {
-  const basePricing = getPlanPrice(planCode, billingCycle);
+const serializeAdminPlan = (plan) => {
+  if (!plan) {
+    return null;
+  }
+
+  return {
+    ...plan,
+    code: normalizePlanCode(plan.code),
+    monthly_amount: Number(plan.monthly_amount || 0),
+    yearly_amount: Number(plan.yearly_amount || 0)
+  };
+};
+
+const ensurePlatformStaffAccess = (req) => {
+  if (![PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT].includes(req.authContext.actorRole)) {
+    throw createHttpError(403, 'Only platform staff can manage subscription pricing.', null, { expose: true });
+  }
+};
+
+const ensurePlatformOwnerAccess = (req) => {
+  if (req.authContext.actorRole !== PLATFORM_ROLES.PLATFORM_OWNER) {
+    throw createHttpError(403, 'Only platform owners can update subscription pricing.', null, { expose: true });
+  }
+};
+
+const buildNormalizedPricing = async (db, planCode, billingCycle, currency) => {
+  const basePricing = await getResolvedPlanPrice(db, planCode, billingCycle);
   if (!basePricing) {
     return null;
   }
@@ -158,6 +187,69 @@ const buildNormalizedPricing = async (planCode, billingCycle, currency) => {
 
 const getTrialAuthorizationAmount = async (currency) => {
   return convertAmount(TRIAL_AUTHORIZATION_BASE_AMOUNT, DEFAULT_CURRENCY, currency || DEFAULT_CURRENCY);
+};
+
+const synchronizePlanPricingAcrossSubscriptions = async (db, planCode) => {
+  const normalizedCode = normalizePlanCode(planCode);
+  const storageCodes = getStoragePlanCodes(normalizedCode);
+  if (!storageCodes.length) {
+    return {
+      subscriptions_updated: 0,
+      invoices_updated: 0
+    };
+  }
+
+  const placeholders = storageCodes.map(() => '?').join(', ');
+  const subscriptions = await db.query(
+    `
+      SELECT id, billing_cycle, currency
+      FROM subscriptions
+      WHERE LOWER(plan) IN (${placeholders})
+    `,
+    storageCodes
+  );
+
+  for (const subscription of subscriptions) {
+    const pricing = await buildNormalizedPricing(
+      db,
+      normalizedCode,
+      subscription.billing_cycle || 'monthly',
+      subscription.currency || DEFAULT_CURRENCY
+    );
+
+    if (!pricing) {
+      continue;
+    }
+
+    await db.execute(
+      'UPDATE subscriptions SET plan = ?, currency = ?, plan_amount = ? WHERE id = ?',
+      [
+        normalizedCode,
+        pricing.currency,
+        pricing.amount,
+        subscription.id
+      ]
+    );
+  }
+
+  const invoiceUpdateResult = await db.execute(
+    `
+      UPDATE invoices AS i
+      INNER JOIN subscriptions AS s ON s.id = i.subscription_id
+      SET i.amount = s.plan_amount,
+          i.currency = s.currency,
+          i.description = CONCAT(LOWER(s.plan), ' ', s.billing_cycle, ' subscription')
+      WHERE LOWER(s.plan) IN (${placeholders})
+        AND i.status IN ('draft', 'pending')
+        AND i.payment_reference IS NULL
+    `,
+    storageCodes
+  );
+
+  return {
+    subscriptions_updated: subscriptions.length,
+    invoices_updated: Number(invoiceUpdateResult?.affectedRows || 0)
+  };
 };
 
 const createOrUpdateSubscription = async (db, ownerId, pricing, payload = {}, existingSubscription = null) => {
@@ -376,9 +468,9 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   ]), asyncHandler(async (req, res) => {
     const requestedCurrency = normalizeCurrencyCode(req.query.currency) || DEFAULT_CURRENCY;
     const trialAuthorizationAmount = await getTrialAuthorizationAmount(requestedCurrency);
-    const plans = await Promise.all(getBillingPlans().map(async (plan) => {
-      const monthly = await buildNormalizedPricing(plan.code, 'monthly', requestedCurrency);
-      const yearly = await buildNormalizedPricing(plan.code, 'yearly', requestedCurrency);
+    const plans = await Promise.all((await getResolvedBillingPlans(db)).map(async (plan) => {
+      const monthly = await buildNormalizedPricing(db, plan.code, 'monthly', requestedCurrency);
+      const yearly = await buildNormalizedPricing(db, plan.code, 'yearly', requestedCurrency);
 
       return {
         ...plan,
@@ -395,6 +487,54 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 
     return res.json({
       plans
+    });
+  }));
+
+  app.get('/admin/plans', requireInternal, asyncHandler(async (req, res) => {
+    ensurePlatformStaffAccess(req);
+
+    const plans = await getResolvedBillingPlans(db);
+    return res.json({
+      plans: plans.map(serializeAdminPlan),
+      trial_days: TRIAL_DAYS,
+      trial_authorization_amount: Number(TRIAL_AUTHORIZATION_BASE_AMOUNT || 0),
+      trial_authorization_currency: DEFAULT_CURRENCY
+    });
+  }));
+
+  app.post('/admin/plans', requireInternal, validate([
+    allowBodyFields(['plan', 'monthly_amount', 'yearly_amount']),
+    body('plan')
+      .isString()
+      .custom((value) => getKnownPlanCodes().includes(normalizePlanCode(value)))
+      .withMessage('Unsupported billing plan.'),
+    body('monthly_amount')
+      .isFloat({ min: 0.01, max: 1000000 })
+      .withMessage('Monthly amount must be greater than zero.')
+      .toFloat(),
+    body('yearly_amount')
+      .isFloat({ min: 0.01, max: 1000000 })
+      .withMessage('Yearly amount must be greater than zero.')
+      .toFloat()
+  ]), asyncHandler(async (req, res) => {
+    ensurePlatformOwnerAccess(req);
+
+    const normalizedCode = normalizePlanCode(req.body.plan);
+    const plan = await upsertPlanSettings(db, {
+      plan: normalizedCode,
+      monthly_amount: req.body.monthly_amount,
+      yearly_amount: req.body.yearly_amount
+    });
+
+    if (!plan) {
+      throw createHttpError(400, 'Unsupported billing plan.', null, { expose: true });
+    }
+
+    const syncResult = await synchronizePlanPricingAcrossSubscriptions(db, normalizedCode);
+
+    return res.status(201).json({
+      plan: serializeAdminPlan(plan),
+      ...syncResult
     });
   }));
 
@@ -430,7 +570,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       throw createHttpError(400, 'owner_id is required.', null, { expose: true });
     }
 
-    const pricing = await buildNormalizedPricing(req.body.plan, req.body.billing_cycle, req.body.currency);
+    const pricing = await buildNormalizedPricing(db, req.body.plan, req.body.billing_cycle, req.body.currency);
     if (!pricing) {
       throw createHttpError(400, 'Unsupported subscription plan.', null, { expose: true });
     }
@@ -556,13 +696,13 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   ]), asyncHandler(async (req, res) => {
     const ownerId = Number(req.body.owner_id || req.authContext.userId);
     const planCode = normalizePlanCode(req.body.plan || 'launch');
-    const plan = getBillingPlan(planCode);
+    const plan = await getResolvedBillingPlan(db, planCode);
     if (!plan) {
       throw createHttpError(400, 'Unsupported subscription plan.', null, { expose: true });
     }
 
     const billingCycle = String(req.body.billing_cycle || 'monthly').trim().toLowerCase();
-    const pricing = await buildNormalizedPricing(planCode, billingCycle, req.body.currency || DEFAULT_CURRENCY);
+    const pricing = await buildNormalizedPricing(db, planCode, billingCycle, req.body.currency || DEFAULT_CURRENCY);
 
     await db.execute(
       `

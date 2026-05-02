@@ -1,5 +1,17 @@
 const schemaStatements = [
   `
+    CREATE TABLE IF NOT EXISTS billing_plan_settings (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      plan_code VARCHAR(50) NOT NULL,
+      currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+      monthly_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      yearly_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_billing_plan_settings_plan_code (plan_code)
+    )
+  `,
+  `
     CREATE TABLE IF NOT EXISTS subscriptions (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       owner_id BIGINT UNSIGNED NOT NULL,
