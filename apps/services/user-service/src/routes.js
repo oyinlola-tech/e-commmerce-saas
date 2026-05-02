@@ -23,6 +23,7 @@ const PASSWORD_RESET_OTP_TTL_MINUTES = Math.max(5, Number(process.env.PASSWORD_R
 const PLATFORM_ADMIN_BOOTSTRAP_KEY = 'platform-admin-env';
 const DEFAULT_PLATFORM_ADMIN_NAME = 'Platform Admin';
 const DEFAULT_PLATFORM_ADMIN_PASSWORD = 'ChangeMe123!';
+const DEFAULT_PLATFORM_ADMIN_EMAIL = 'platform-admin@example.com';
 
 const sanitizeUser = (user) => {
   if (!user) {
@@ -53,6 +54,19 @@ const normalizeEmail = (value = '') => {
 
 const normalizeStatus = (value = '') => {
   return String(value || '').trim().toLowerCase();
+};
+
+const isLikelyEmailAddress = (value = '') => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+};
+
+const buildBootstrapAdminEmail = (rootDomain = '') => {
+  const normalizedRootDomain = String(rootDomain || '').trim().toLowerCase();
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(normalizedRootDomain)) {
+    return `admin@${normalizedRootDomain}`;
+  }
+
+  return DEFAULT_PLATFORM_ADMIN_EMAIL;
 };
 
 const buildGenericPasswordResetResponse = () => ({
@@ -107,17 +121,26 @@ const upsertBootstrappedPlatformAdmin = async ({ db, logger, config }) => {
   const configuredName = sanitizePlainText(process.env.PLATFORM_ADMIN_NAME || DEFAULT_PLATFORM_ADMIN_NAME, {
     maxLength: 120
   }) || DEFAULT_PLATFORM_ADMIN_NAME;
-  const configuredEmail = normalizeEmail(
-    process.env.PLATFORM_ADMIN_EMAIL || `admin@${config.rootDomain || 'localhost'}`
-  );
+  const requestedEmail = normalizeEmail(process.env.PLATFORM_ADMIN_EMAIL || '');
+  const fallbackEmail = buildBootstrapAdminEmail(config.rootDomain);
+  const configuredEmail = isLikelyEmailAddress(requestedEmail)
+    ? requestedEmail
+    : fallbackEmail;
   const configuredPassword = String(process.env.PLATFORM_ADMIN_PASSWORD || DEFAULT_PLATFORM_ADMIN_PASSWORD);
 
-  if (!configuredEmail) {
-    throw new Error('PLATFORM_ADMIN_EMAIL must be a valid email address.');
+  if (!isLikelyEmailAddress(configuredEmail)) {
+    throw new Error('PLATFORM_ADMIN_EMAIL must resolve to a valid email address for platform admin bootstrap.');
   }
 
   if (configuredPassword.length < 8) {
     throw new Error('PLATFORM_ADMIN_PASSWORD must be at least 8 characters long.');
+  }
+
+  if (requestedEmail && !isLikelyEmailAddress(requestedEmail)) {
+    logger.warn('PLATFORM_ADMIN_EMAIL is not a usable login email; falling back to a safe bootstrap email.', {
+      requestedEmail,
+      fallbackEmail: configuredEmail
+    });
   }
 
   const existingBootstrapUser = (await db.query(

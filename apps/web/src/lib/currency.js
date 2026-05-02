@@ -226,7 +226,12 @@ const getGeoData = async (req) => {
 const buildCurrencyContext = async (req, store = null) => {
   const baseCurrency = getStoreBaseCurrency(store);
   const cookieName = getCurrencyCookieName(store);
-  const savedCurrency = normalizeCurrencyCode(req.cookies[cookieName] || req.cookies.preferred_currency);
+  const savedCurrency = normalizeCurrencyCode(
+    req.signedCookies?.[cookieName]
+    || req.cookies?.[cookieName]
+    || req.signedCookies?.preferred_currency
+    || req.cookies?.preferred_currency
+  );
   const geoData = savedCurrency ? null : await getGeoData(req);
   const locale = resolveLocale(req, geoData);
   const candidateCurrencies = getSupportedCurrencies(store, geoData?.currency);

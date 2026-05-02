@@ -33,7 +33,7 @@
             <%- include('./csrf-field') %>
             <input type="hidden" name="returnTo" value="<%= currentUrl || currentPath || '/' %>">
             <label for="platform-currency" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Currency</label>
-            <select id="platform-currency" name="code" onchange="this.form.submit()" class="border-0 bg-transparent pr-6 text-sm font-medium text-slate-700 focus:outline-none focus:ring-0">
+            <select id="platform-currency" name="code" data-submit-on-change class="border-0 bg-transparent pr-6 text-sm font-medium text-slate-700 focus:outline-none focus:ring-0">
               <% availableCurrencies.forEach((entry) => { %>
                 <option value="<%= entry.code %>" <%= selectedCurrency === entry.code ? 'selected' : '' %>><%= entry.code %></option>
               <% }) %>
@@ -80,7 +80,7 @@
           <%- include('./csrf-field') %>
           <input type="hidden" name="returnTo" value="<%= currentUrl || currentPath || '/' %>">
           <label for="platform-currency-mobile" class="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Currency</label>
-          <select id="platform-currency-mobile" name="code" onchange="this.form.submit()" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+          <select id="platform-currency-mobile" name="code" data-submit-on-change class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
             <% availableCurrencies.forEach((entry) => { %>
               <option value="<%= entry.code %>" <%= selectedCurrency === entry.code ? 'selected' : '' %>><%= entry.label %></option>
             <% }) %>

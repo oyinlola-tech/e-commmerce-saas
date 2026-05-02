@@ -1,3 +1,6 @@
+<script id="currency-context-data" type="application/json">
+  <%- JSON.stringify((currencyContext && currencyContext.client) || null).replace(/</g, '\\u003c') %>
+</script>
 <script nonce="<%= cspNonce %>">
   (() => {
     const focusableSelector = [
@@ -168,7 +171,8 @@
     document.addEventListener('DOMContentLoaded', () => {
       try {
         const key = 'aisle.currencyContext';
-        const payload = <%- JSON.stringify((currencyContext && currencyContext.client) || null).replace(/</g, '\\u003c') %>;
+        const payloadNode = document.getElementById('currency-context-data');
+        const payload = payloadNode ? JSON.parse(payloadNode.textContent || 'null') : null;
         if (payload) {
           sessionStorage.setItem(key, JSON.stringify(payload));
         }
@@ -279,6 +283,22 @@
           link.addEventListener('click', () => {
             syncMobileNavState(button, panel, false);
           });
+        });
+      });
+
+      document.querySelectorAll('[data-submit-on-change]').forEach((control) => {
+        control.addEventListener('change', () => {
+          const form = control.closest('form');
+          if (!form) {
+            return;
+          }
+
+          if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+            return;
+          }
+
+          form.submit();
         });
       });
 

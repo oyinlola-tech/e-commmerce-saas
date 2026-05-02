@@ -1,6 +1,5 @@
 const applyRequestContextMiddleware = (app, context, helpers) => {
   const {
-    env,
     ROOT_DOMAIN,
     storeTypes,
     storeTemplates,

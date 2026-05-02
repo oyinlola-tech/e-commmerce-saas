@@ -190,6 +190,10 @@ const registerPlatformRoutes = (app, deps) => {
     }
 
     setCurrencyPreferenceCookie(req, res, currencyContext.cookieName, requestedCurrency);
+    req.signedCookies = req.signedCookies || {};
+    req.cookies = req.cookies || {};
+    req.signedCookies[currencyContext.cookieName] = requestedCurrency;
+    req.cookies[currencyContext.cookieName] = requestedCurrency;
     return res.redirect(safeReturnTo);
   });
 
