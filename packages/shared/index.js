@@ -17,5 +17,6 @@ module.exports = {
   ...require('./src/sanitization'),
   ...require('./src/validation'),
   ...require('./src/express'),
+  ...require('./src/server'),
   ...require('./src/service-runner')
 };

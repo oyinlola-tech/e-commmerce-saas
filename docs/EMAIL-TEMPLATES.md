@@ -1,0 +1,78 @@
+# Email Templates
+
+This document defines the transactional email matrix for Aisle Commerce so customer emails stay store-branded and owner emails stay platform-branded.
+
+## Branding rules
+
+- Customer-facing emails use the exact store identity from `store-service`: `name`, `logo_url`, `theme_color`, `support_email`, and storefront URL.
+- Store-owner emails use the platform identity as the visual shell and can optionally mention the owner's store name in the copy.
+- The notification renderer should stay centralized in `apps/services/notification-service` so HTML is not duplicated across services.
+
+## Implemented now
+
+| Template key | Audience | Brand source | Trigger |
+| --- | --- | --- | --- |
+| `platform.password_reset_otp` | Platform user / store owner | Platform brand | `user-service` password reset request |
+| `store.customer_password_reset_otp` | Customer | Store brand from `store-service` | `customer-service` password reset request |
+
+## Recommended owner and platform emails
+
+| Template key | Why it matters | Likely trigger in this repo |
+| --- | --- | --- |
+| `platform.owner_welcome` | Confirms account creation and sets first expectations. | `USER_REGISTERED` |
+| `platform.owner_email_verification_otp` | Confirms the owner controls the email address. | Future verification flow |
+| `platform.owner_login_alert` | Warns about unrecognized or suspicious logins. | Future auth security event |
+| `platform.store_created` | Confirms a store was provisioned successfully. | `STORE_CREATED` |
+| `platform.subscription_trial_started` | Tells the owner the free trial is active. | Billing verification success |
+| `platform.subscription_trial_ending` | Prevents surprise billing and reduces failed renewals. | Scheduled check on `trial_ends_at` |
+| `platform.subscription_trial_ended` | Explains what changed after the trial ended. | Trial expiry workflow |
+| `platform.subscription_invoice_created` | Sends or announces a new subscription invoice. | Invoice creation |
+| `platform.subscription_invoice_paid` | Acts as the billing receipt for owners. | `PAYMENT_SUCCEEDED` for invoices |
+| `platform.subscription_payment_failed` | Prompts the owner to fix billing before access is affected. | `PAYMENT_FAILED` for invoices |
+| `platform.subscription_renewed` | Confirms successful renewal and next billing date. | `SUBSCRIPTION_CHANGED` |
+| `platform.subscription_cancellation_scheduled` | Confirms cancellation at period end. | `POST /subscriptions/cancel` |
+| `platform.subscription_cancelled` | Final confirmation that billing has stopped. | `POST /subscriptions/cancel` |
+| `platform.compliance_status_changed` | Communicates KYC/KYB approvals, rejections, or missing info. | `COMPLIANCE_STATUS_CHANGED` |
+
+## Recommended customer emails
+
+| Template key | Why it matters | Likely trigger in this repo |
+| --- | --- | --- |
+| `store.customer_welcome` | Confirms registration and introduces the account area. | `CUSTOMER_REGISTERED` |
+| `store.customer_email_verification_otp` | Validates the email address before trust-sensitive actions. | Future verification flow |
+| `store.customer_login_alert` | Warns about unrecognized customer logins. | Future auth security event |
+| `store.order_confirmation` | Acknowledges the order immediately. | `ORDER_CREATED` |
+| `store.payment_receipt` | Confirms successful payment with amount and reference. | `PAYMENT_SUCCEEDED` for orders |
+| `store.payment_failed` | Lets the customer retry before abandoning checkout. | `PAYMENT_FAILED` for orders |
+| `store.invoice_issued` | Supports invoice-based or B2B-style purchases. | Future invoice workflow |
+| `store.order_status_processing` | Reassures the customer that fulfillment has started. | `ORDER_STATUS_CHANGED` |
+| `store.order_status_shipped` | Announces shipment and tracking details. | Future shipped status workflow |
+| `store.order_status_delivered` | Confirms delivery. | Future delivered status workflow |
+| `store.order_cancelled` | Explains a cancellation clearly and quickly. | Future cancelled status workflow |
+| `store.refund_issued` | Confirms refund amount and timing. | Future refund workflow |
+| `store.abandoned_cart_reminder` | Recovers revenue from unfinished checkout sessions. | Future cart recovery workflow |
+| `store.wishlist_back_in_stock` | Re-engages customers when saved items return. | Future inventory alert workflow |
+| `store.wishlist_price_drop` | Re-engages customers when a saved item becomes cheaper. | Future merchandising alert workflow |
+| `store.review_request` | Generates post-purchase feedback and trust signals. | Post-delivery workflow |
+
+## Suggested rollout order
+
+1. Auth and account emails: welcome, verification OTP, password reset OTP, login alert.
+2. Checkout and payment emails: order confirmation, payment receipt, payment failed, invoice issued.
+3. Fulfillment emails: processing, shipped, delivered, cancelled, refund issued.
+4. Subscription emails: trial start, trial ending, invoice created, paid, failed, renewed, cancelled.
+5. Retention emails: abandoned cart, wishlist alerts, review request.
+
+## Data each template should expect
+
+- Identity: recipient name, email, audience, locale if later added.
+- Brand: store name, store logo, store theme color, platform name, support email.
+- Commerce: order ID, invoice ID, currency, amount, line items, payment reference.
+- Lifecycle: plan name, trial end date, renewal date, cancellation date, compliance status.
+- Security: IP address, device, browser, rough location, timestamp.
+
+## Code pointers
+
+- Renderer and template catalog live in `apps/services/notification-service/src`.
+- Store branding comes from `store-service`, which already exposes `name`, `logo_url`, `theme_color`, and `support_email`.
+- Existing order and billing events already provide the main hooks we need for the next template wave.

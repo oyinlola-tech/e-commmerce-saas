@@ -11,6 +11,8 @@ const {
   sanitizeJsonObject,
   sanitizePlainText
 } = require('../../../../packages/shared');
+const { listEmailTemplates } = require('./template-catalog');
+const { renderEmailTemplate } = require('./template-renderer');
 
 let transporterPromise = null;
 
@@ -69,20 +71,65 @@ const buildRequireInternal = (config) => {
 const registerRoutes = async ({ app, db, config }) => {
   const requireInternal = buildRequireInternal(config);
 
+  app.get('/emails/templates', requireInternal, asyncHandler(async (req, res) => {
+    return res.json({
+      templates: listEmailTemplates()
+    });
+  }));
+
   app.post('/emails/send', requireInternal, validate([
-    allowBodyFields(['to', 'subject', 'text', 'html', 'metadata']),
+    allowBodyFields(['to', 'subject', 'text', 'html', 'metadata', 'template_key', 'template_data', 'brand', 'store_id']),
     body('to').isEmail().customSanitizer((value) => sanitizeEmail(value)),
     commonRules.optionalPlainText('subject', 190),
     body('text').optional().isString(),
     body('html').optional().isString(),
-    commonRules.jsonObject('metadata')
+    commonRules.jsonObject('metadata'),
+    commonRules.optionalPlainText('template_key', 120),
+    commonRules.jsonObject('template_data'),
+    commonRules.jsonObject('brand'),
+    body('store_id').optional().isInt({ min: 1 }).toInt()
   ]), asyncHandler(async (req, res) => {
     const smtpConfig = resolveSmtpConfig();
-    const subject = sanitizePlainText(req.body.subject || 'Aisle notification', { maxLength: 190 }) || 'Aisle notification';
-    const text = String(req.body.text || '').trim();
-    const html = String(req.body.html || '').trim();
+    const templateKey = sanitizePlainText(req.body.template_key || '', { maxLength: 120 });
+    let subject = sanitizePlainText(req.body.subject || 'Aisle notification', { maxLength: 190 }) || 'Aisle notification';
+    let text = String(req.body.text || '').trim();
+    let html = String(req.body.html || '').trim();
+    let resolvedTemplate = null;
+
+    if (templateKey) {
+      try {
+        resolvedTemplate = await renderEmailTemplate({
+          config,
+          smtpConfig,
+          requestId: req.requestId || req.authContext.requestId,
+          templateKey,
+          templateData: req.body.template_data || {},
+          brand: req.body.brand || {},
+          storeId: req.body.store_id || null
+        });
+      } catch (error) {
+        throw createHttpError(Number(error.status) || 422, error.message || 'Unable to render the email template.', null, {
+          expose: true
+        });
+      }
+
+      subject = sanitizePlainText(resolvedTemplate.subject || subject, { maxLength: 190 }) || subject;
+      text = String(resolvedTemplate.text || '').trim();
+      html = String(resolvedTemplate.html || '').trim();
+    }
+
     if (!text && !html) {
       throw createHttpError(400, 'Either text or html email content is required.', null, { expose: true });
+    }
+
+    const metadata = sanitizeJsonObject(req.body.metadata || {});
+    if (templateKey) {
+      metadata.template_key = templateKey;
+      metadata.audience = resolvedTemplate?.definition?.audience || metadata.audience || '';
+      metadata.brand_mode = resolvedTemplate?.definition?.brand_mode || metadata.brand_mode || '';
+      if (req.body.store_id) {
+        metadata.store_id = Number(req.body.store_id);
+      }
     }
 
     const result = await db.execute(
@@ -94,8 +141,12 @@ const registerRoutes = async ({ app, db, config }) => {
       [
         req.body.to,
         subject,
-        JSON.stringify(sanitizeJsonObject(req.body.metadata || {})),
+        JSON.stringify(metadata),
         JSON.stringify({
+          template_key: templateKey || null,
+          template_data: sanitizeJsonObject(req.body.template_data || {}),
+          brand: sanitizeJsonObject(req.body.brand || {}),
+          store_id: req.body.store_id || null,
           text,
           html
         })

@@ -32,7 +32,8 @@ const {
   allowBodyFields,
   commonRules,
   asyncHandler,
-  errorHandler
+  errorHandler,
+  listenWithErrorHandler
 } = require('../../packages/shared');
 const { createGatewayOpenApiSpec } = require('./src/openapi');
 
@@ -906,11 +907,19 @@ const bootstrap = async () => {
   server.on('upgrade', chatSocketProxy.upgrade);
   server.on('upgrade', webProxy.upgrade);
 
-  server.listen(config.port, () => {
-    logger.info('Gateway listening', {
-      port: config.port,
-      rootDomain: config.rootDomain
-    });
+  listenWithErrorHandler({
+    server,
+    port: config.port,
+    logger,
+    serviceName: 'gateway',
+    displayName: 'Gateway',
+    envVarName: 'GATEWAY_PORT',
+    onListening: () => {
+      logger.info('Gateway listening', {
+        port: config.port,
+        rootDomain: config.rootDomain
+      });
+    }
   });
 
   let shutdownPromise = null;

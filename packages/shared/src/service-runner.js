@@ -7,6 +7,9 @@ const {
   createLogger
 } = require('./logger');
 const {
+  listenWithErrorHandler
+} = require('./server');
+const {
   bootstrapDatabase
 } = require('./database');
 const {
@@ -179,11 +182,19 @@ const startService = async ({
     serviceName
   }));
 
-  server.listen(config.port, () => {
-    logger.info('Service listening', {
-      port: config.port,
-      serviceName
-    });
+  listenWithErrorHandler({
+    server,
+    port: config.port,
+    logger,
+    serviceName,
+    displayName: 'Service',
+    envVarName: `${config.serviceEnvPrefix}_PORT`,
+    onListening: () => {
+      logger.info('Service listening', {
+        port: config.port,
+        serviceName
+      });
+    }
   });
 
   let shutdownPromise = null;

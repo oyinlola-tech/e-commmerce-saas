@@ -76,27 +76,6 @@ const buildGenericPasswordResetResponse = () => ({
 });
 
 const sendPasswordResetOtpEmail = async (config, requestId, payload = {}) => {
-  const subject = 'Your Aisle storefront password reset OTP';
-  const otp = String(payload.otp || '').trim();
-  const displayName = sanitizePlainText(payload.name || 'there', { maxLength: 120 }) || 'there';
-  const resetWindow = `${PASSWORD_RESET_OTP_TTL_MINUTES} minute${PASSWORD_RESET_OTP_TTL_MINUTES === 1 ? '' : 's'}`;
-  const text = [
-    `Hi ${displayName},`,
-    '',
-    `Use this OTP to reset your storefront password: ${otp}`,
-    '',
-    `This code expires in ${resetWindow}. If you did not request this, you can ignore this email.`
-  ].join('\n');
-  const html = `
-    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
-      <p>Hi ${displayName},</p>
-      <p>Use this OTP to reset your storefront password.</p>
-      <p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0;color:#0f766e">${otp}</p>
-      <p>This code expires in ${resetWindow}.</p>
-      <p>If you did not request this, you can ignore this email.</p>
-    </div>
-  `.trim();
-
   try {
     await requestJson(`${config.serviceUrls.notification}/emails/send`, {
       method: 'POST',
@@ -108,9 +87,13 @@ const sendPasswordResetOtpEmail = async (config, requestId, payload = {}) => {
       }),
       body: {
         to: normalizeEmail(payload.email),
-        subject,
-        text,
-        html,
+        template_key: 'store.customer_password_reset_otp',
+        template_data: {
+          name: sanitizePlainText(payload.name || 'there', { maxLength: 120 }) || 'there',
+          otp: String(payload.otp || '').trim(),
+          expires_in_minutes: PASSWORD_RESET_OTP_TTL_MINUTES
+        },
+        store_id: Number(payload.store_id) || null,
         metadata: {
           kind: 'password_reset_otp',
           audience: 'customer'
@@ -259,6 +242,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     );
 
     await sendPasswordResetOtpEmail(config, req.requestId, {
+      store_id: storeId,
       email: customer.email,
       name: customer.name,
       otp

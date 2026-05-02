@@ -124,11 +124,13 @@ selectedProcesses.forEach((processDefinition) => {
 
     if (signal) {
       process.stderr.write(`${prefixLine(processDefinition, `stopped by ${signal}`)}\n`);
+      exitCode = exitCode || 1;
     } else if (code !== 0) {
       process.stderr.write(`${prefixLine(processDefinition, `exited with code ${code}`)}\n`);
       exitCode = code || 1;
     } else {
-      process.stdout.write(`${prefixLine(processDefinition, 'exited cleanly')}\n`);
+      process.stderr.write(`${prefixLine(processDefinition, 'exited unexpectedly with code 0')}\n`);
+      exitCode = 1;
     }
 
     await stopChildren();
