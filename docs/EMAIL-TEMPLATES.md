@@ -48,6 +48,7 @@ This document defines the transactional email matrix for Aisle Commerce so custo
 | `store.order_cancelled` | Customer | Store brand from `store-service` | `ORDER_STATUS_CHANGED` when status becomes cancelled |
 | `store.refund_issued` | Customer | Store brand from `store-service` | Render-ready for refund workflow |
 | `store.abandoned_cart_reminder` | Customer | Store brand from `store-service` | Render-ready for cart recovery workflow |
+| `store.monthly_product_marketing` | Customer | Store brand from `store-service` | Monthly scheduler for subscribed customers |
 | `store.wishlist_back_in_stock` | Customer | Store brand from `store-service` | Render-ready for inventory alert workflow |
 | `store.wishlist_price_drop` | Customer | Store brand from `store-service` | Render-ready for merchandising alert workflow |
 | `store.review_request` | Customer | Store brand from `store-service` | Render-ready for post-delivery follow-up |
@@ -56,6 +57,7 @@ This document defines the transactional email matrix for Aisle Commerce so custo
 
 - `notification-service` now consumes registration, store creation, order, payment, subscription-state, and compliance events for the templates that already have real data sources.
 - Owner billing and compliance emails now avoid "primary store" guessing; store-specific copy is included only when the event payload carries a real `store_id`.
+- Monthly marketing product emails are now seeded per store, run automatically from `notification-service`, send the latest 15 published products, and include a per-customer unsubscribe link.
 - Previewing is supported with `POST /emails/render` in `notification-service` so templates can be inspected without sending a real email.
 - Sending still works through `POST /emails/send`, and template sends now accept `template_key`, `template_data`, `brand`, and `store_id`.
 
@@ -95,6 +97,7 @@ This document defines the transactional email matrix for Aisle Commerce so custo
 | `store.order_cancelled` | Explains a cancellation clearly and quickly. | Future cancelled status workflow |
 | `store.refund_issued` | Confirms refund amount and timing. | Future refund workflow |
 | `store.abandoned_cart_reminder` | Recovers revenue from unfinished checkout sessions. | Future cart recovery workflow |
+| `store.monthly_product_marketing` | Re-engages subscribed customers with the newest catalog additions every month. | Monthly marketing scheduler |
 | `store.wishlist_back_in_stock` | Re-engages customers when saved items return. | Future inventory alert workflow |
 | `store.wishlist_price_drop` | Re-engages customers when a saved item becomes cheaper. | Future merchandising alert workflow |
 | `store.review_request` | Generates post-purchase feedback and trust signals. | Post-delivery workflow |

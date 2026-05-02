@@ -1,9 +1,13 @@
 const {
-  createHttpError,
+  createHttpError
+} = require('../../../../packages/shared/src/errors');
+const {
   sanitizeEmail,
-  sanitizePlainText,
+  sanitizePlainText
+} = require('../../../../packages/shared/src/sanitization');
+const {
   decryptText
-} = require('../../../../packages/shared');
+} = require('../../../../packages/shared/src/crypto');
 
 const MARKETING_UNSUBSCRIBE_TOKEN_PURPOSE = 'customer_marketing_unsubscribe';
 

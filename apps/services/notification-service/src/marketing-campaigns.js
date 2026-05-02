@@ -1,9 +1,11 @@
 const { URL } = require('url');
 const {
   sanitizePlainText,
-  sanitizeUrl,
+  sanitizeUrl
+} = require('../../../../packages/shared/src/sanitization');
+const {
   createMarketingUnsubscribeToken
-} = require('../../../../packages/shared');
+} = require('../../../../packages/shared/src/marketing-emails');
 
 const MARKETING_CAMPAIGN_SCHEDULER_INTERVAL_MS = Math.max(
   60 * 1000,
