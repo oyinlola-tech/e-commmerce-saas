@@ -9,6 +9,9 @@ const schemaStatements = [
       phone VARCHAR(50) NULL,
       addresses JSON NULL,
       metadata JSON NULL,
+      marketing_email_subscribed TINYINT(1) NOT NULL DEFAULT 1,
+      marketing_email_subscribed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      marketing_email_unsubscribed_at DATETIME NULL,
       password_reset_otp_hash VARCHAR(255) NULL,
       password_reset_otp_expires_at DATETIME NULL,
       password_reset_requested_at DATETIME NULL,
@@ -19,6 +22,28 @@ const schemaStatements = [
       KEY idx_customers_email (email)
     )
   `
+  ,
+  {
+    sql: `
+      ALTER TABLE customers
+      ADD COLUMN marketing_email_subscribed TINYINT(1) NOT NULL DEFAULT 1 AFTER metadata
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE customers
+      ADD COLUMN marketing_email_subscribed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER marketing_email_subscribed
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE customers
+      ADD COLUMN marketing_email_unsubscribed_at DATETIME NULL AFTER marketing_email_subscribed_at
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  }
 ];
 
 module.exports = {

@@ -10,6 +10,7 @@ module.exports = {
   ...require('./src/http'),
   ...require('./src/passwords'),
   ...require('./src/crypto'),
+  ...require('./src/marketing-emails'),
   ...require('./src/security'),
   ...require('./src/cache'),
   ...require('./src/rate-limit'),

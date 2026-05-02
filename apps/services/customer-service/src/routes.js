@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { body } = require('express-validator');
+const { body, query } = require('express-validator');
 const {
   hashPassword,
   comparePassword,
@@ -12,12 +12,17 @@ const {
   createHttpError,
   validate,
   allowBodyFields,
+  allowQueryFields,
   commonRules,
   storeIdRule,
   sanitizeEmail,
   sanitizeJsonObject,
   sanitizePlainText
 } = require('../../../../packages/shared');
+const {
+  parseMarketingUnsubscribeToken,
+  sanitizeMarketingSubscriber
+} = require('./marketing');
 
 const PASSWORD_RESET_OTP_TTL_MINUTES = Math.max(5, Number(process.env.PASSWORD_RESET_OTP_TTL_MINUTES || 15));
 
@@ -393,6 +398,76 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     );
     return res.json({
       customers: customers.map(sanitizeCustomer)
+    });
+  }));
+
+  app.get('/customers/marketing/subscribers', requireInternal, asyncHandler(async (req, res) => {
+    const storeId = Number(req.authContext.storeId || req.headers['x-store-id']);
+    if (!storeId) {
+      throw createHttpError(400, 'Store context is required.', null, { expose: true });
+    }
+
+    const customers = await db.query(
+      `
+        SELECT id, store_id, name, email, marketing_email_subscribed, marketing_email_subscribed_at, marketing_email_unsubscribed_at
+        FROM customers
+        WHERE store_id = ? AND marketing_email_subscribed = 1
+        ORDER BY created_at DESC, id DESC
+      `,
+      [storeId]
+    );
+
+    return res.json({
+      customers: customers.map(sanitizeMarketingSubscriber)
+    });
+  }));
+
+  app.get('/customers/marketing/unsubscribe', validate([
+    allowQueryFields(['token']),
+    query('token')
+      .trim()
+      .notEmpty()
+      .withMessage('token is required.')
+      .isLength({ max: 4096 })
+      .withMessage('token is invalid.')
+  ]), asyncHandler(async (req, res) => {
+    const tokenData = parseMarketingUnsubscribeToken(req.query.token, config.internalSharedSecret);
+    const customer = (await db.query(
+      'SELECT * FROM customers WHERE id = ? AND store_id = ? AND email = ? LIMIT 1',
+      [tokenData.customerId, tokenData.storeId, tokenData.email]
+    ))[0] || null;
+
+    if (!customer) {
+      throw createHttpError(404, 'Customer not found for this unsubscribe link.', null, { expose: true });
+    }
+
+    const alreadyUnsubscribed = !Boolean(customer.marketing_email_subscribed);
+    if (!alreadyUnsubscribed) {
+      await db.execute(
+        `
+          UPDATE customers
+          SET marketing_email_subscribed = 0,
+              marketing_email_unsubscribed_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND store_id = ?
+        `,
+        [customer.id, customer.store_id]
+      );
+    }
+
+    const refreshedCustomer = (await db.query(
+      `
+        SELECT id, store_id, name, email, marketing_email_subscribed, marketing_email_subscribed_at, marketing_email_unsubscribed_at
+        FROM customers
+        WHERE id = ? AND store_id = ?
+        LIMIT 1
+      `,
+      [customer.id, customer.store_id]
+    ))[0] || customer;
+
+    return res.json({
+      status: 'unsubscribed',
+      already_unsubscribed: alreadyUnsubscribed,
+      customer: sanitizeMarketingSubscriber(refreshedCustomer)
     });
   }));
 };
