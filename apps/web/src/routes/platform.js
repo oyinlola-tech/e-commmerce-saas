@@ -481,7 +481,7 @@ const registerPlatformRoutes = (app, deps) => {
     }
   });
 
-  app.get('/billing/callback', async (req, res, next) => {
+  app.get('/billing/callback', authRateLimiter, async (req, res, next) => {
     try {
       if (requirePlatformUser(req, res)) {
         return;
