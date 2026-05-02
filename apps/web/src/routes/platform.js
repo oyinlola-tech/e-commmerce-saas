@@ -5,18 +5,14 @@ const {
   buildCustomerTermsPage,
   buildCustomerPrivacyPage
 } = require('../lib/legal-content');
-
-const buildPlatformAbsoluteUrl = (req, pathname = '/') => {
-  const protocol = String(req.headers['x-forwarded-proto'] || '')
-    .split(',')[0]
-    .trim()
-    || (req.secure ? 'https' : 'http');
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || req.hostname || '')
-    .split(',')[0]
-    .trim();
-  const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
-  return `${protocol}://${host}${normalizedPath}`;
-};
+const {
+  cleanStructuredData,
+  toIsoDate,
+  buildSitemapXml,
+  buildRobotsTxt,
+  buildItemListStructuredData,
+  buildFaqStructuredData
+} = require('../lib/seo');
 
 const registerPlatformRoutes = (app, deps) => {
   const { context, helpers, validations, renderers } = deps;
@@ -56,6 +52,10 @@ const registerPlatformRoutes = (app, deps) => {
     resolveStore,
     isStorefrontHost,
     resolveSafeLocalRedirect,
+    joinKeywordList,
+    buildPlatformAbsoluteUrl,
+    buildPlatformAssetUrl,
+    buildPlatformSeoDescription,
     buildStoreSeoDescription,
     buildStoreSeoKeywords,
     buildStorefrontAssetUrl,
@@ -99,9 +99,131 @@ const registerPlatformRoutes = (app, deps) => {
     renderErrorPage
   } = renderers;
 
+  const sendPlainText = (res, body) => {
+    res.type('text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+    return res.send(body);
+  };
+
+  const sendXml = (res, body) => {
+    res.type('application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+    return res.send(body);
+  };
+
+  const collectPublicStoreProducts = async (req, store, options = {}) => {
+    const limit = Math.max(1, Number(options.limit || 200));
+    const products = [];
+    let total = Infinity;
+    let page = 1;
+
+    while (products.length < total) {
+      const pageResult = await listStoreProducts(req, store, {
+        limit,
+        page
+      });
+      const pageProducts = Array.isArray(pageResult.products) ? pageResult.products : [];
+      if (!pageProducts.length) {
+        break;
+      }
+
+      products.push(...pageProducts);
+      total = Number(pageResult.total || pageProducts.length || 0);
+      page += 1;
+    }
+
+    return products;
+  };
+
+  const buildPlatformLandingStructuredData = (req, brand = {}, selectedCurrency = 'USD', billingPlans = [], faqItems = []) => {
+    const platformUrl = buildPlatformAbsoluteUrl(req, '/');
+    const socialImage = buildPlatformAssetUrl(req, '/brand/aisle-logo.svg');
+
+    return [
+      cleanStructuredData({
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: brand.platformName || 'Aisle',
+        url: platformUrl,
+        logo: socialImage,
+        image: socialImage,
+        email: brand.supportEmail || undefined,
+        description: buildPlatformSeoDescription(brand)
+      }),
+      cleanStructuredData({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: brand.platformName || 'Aisle',
+        url: platformUrl,
+        description: buildPlatformSeoDescription(brand)
+      }),
+      cleanStructuredData({
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: brand.platformName || 'Aisle',
+        applicationCategory: 'BusinessApplication',
+        operatingSystem: 'Web',
+        url: platformUrl,
+        image: socialImage,
+        description: 'Ecommerce SaaS for multi-store retail teams that want a branded storefront, real authentication, and an owner workspace.',
+        offers: billingPlans.map((plan) => cleanStructuredData({
+          '@type': 'Offer',
+          name: plan.name,
+          description: plan.description,
+          price: Number(plan.monthly_amount || 0),
+          priceCurrency: plan.currency || selectedCurrency || 'USD',
+          url: `${platformUrl}#pricing`
+        }))
+      }),
+      faqItems.length ? buildFaqStructuredData(faqItems) : null
+    ].filter(Boolean);
+  };
+
+  const buildStorefrontLandingStructuredData = (req, store, products = []) => {
+    const storefrontUrl = buildStorefrontUrl(store);
+    const featuredItems = products.slice(0, 8).map((product) => ({
+      url: storefrontUrl.startsWith('http')
+        ? `${storefrontUrl}/products/${encodeURIComponent(product.slug)}`
+        : buildPlatformAbsoluteUrl(req, `/products/${encodeURIComponent(product.slug)}`),
+      name: product.name,
+      image: buildStorefrontAssetUrl(store, product.image || store.logo || '')
+    }));
+
+    return [
+      cleanStructuredData({
+        '@context': 'https://schema.org',
+        '@type': 'OnlineStore',
+        name: store.name,
+        url: storefrontUrl,
+        image: buildStorefrontAssetUrl(store, store.logo || products[0]?.image || ''),
+        description: buildStoreSeoDescription(store),
+        email: store.support_email || undefined,
+        telephone: store.contact_phone || undefined,
+        areaServed: Array.isArray(store.markets) ? store.markets.slice(0, 12) : undefined
+      }),
+      cleanStructuredData({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: store.name,
+        url: storefrontUrl,
+        description: buildStoreSeoDescription(store),
+        potentialAction: {
+          '@type': 'SearchAction',
+          target: `${storefrontUrl}/products?search={search_term_string}`,
+          'query-input': 'required name=search_term_string'
+        }
+      }),
+      featuredItems.length
+        ? buildItemListStructuredData(featuredItems, {
+          name: `Featured products from ${store.name}`
+        })
+        : null
+    ].filter(Boolean);
+  };
+
   const renderLegalPage = (req, res, kind) => {
     const isStorefront = isStorefrontHost(req);
-    const canonicalUrl = buildPlatformAbsoluteUrl(req, kind === 'privacy' ? '/privacy' : '/terms');
+    const canonicalPath = kind === 'privacy' ? '/privacy' : '/terms';
 
     if (isStorefront) {
       const store = resolveStore(req);
@@ -118,7 +240,7 @@ const registerPlatformRoutes = (app, deps) => {
         pageBrandLabel: store.name,
         metaTitle: `${legalPage.title} | ${store.name}`,
         metaDescription: legalPage.metaDescription,
-        canonicalUrl,
+        canonicalPath,
         legalPage
       });
     }
@@ -131,7 +253,7 @@ const registerPlatformRoutes = (app, deps) => {
       pageTitle: legalPage.title,
       metaTitle: `${legalPage.title} | ${res.locals.platformBrand?.platformName || 'Aisle'}`,
       metaDescription: legalPage.metaDescription,
-      canonicalUrl,
+      canonicalPath,
       legalPage
     });
   };
@@ -199,6 +321,114 @@ const registerPlatformRoutes = (app, deps) => {
     return res.redirect(safeReturnTo);
   });
 
+  app.get('/robots.txt', (req, res) => {
+    if (isStorefrontHost(req)) {
+      const store = resolveStore(req);
+      if (!store) {
+        return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+      }
+
+      return sendPlainText(res, buildRobotsTxt({
+        lines: [
+          'Allow: /',
+          'Disallow: /account',
+          'Disallow: /orders',
+          'Disallow: /checkout',
+          'Disallow: /cart',
+          'Disallow: /wishlist',
+          'Disallow: /order-confirmation',
+          'Disallow: /cart/',
+          'Disallow: /wishlist/items',
+          'Disallow: /preferences/currency'
+        ],
+        sitemapUrl: `${buildStorefrontUrl(store)}/sitemap.xml`
+      }));
+    }
+
+    return sendPlainText(res, buildRobotsTxt({
+      lines: [
+        'Allow: /',
+        'Disallow: /dashboard',
+        'Disallow: /platform-admin',
+        'Disallow: /billing/callback',
+        'Disallow: /preferences/currency'
+      ],
+      sitemapUrl: buildPlatformAbsoluteUrl(req, '/sitemap.xml')
+    }));
+  });
+
+  app.get('/sitemap.xml', async (req, res, next) => {
+    try {
+      if (isStorefrontHost(req)) {
+        const store = resolveStore(req);
+        if (!store) {
+          return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+        }
+
+        const storefrontUrl = buildStorefrontUrl(store);
+        const products = await collectPublicStoreProducts(req, store, { limit: 200 });
+        const productsUpdatedAt = products.reduce((latest, product) => {
+          const candidate = new Date(product.updated_at || product.created_at || 0).getTime();
+          return candidate > latest ? candidate : latest;
+        }, 0);
+        const sitemapEntries = [
+          {
+            loc: storefrontUrl,
+            lastmod: toIsoDate(store.updated_at || store.created_at),
+            changefreq: 'daily',
+            priority: '1.0'
+          },
+          {
+            loc: `${storefrontUrl}/products`,
+            lastmod: productsUpdatedAt ? new Date(productsUpdatedAt).toISOString() : toIsoDate(store.updated_at || store.created_at),
+            changefreq: 'daily',
+            priority: '0.9'
+          },
+          {
+            loc: `${storefrontUrl}/terms`,
+            lastmod: toIsoDate(store.updated_at || store.created_at),
+            changefreq: 'monthly',
+            priority: '0.3'
+          },
+          {
+            loc: `${storefrontUrl}/privacy`,
+            lastmod: toIsoDate(store.updated_at || store.created_at),
+            changefreq: 'monthly',
+            priority: '0.3'
+          },
+          ...products.map((product) => ({
+            loc: `${storefrontUrl}/products/${encodeURIComponent(product.slug)}`,
+            lastmod: toIsoDate(product.updated_at || product.created_at),
+            changefreq: 'weekly',
+            priority: '0.8'
+          }))
+        ];
+
+        return sendXml(res, buildSitemapXml(sitemapEntries));
+      }
+
+      return sendXml(res, buildSitemapXml([
+        {
+          loc: buildPlatformAbsoluteUrl(req, '/'),
+          changefreq: 'weekly',
+          priority: '1.0'
+        },
+        {
+          loc: buildPlatformAbsoluteUrl(req, '/terms'),
+          changefreq: 'monthly',
+          priority: '0.3'
+        },
+        {
+          loc: buildPlatformAbsoluteUrl(req, '/privacy'),
+          changefreq: 'monthly',
+          priority: '0.3'
+        }
+      ]));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   app.get('/', async (req, res, next) => {
     try {
       if (isStorefrontHost(req)) {
@@ -219,6 +449,7 @@ const registerPlatformRoutes = (app, deps) => {
           metaKeywords: buildStoreSeoKeywords(store),
           canonicalPath: '/',
           socialImage: buildStorefrontAssetUrl(store, store.logo || ''),
+          structuredData: buildStorefrontLandingStructuredData(req, store, sortedProducts),
           products: sortedProducts,
           featuredProducts: sortedProducts.filter((product) => product.featured).slice(0, 4),
           categories: productResult.categories || discovery.categories,
@@ -230,10 +461,40 @@ const registerPlatformRoutes = (app, deps) => {
       const billingPlans = await getPublicBillingPlans(req, {
         currency: res.locals.selectedCurrency || 'USD'
       });
+      const platformFaqItems = [
+        {
+          question: 'Can I create and manage real stores from this build?',
+          answer: 'Yes. Owner accounts, store creation, store admin, storefront auth, and customer checkout flows are all wired to services.'
+        },
+        {
+          question: 'Does Aisle integrate directly with Shopify, AliExpress, or Jumia today?',
+          answer: 'No direct integrations are advertised in this build. Those names are referenced only to describe the ecommerce patterns and comparisons merchants often evaluate.'
+        },
+        {
+          question: 'Why is the platform operations area a placeholder?',
+          answer: 'Because platform-wide support, incident handling, and staff operations will only appear once they are backed by real permissions and workflows.'
+        },
+        {
+          question: 'Does this support custom storefront identity?',
+          answer: 'Yes. Each store can carry its own theme color, typography, content, catalog, domain, and support details.'
+        }
+      ];
 
       return renderPlatform(res, 'platform/index', {
         pageTitle: 'Aisle',
-        metaDescription: 'Aisle gives retail teams a polished storefront, real authentication, and an owner workspace that feels like product, not a mockup.',
+        metaDescription: 'Aisle is an ecommerce SaaS platform for teams comparing Shopify alternatives and wanting marketplace-inspired storefronts, real authentication, and a serious owner workspace.',
+        metaKeywords: joinKeywordList(
+          ['ecommerce saas', 'shopify alternative', 'multistore ecommerce platform', 'online store builder'],
+          ['marketplace-inspired storefront', 'aliexpress shopping experience', 'jumia ecommerce workflow', 'retail operations software']
+        ),
+        canonicalPath: '/',
+        structuredData: buildPlatformLandingStructuredData(
+          req,
+          res.locals.platformBrand,
+          res.locals.selectedCurrency || 'USD',
+          billingPlans,
+          platformFaqItems
+        ),
         metrics: {},
         stores: [],
         billingPlans

@@ -25,6 +25,55 @@ const schemaStatements = [
       KEY idx_products_category (category)
     )
   `,
+  {
+    sql: `
+      ALTER TABLE products
+      ADD COLUMN base_price DECIMAL(12,2) NULL AFTER price
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE products
+      ADD COLUMN promotion_type VARCHAR(20) NOT NULL DEFAULT 'none' AFTER compare_at_price
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE products
+      ADD COLUMN discount_type VARCHAR(20) NOT NULL DEFAULT 'none' AFTER promotion_type
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE products
+      ADD COLUMN discount_value DECIMAL(12,2) NULL DEFAULT NULL AFTER discount_type
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE products
+      ADD COLUMN discount_label VARCHAR(120) NULL AFTER discount_value
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE products
+      ADD COLUMN discount_starts_at DATETIME NULL AFTER discount_label
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE products
+      ADD COLUMN discount_ends_at DATETIME NULL AFTER discount_starts_at
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
   `
     CREATE TABLE IF NOT EXISTS inventory_reservations (
       id VARCHAR(64) NOT NULL PRIMARY KEY,

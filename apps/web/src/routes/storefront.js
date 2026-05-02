@@ -1,5 +1,10 @@
 const rateLimit = require('express-rate-limit');
 const { body, param } = require('express-validator');
+const {
+  cleanStructuredData,
+  buildBreadcrumbStructuredData,
+  buildItemListStructuredData
+} = require('../lib/seo');
 
 const registerStorefrontRoutes = (app, deps) => {
   const { context, helpers, validations, renderers } = deps;
@@ -16,6 +21,7 @@ const registerStorefrontRoutes = (app, deps) => {
     getStoreProductById,
     getStoreProductBySlug,
     listCustomerOrders,
+    previewStoreCoupon,
     listStoreProducts,
     mergeProductPresentation,
     registerStorefrontCustomer,
@@ -36,6 +42,7 @@ const registerStorefrontRoutes = (app, deps) => {
     resolveStore,
     buildStoreSeoDescription,
     buildStoreSeoKeywords,
+    buildStorefrontAbsoluteUrl,
     buildStorefrontAssetUrl,
     decorateProducts,
     buildProductDiscovery,
@@ -46,13 +53,17 @@ const registerStorefrontRoutes = (app, deps) => {
     getRecentlyViewedProducts,
     resolveSafeLocalRedirect,
     persistWishlist,
-    setOrderTrackingCookie
+    setOrderTrackingCookie,
+    getAppliedCouponCode,
+    persistAppliedCoupon,
+    clearAppliedCoupon
   } = helpers;
   const {
     catalogQueryValidation,
     customerRegisterValidation,
     checkoutValidation,
     cartMutationValidation,
+    cartCouponValidation,
     productIdentifierValidation
   } = validations;
   const {
@@ -61,6 +72,113 @@ const registerStorefrontRoutes = (app, deps) => {
     renderCheckoutPage,
     renderErrorPage
   } = renderers;
+
+  const loadAppliedCouponPreview = async (req, res, store) => {
+    if (!store?.id) {
+      req.storeCouponPreview = null;
+      return null;
+    }
+
+    if (!req.currentCart?.items?.length) {
+      clearAppliedCoupon(req, res, store.id);
+      req.storeCouponPreview = null;
+      return null;
+    }
+
+    const appliedCouponCode = getAppliedCouponCode(req, store.id);
+    if (!appliedCouponCode) {
+      req.storeCouponPreview = null;
+      return null;
+    }
+
+    try {
+      const preview = await previewStoreCoupon(req, store, {
+        code: appliedCouponCode,
+        subtotal: req.currentCart.total
+      }, req.customerAuth);
+      req.storeCouponPreview = preview;
+      return preview;
+    } catch (error) {
+      if ([404, 422].includes(Number(error.status))) {
+        clearAppliedCoupon(req, res, store.id);
+        req.storeCouponPreview = null;
+        return null;
+      }
+
+      throw error;
+    }
+  };
+
+  const buildCollectionStructuredData = (store, products = [], options = {}) => {
+    const storeUrl = buildStorefrontAbsoluteUrl(store, '/');
+    const collectionUrl = buildStorefrontAbsoluteUrl(store, '/products');
+    const items = products.slice(0, 24).map((product) => ({
+      url: buildStorefrontAbsoluteUrl(store, `/products/${product.slug}`),
+      name: product.name,
+      image: buildStorefrontAssetUrl(store, product.image || store.logo || '')
+    }));
+
+    return [
+      buildBreadcrumbStructuredData([
+        { name: store.name, item: storeUrl },
+        { name: options.name || 'Catalog', item: collectionUrl }
+      ]),
+      buildItemListStructuredData(items, {
+        name: options.name || `Catalog for ${store.name}`
+      })
+    ].filter(Boolean);
+  };
+
+  const buildProductStructuredData = (store, product, selectedCurrency = 'USD') => {
+    const productUrl = buildStorefrontAbsoluteUrl(store, `/products/${product.slug}`);
+    const storeUrl = buildStorefrontAbsoluteUrl(store, '/');
+    const currency = selectedCurrency || store.default_currency || 'USD';
+
+    return [
+      buildBreadcrumbStructuredData([
+        { name: store.name, item: storeUrl },
+        { name: 'Catalog', item: buildStorefrontAbsoluteUrl(store, '/products') },
+        { name: product.name, item: productUrl }
+      ]),
+      cleanStructuredData({
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: product.name,
+        description: sanitizePlainText(product.description || buildStoreSeoDescription(store), { maxLength: 320 }),
+        image: (Array.isArray(product.images) ? product.images : [product.image])
+          .filter(Boolean)
+          .map((entry) => buildStorefrontAssetUrl(store, entry)),
+        sku: product.sku || undefined,
+        category: product.category || undefined,
+        brand: {
+          '@type': 'Brand',
+          name: store.name
+        },
+        url: productUrl,
+        offers: {
+          '@type': 'Offer',
+          priceCurrency: currency,
+          price: Number(product.price || 0),
+          availability: Number(product.inventory || 0) > 0
+            ? 'https://schema.org/InStock'
+            : 'https://schema.org/OutOfStock',
+          itemCondition: 'https://schema.org/NewCondition',
+          seller: {
+            '@type': 'Organization',
+            name: store.name
+          },
+          url: productUrl
+        },
+        aggregateRating: product.rating
+          ? {
+            '@type': 'AggregateRating',
+            ratingValue: Number(product.rating || 0),
+            reviewCount: Number(product.review_count || 1)
+          }
+          : undefined
+      })
+    ];
+  };
 
   app.get('/products', catalogQueryValidation, async (req, res, next) => {
     try {
@@ -97,6 +215,9 @@ const registerStorefrontRoutes = (app, deps) => {
           search
         ]),
         canonicalPath: '/products',
+        structuredData: buildCollectionStructuredData(store, products, {
+          name: `Catalog for ${store.name}`
+        }),
         products,
         categories: productResult.categories || discovery.categories,
         discoveryTags: discovery.tags.slice(0, 10),
@@ -147,6 +268,11 @@ const registerStorefrontRoutes = (app, deps) => {
         canonicalPath: `/products/${product.slug}`,
         socialImage: buildStorefrontAssetUrl(store, product.image || store.logo || ''),
         metaType: 'product',
+        structuredData: buildProductStructuredData(
+          store,
+          product,
+          res.locals.selectedCurrency || store.default_currency || 'USD'
+        ),
         product,
         relatedProducts,
         recentlyViewedProducts
@@ -179,15 +305,21 @@ const registerStorefrontRoutes = (app, deps) => {
     }
   });
 
-  app.get('/cart', (req, res) => {
+  app.get('/cart', async (req, res, next) => {
     const store = resolveStore(req);
     if (!store) {
       return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
     }
 
-    return renderStorefront(req, res, 'storefront/cart', {
-      pageTitle: 'Cart'
-    });
+    try {
+      await loadAppliedCouponPreview(req, res, store);
+      return renderStorefront(req, res, 'storefront/cart', {
+        pageTitle: 'Cart',
+        couponPreview: req.storeCouponPreview || null
+      });
+    } catch (error) {
+      return next(error);
+    }
   });
 
   app.get('/register', (req, res) => {
@@ -342,7 +474,7 @@ const registerStorefrontRoutes = (app, deps) => {
     }
   });
 
-  app.get('/checkout', (req, res) => {
+  app.get('/checkout', async (req, res, next) => {
     const store = resolveStore(req);
     if (!store) {
       return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
@@ -356,10 +488,27 @@ const registerStorefrontRoutes = (app, deps) => {
       return res.redirect('/cart?error=Your cart is empty');
     }
 
-    return renderCheckoutPage(req, res);
+    try {
+      await loadAppliedCouponPreview(req, res, store);
+      return renderCheckoutPage(req, res);
+    } catch (error) {
+      return next(error);
+    }
   });
 
-  app.post('/checkout', checkoutValidation, handleFormValidation((req, res, errors) => {
+  app.post('/checkout', async (req, res, next) => {
+    const store = resolveStore(req);
+    if (!store) {
+      return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+    }
+
+    try {
+      await loadAppliedCouponPreview(req, res, store);
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  }, checkoutValidation, handleFormValidation((req, res, errors) => {
     return renderCheckoutPage(req, res, errors, 422);
   }), async (req, res, next) => {
     try {
@@ -381,6 +530,7 @@ const registerStorefrontRoutes = (app, deps) => {
         email: req.currentCustomer.email,
         phone: req.currentCustomer.phone,
         currency: res.locals.selectedCurrency || store.default_currency || 'USD',
+        coupon_code: req.storeCouponPreview?.coupon?.code || getAppliedCouponCode(req, store.id) || null,
         sessionId: req.storefrontSessionId || ensureStorefrontSession(req, res)
       });
 
@@ -388,9 +538,14 @@ const registerStorefrontRoutes = (app, deps) => {
         return res.redirect('/cart?error=Your cart is empty');
       }
 
+      clearAppliedCoupon(req, res, store.id);
       setOrderTrackingCookie(req, res, store.id, checkout.order.id);
       return res.redirect(`/order-confirmation?order=${encodeURIComponent(checkout.order.id)}&success=Order placed`);
     } catch (error) {
+      if ([404, 422].includes(Number(error.status))) {
+        clearAppliedCoupon(req, res, store.id);
+      }
+
       if ([400, 403, 404, 409, 422].includes(Number(error.status))) {
         return res.redirect(`/checkout?error=${encodeURIComponent(error.message || 'Unable to place the order right now.')}`);
       }
@@ -520,11 +675,52 @@ const registerStorefrontRoutes = (app, deps) => {
         req.customerAuth,
         req.storefrontSessionId || ensureStorefrontSession(req, res)
       );
+      clearAppliedCoupon(req, res, store.id);
 
       return res.json({ cart });
     } catch (error) {
       return next(error);
     }
+  });
+
+  app.post('/cart/coupon', cartCouponValidation, handleFormValidation((req, res) => {
+    return res.redirect('/cart?error=Enter a valid coupon code.');
+  }), async (req, res, next) => {
+    try {
+      const store = resolveStore(req);
+      if (!store) {
+        return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+      }
+
+      if (!req.currentCart?.items?.length) {
+        return res.redirect('/cart?error=Your cart is empty');
+      }
+
+      const preview = await previewStoreCoupon(req, store, {
+        code: req.body.coupon_code,
+        subtotal: req.currentCart.total
+      }, req.customerAuth);
+      persistAppliedCoupon(req, res, store.id, preview?.coupon?.code || req.body.coupon_code);
+      return res.redirect('/cart?success=Coupon applied');
+    } catch (error) {
+      if ([400, 404, 422].includes(Number(error.status))) {
+        return res.redirect(`/cart?error=${encodeURIComponent(error.message || 'Unable to apply that coupon.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.post('/cart/coupon/remove', validate([
+    allowBodyFields(['_csrf'])
+  ]), (req, res) => {
+    const store = resolveStore(req);
+    if (!store) {
+      return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+    }
+
+    clearAppliedCoupon(req, res, store.id);
+    return res.redirect('/cart?success=Coupon removed');
   });
 
   app.get('/wishlist/items', async (req, res, next) => {

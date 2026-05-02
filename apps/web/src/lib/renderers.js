@@ -12,6 +12,7 @@ const createRenderers = (context, helpers, paymentProviderService) => {
     resolveStore,
     getCurrentCustomer,
     getWishlistProductIds,
+    buildPlatformMeta,
     buildStorefrontMeta,
     resolveFormReturnTo,
     buildFormData,
@@ -29,8 +30,10 @@ const createRenderers = (context, helpers, paymentProviderService) => {
   const supportedErrorPageStatuses = new Set([400, 401, 403, 404, 422, 429, 500, 502, 503]);
 
   const renderPlatform = (res, view, payload = {}) => {
+    const platformMeta = buildPlatformMeta(res.req, payload, res.locals.platformBrand);
     return res.render(view, {
       layout: 'layouts/main',
+      ...platformMeta,
       ...payload
     });
   };
@@ -65,13 +68,16 @@ const createRenderers = (context, helpers, paymentProviderService) => {
       store,
       storeTheme: store ? getStoreTheme(store) : null,
       pageBrandLabel: store?.name || '',
+      metaRobots: payload.metaRobots || 'noindex, nofollow',
       ...payload
     });
   };
 
   const renderPlatformAdmin = (res, view, payload = {}) => {
+    const platformMeta = buildPlatformMeta(res.req, payload, res.locals.platformBrand);
     return res.render(view, {
       layout: 'layouts/platform-admin',
+      ...platformMeta,
       ...payload
     });
   };
@@ -226,11 +232,23 @@ const createRenderers = (context, helpers, paymentProviderService) => {
     });
   };
 
+  const renderMarketingPage = (req, res, payload = {}, status = 200) => {
+    res.status(status);
+    return renderStoreAdmin(req, res, 'admin/marketing', {
+      pageTitle: 'Promotions',
+      errors: payload.errors || {},
+      formData: payload.formData || {},
+      coupons: payload.coupons || [],
+      editingCouponId: payload.editingCouponId || null
+    });
+  };
+
   const renderCheckoutPage = (req, res, errors = {}, status = 200) => {
     res.status(status);
     return renderStorefront(req, res, 'storefront/checkout', {
       pageTitle: 'Checkout',
-      errors
+      errors,
+      couponPreview: req.storeCouponPreview || null
     });
   };
 
@@ -431,6 +449,7 @@ const createRenderers = (context, helpers, paymentProviderService) => {
       layout,
       pageTitle: overrides.pageTitle || errorState.title,
       metaDescription: errorState.message,
+      metaRobots: 'noindex, nofollow',
       store,
       storeTheme: getStoreTheme(store),
       customer,
@@ -458,6 +477,7 @@ const createRenderers = (context, helpers, paymentProviderService) => {
     renderProductForm,
     renderSettingsPage,
     renderDomainPage,
+    renderMarketingPage,
     renderCheckoutPage,
     resolveErrorView,
     resolveErrorLayout,

@@ -6,6 +6,7 @@ const createAppHelpers = (context) => {
     PORT,
     isLocalRoot,
     orderCookieName,
+    couponCookieName,
     wishlistCookieName,
     recentlyViewedCookieName,
     catalogSortOptions,
@@ -20,6 +21,7 @@ const createAppHelpers = (context) => {
     sanitizeUrl,
     readSignedCookie,
     setSignedCookie,
+    clearSignedCookie,
     safeRedirect,
     isPlatformRequestHost,
     PLATFORM_ROLES,
@@ -63,6 +65,13 @@ const createAppHelpers = (context) => {
 
   const parseCheckbox = (value) => {
     return ['1', 'true', 'on', 'yes', 'published'].includes(String(value || '').trim().toLowerCase());
+  };
+
+  const normalizePromotionCode = (value = '') => {
+    return sanitizePlainText(value || '', { maxLength: 80 })
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, '')
+      .slice(0, 80);
   };
 
   const isStorefrontHost = (req) => {
@@ -151,6 +160,49 @@ const createAppHelpers = (context) => {
     return buildStorefrontAbsoluteUrl(store, `/${raw.replace(/^\/+/, '')}`);
   };
 
+  const buildRequestBaseUrl = (req) => {
+    const protocol = String(req.headers['x-forwarded-proto'] || '')
+      .split(',')[0]
+      .trim()
+      || (req.secure ? 'https' : 'http');
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || req.hostname || '')
+      .split(',')[0]
+      .trim();
+
+    return host ? `${protocol}://${host}` : '';
+  };
+
+  const buildPlatformAbsoluteUrl = (req, pathname = '/') => {
+    const baseUrl = buildRequestBaseUrl(req);
+    const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+    if (!baseUrl) {
+      return normalizedPath;
+    }
+
+    try {
+      return new URL(normalizedPath, baseUrl).toString();
+    } catch {
+      return `${baseUrl}${normalizedPath}`;
+    }
+  };
+
+  const buildPlatformAssetUrl = (req, value = '') => {
+    const raw = String(value || '').trim();
+    if (!raw) {
+      return '';
+    }
+
+    if (/^https?:\/\//i.test(raw)) {
+      return raw;
+    }
+
+    if (raw.startsWith('/')) {
+      return buildPlatformAbsoluteUrl(req, raw);
+    }
+
+    return buildPlatformAbsoluteUrl(req, `/${raw.replace(/^\/+/, '')}`);
+  };
+
   const resolveSafeLocalRedirect = (req, target, fallback = '/', store = null) => {
     const normalizedFallback = safeRedirect(req, fallback, '/', store);
     const fallbackPath = normalizedFallback.startsWith('/')
@@ -199,12 +251,31 @@ const createAppHelpers = (context) => {
     );
   };
 
+  const buildPlatformSeoDescription = (platformBrand = null) => {
+    return sanitizePlainText(
+      platformBrand?.shortDescription
+      || 'A serious commerce workspace for design-led brands and retail operators.',
+      { maxLength: 320 }
+    );
+  };
+
   const resolveStorefrontMetaRobots = (req, payload = {}) => {
     if (payload.metaRobots) {
       return payload.metaRobots;
     }
 
-    const disallowedPaths = ['/account', '/orders', '/checkout', '/cart', '/wishlist', '/order-confirmation'];
+    const disallowedPaths = [
+      '/account',
+      '/orders',
+      '/checkout',
+      '/cart',
+      '/wishlist',
+      '/order-confirmation',
+      '/login',
+      '/register',
+      '/forgot-password',
+      '/reset-password'
+    ];
     if (disallowedPaths.some((entry) => req.path === entry || req.path.startsWith(`${entry}/`))) {
       return 'noindex, nofollow';
     }
@@ -212,13 +283,42 @@ const createAppHelpers = (context) => {
     return 'index, follow';
   };
 
+  const resolvePlatformMetaRobots = (req, payload = {}) => {
+    if (payload.metaRobots) {
+      return payload.metaRobots;
+    }
+
+    const publicIndexablePaths = new Set(['/', '/terms', '/privacy']);
+    return publicIndexablePaths.has(req.path) ? 'index, follow' : 'noindex, nofollow';
+  };
+
+  const buildPlatformMeta = (req, payload = {}, platformBrand = null) => {
+    const hasCanonicalPath = Object.prototype.hasOwnProperty.call(payload, 'canonicalPath');
+    const canonicalPath = hasCanonicalPath ? payload.canonicalPath : (req.path || '/');
+    const fallbackBrandLabel = platformBrand?.platformName || 'Aisle';
+
+    return {
+      pageTitle: payload.pageTitle || '',
+      metaTitle: payload.metaTitle || payload.pageTitle || fallbackBrandLabel,
+      metaDescription: payload.metaDescription || buildPlatformSeoDescription(platformBrand),
+      metaKeywords: payload.metaKeywords || '',
+      canonicalUrl: payload.canonicalUrl || (canonicalPath ? buildPlatformAbsoluteUrl(req, canonicalPath) : ''),
+      socialImage: payload.socialImage || buildPlatformAssetUrl(req, '/brand/aisle-logo.svg'),
+      metaType: payload.metaType || 'website',
+      metaRobots: resolvePlatformMetaRobots(req, payload)
+    };
+  };
+
   const buildStorefrontMeta = (req, store, payload = {}) => {
+    const hasCanonicalPath = Object.prototype.hasOwnProperty.call(payload, 'canonicalPath');
+    const canonicalPath = hasCanonicalPath ? payload.canonicalPath : (req.path || '/');
+
     return {
       pageTitle: payload.pageTitle || '',
       metaTitle: payload.metaTitle || payload.pageTitle || store?.name || '',
       metaDescription: payload.metaDescription || buildStoreSeoDescription(store),
       metaKeywords: payload.metaKeywords || buildStoreSeoKeywords(store),
-      canonicalUrl: payload.canonicalPath ? buildStorefrontAbsoluteUrl(store, payload.canonicalPath) : '',
+      canonicalUrl: payload.canonicalUrl || (canonicalPath ? buildStorefrontAbsoluteUrl(store, canonicalPath) : ''),
       socialImage: payload.socialImage || buildStorefrontAssetUrl(store, store?.logo || ''),
       metaType: payload.metaType || 'website',
       metaRobots: resolveStorefrontMetaRobots(req, payload)
@@ -243,6 +343,27 @@ const createAppHelpers = (context) => {
     } catch {
       return [];
     }
+  };
+
+  const getAppliedCouponCode = (req, storeId) => {
+    return normalizePromotionCode(readSignedCookie(req, couponCookieName(storeId)) || '');
+  };
+
+  const persistAppliedCoupon = (req, res, storeId, couponCode) => {
+    const normalizedCode = normalizePromotionCode(couponCode);
+    if (!normalizedCode) {
+      clearSignedCookie(req, res, couponCookieName(storeId));
+      return '';
+    }
+
+    setSignedCookie(req, res, couponCookieName(storeId), normalizedCode, {
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+    return normalizedCode;
+  };
+
+  const clearAppliedCoupon = (req, res, storeId) => {
+    clearSignedCookie(req, res, couponCookieName(storeId));
   };
 
   const persistWishlist = (req, res, storeId, productIds) => {
@@ -481,6 +602,8 @@ const createAppHelpers = (context) => {
     const primaryImage = sanitizeUrl(req.body.image || '');
     const galleryImages = parseLineList(req.body.gallery || '', 12, 500).map((entry) => sanitizeUrl(entry)).filter(Boolean);
     const mergedImages = Array.from(new Set([primaryImage, ...galleryImages].filter(Boolean))).slice(0, 12);
+    const discountType = sanitizePlainText(req.body.discount_type || 'none', { maxLength: 20 }).toLowerCase() || 'none';
+    const promotionType = sanitizePlainText(req.body.promotion_type || 'none', { maxLength: 20 }).toLowerCase() || 'none';
 
     return {
       title: sanitizePlainText(req.body.name || '', { maxLength: 180 }),
@@ -488,9 +611,18 @@ const createAppHelpers = (context) => {
       sku: sanitizePlainText(req.body.sku || '', { maxLength: 120 }),
       description: sanitizePlainText(req.body.description || '', { maxLength: 3000 }),
       price: Number(req.body.price || 0),
+      base_price: Number(req.body.price || 0),
       compare_at_price: req.body.compare_at_price === '' || req.body.compare_at_price === undefined
         ? null
         : Number(req.body.compare_at_price),
+      discount_type: discountType,
+      discount_value: req.body.discount_value === '' || req.body.discount_value === undefined
+        ? null
+        : Number(req.body.discount_value),
+      promotion_type: promotionType,
+      discount_label: sanitizePlainText(req.body.discount_label || '', { maxLength: 120 }),
+      discount_starts_at: req.body.discount_starts_at || null,
+      discount_ends_at: req.body.discount_ends_at || null,
       inventory_count: Number(req.body.inventory || 0),
       images: mergedImages,
       status: parseCheckbox(req.body.status) ? 'published' : 'draft'
@@ -515,7 +647,14 @@ const createAppHelpers = (context) => {
       sku: servicePayload.sku,
       description: servicePayload.description,
       price: servicePayload.price,
+      base_price: servicePayload.base_price,
       compare_at_price: servicePayload.compare_at_price,
+      discount_type: servicePayload.discount_type,
+      discount_value: servicePayload.discount_value,
+      promotion_type: servicePayload.promotion_type,
+      discount_label: servicePayload.discount_label,
+      discount_starts_at: servicePayload.discount_starts_at,
+      discount_ends_at: servicePayload.discount_ends_at,
       inventory: servicePayload.inventory_count,
       image: servicePayload.images[0] || '',
       images: servicePayload.images,
@@ -651,16 +790,25 @@ const createAppHelpers = (context) => {
     buildStoreAdminUrl,
     buildStorefrontAbsoluteUrl,
     buildStorefrontAssetUrl,
+    buildRequestBaseUrl,
+    buildPlatformAbsoluteUrl,
+    buildPlatformAssetUrl,
     resolveSafeLocalRedirect,
     resolveFormReturnTo,
     joinKeywordList,
     buildStoreSeoDescription,
     buildStoreSeoKeywords,
+    buildPlatformSeoDescription,
     resolveStorefrontMetaRobots,
+    resolvePlatformMetaRobots,
+    buildPlatformMeta,
     buildStorefrontMeta,
     getCurrentCustomer,
     getWishlistProductIds,
     persistWishlist,
+    getAppliedCouponCode,
+    persistAppliedCoupon,
+    clearAppliedCoupon,
     getRecentlyViewedProductIds,
     persistRecentlyViewed,
     loadProductsByIds,
@@ -678,6 +826,7 @@ const createAppHelpers = (context) => {
     buildProductServicePayload,
     buildProductPresentationPayload,
     buildProductDraft,
+    normalizePromotionCode,
     filterCatalogProducts,
     isPlatformAdminUser,
     getPlatformHomePath,

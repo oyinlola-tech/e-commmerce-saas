@@ -213,6 +213,12 @@ const createValidations = (context, helpers) => {
       'highlights',
       'price',
       'compare_at_price',
+      'discount_type',
+      'discount_value',
+      'promotion_type',
+      'discount_label',
+      'discount_starts_at',
+      'discount_ends_at',
       'inventory',
       'featured',
       'image',
@@ -227,9 +233,52 @@ const createValidations = (context, helpers) => {
     body('highlights').optional().isString(),
     body('price').isFloat({ min: 0 }).withMessage('Price must be zero or greater.').toFloat(),
     body('compare_at_price').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Compare-at price must be zero or greater.').toFloat(),
+    body('discount_type').optional().isIn(['none', 'amount', 'percentage']).withMessage('Choose a valid discount type.'),
+    body('discount_value').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Discount value must be zero or greater.').toFloat(),
+    body('promotion_type').optional().isIn(['none', 'discount', 'flash_sale']).withMessage('Choose a valid promotion type.'),
+    body('discount_label').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })),
+    body('discount_starts_at').optional({ values: 'falsy' }).isISO8601().withMessage('Use a valid discount start date and time.'),
+    body('discount_ends_at').optional({ values: 'falsy' }).isISO8601().withMessage('Use a valid discount end date and time.'),
     body('inventory').isInt({ min: 0, max: 1000000 }).withMessage('Inventory must be zero or greater.').toInt(),
     body('image').optional({ values: 'falsy' }).customSanitizer((value) => sanitizeUrl(value)),
     body('gallery').optional().isString()
+  ];
+
+  const couponValidation = [
+    allowBodyFields([
+      'code',
+      'description',
+      'discount_type',
+      'discount_value',
+      'minimum_order_amount',
+      'starts_at',
+      'ends_at',
+      'usage_limit',
+      'is_active',
+      '_csrf'
+    ]),
+    body('code')
+      .trim()
+      .notEmpty()
+      .isLength({ max: 80 })
+      .withMessage('Coupon code is required.'),
+    body('description').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 190 })),
+    body('discount_type').isIn(['amount', 'percentage']).withMessage('Choose a valid coupon discount type.'),
+    body('discount_value').isFloat({ min: 0.01 }).withMessage('Discount value must be greater than zero.').toFloat(),
+    body('minimum_order_amount').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Minimum order amount must be zero or greater.').toFloat(),
+    body('starts_at').optional({ values: 'falsy' }).isISO8601().withMessage('Use a valid coupon start date and time.'),
+    body('ends_at').optional({ values: 'falsy' }).isISO8601().withMessage('Use a valid coupon end date and time.'),
+    body('usage_limit').optional({ values: 'falsy' }).isInt({ min: 1 }).withMessage('Usage limit must be a whole number greater than zero.').toInt(),
+    body('is_active').optional().isIn(['0', '1', 'true', 'false', 'on']).withMessage('Choose whether the coupon is active.')
+  ];
+
+  const cartCouponValidation = [
+    allowBodyFields(['coupon_code', '_csrf']),
+    body('coupon_code')
+      .trim()
+      .notEmpty()
+      .isLength({ max: 80 })
+      .withMessage('Enter a coupon code.')
   ];
 
   const orderStatusValidation = [
@@ -295,6 +344,8 @@ const createValidations = (context, helpers) => {
     storeSettingsValidation,
     domainValidation,
     productValidation,
+    couponValidation,
+    cartCouponValidation,
     orderStatusValidation,
     checkoutValidation,
     cartMutationValidation,

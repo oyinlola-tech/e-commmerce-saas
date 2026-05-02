@@ -1,0 +1,166 @@
+<%
+  const couponList = Array.isArray(coupons) ? coupons : [];
+  const couponData = formData || {};
+  const editing = !!editingCouponId;
+  const formAction = editing ? `/admin/marketing/coupons/${editingCouponId}` : '/admin/marketing/coupons';
+  const toDatetimeLocalValue = (value) => {
+    if (!value) {
+      return '';
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return String(value).replace(' ', 'T').slice(0, 16);
+    }
+
+    const offset = parsed.getTimezoneOffset() * 60 * 1000;
+    return new Date(parsed.getTime() - offset).toISOString().slice(0, 16);
+  };
+  const statusBadgeClass = (coupon) => {
+    return coupon.is_active
+      ? 'bg-emerald-50 text-emerald-700'
+      : 'bg-slate-100 text-slate-700';
+  };
+%>
+<section class="space-y-8">
+  <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.24em] text-primary">Promotions</p>
+      <h1 class="section-title mt-2 text-3xl font-semibold tracking-tight text-slate-950">Coupons and flash sales</h1>
+      <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">Create coupon codes here, then use each product's pricing controls for fixed discounts, percentage discounts, and timed flash-sale windows that show clearly on the storefront.</p>
+    </div>
+    <a href="/admin/products" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">
+      Manage product flash sales
+    </a>
+  </div>
+
+  <div class="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
+    <section class="surface-card rounded-[2rem] p-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary"><%= editing ? 'Update coupon' : 'New coupon' %></p>
+          <h2 class="section-title mt-2 text-2xl font-semibold text-slate-950"><%= editing ? 'Edit coupon details' : 'Create a storefront coupon' %></h2>
+        </div>
+        <% if (editing) { %>
+          <a href="/admin/marketing" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Cancel edit</a>
+        <% } %>
+      </div>
+
+      <form action="<%= formAction %>" method="post" class="mt-6 space-y-5">
+        <%- include('../partials/csrf-field') %>
+        <div class="grid gap-5 sm:grid-cols-2">
+          <div>
+            <label for="couponCode" class="mb-1 block text-sm font-medium text-slate-700">Coupon code</label>
+            <input id="couponCode" name="code" type="text" value="<%= couponData.code || '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="WELCOME10">
+            <%- include('../partials/form-error', { field: 'code' }) %>
+          </div>
+          <div>
+            <label for="couponType" class="mb-1 block text-sm font-medium text-slate-700">Discount type</label>
+            <select id="couponType" name="discount_type" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+              <option value="percentage" <%= (couponData.discount_type || 'percentage') === 'percentage' ? 'selected' : '' %>>Percentage off</option>
+              <option value="amount" <%= couponData.discount_type === 'amount' ? 'selected' : '' %>>Fixed amount off</option>
+            </select>
+            <%- include('../partials/form-error', { field: 'discount_type' }) %>
+          </div>
+          <div>
+            <label for="couponValue" class="mb-1 block text-sm font-medium text-slate-700">Discount value</label>
+            <input id="couponValue" name="discount_value" type="number" min="0.01" step="0.01" value="<%= couponData.discount_value !== undefined ? couponData.discount_value : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="10">
+            <%- include('../partials/form-error', { field: 'discount_value' }) %>
+          </div>
+          <div>
+            <label for="minimumOrderAmount" class="mb-1 block text-sm font-medium text-slate-700">Minimum order</label>
+            <input id="minimumOrderAmount" name="minimum_order_amount" type="number" min="0" step="0.01" value="<%= couponData.minimum_order_amount !== undefined ? couponData.minimum_order_amount : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="0">
+            <%- include('../partials/form-error', { field: 'minimum_order_amount' }) %>
+          </div>
+          <div class="sm:col-span-2">
+            <label for="couponDescription" class="mb-1 block text-sm font-medium text-slate-700">Description</label>
+            <input id="couponDescription" name="description" type="text" value="<%= couponData.description || '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Welcome offer for first-time shoppers">
+            <%- include('../partials/form-error', { field: 'description' }) %>
+          </div>
+          <div>
+            <label for="startsAt" class="mb-1 block text-sm font-medium text-slate-700">Starts at</label>
+            <input id="startsAt" name="starts_at" type="datetime-local" value="<%= toDatetimeLocalValue(couponData.starts_at) %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+            <%- include('../partials/form-error', { field: 'starts_at' }) %>
+          </div>
+          <div>
+            <label for="endsAt" class="mb-1 block text-sm font-medium text-slate-700">Ends at</label>
+            <input id="endsAt" name="ends_at" type="datetime-local" value="<%= toDatetimeLocalValue(couponData.ends_at) %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+            <%- include('../partials/form-error', { field: 'ends_at' }) %>
+          </div>
+          <div>
+            <label for="usageLimit" class="mb-1 block text-sm font-medium text-slate-700">Usage limit</label>
+            <input id="usageLimit" name="usage_limit" type="number" min="1" step="1" value="<%= couponData.usage_limit !== undefined ? couponData.usage_limit : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Leave blank for unlimited">
+            <%- include('../partials/form-error', { field: 'usage_limit' }) %>
+          </div>
+          <div class="flex items-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3 shadow-sm">
+            <input id="couponActive" name="is_active" type="checkbox" value="1" <%= couponData.is_active === false ? '' : 'checked' %> class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+            <label for="couponActive" class="text-sm font-medium text-slate-700">Coupon is active</label>
+          </div>
+        </div>
+
+        <div class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <p class="text-sm font-semibold text-slate-900">How this works for shoppers</p>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+            <li>Coupons are validated against order minimums, schedule windows, and usage limits during checkout.</li>
+            <li>Flash sales are configured on each product so the storefront can show the original price, percent off, and current sale price clearly.</li>
+            <li>Paid and pending order notifications are emailed to store operators automatically once orders move through the payment flow.</li>
+          </ul>
+        </div>
+
+        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+          <%= editing ? 'Update Coupon' : 'Create Coupon' %>
+        </button>
+      </form>
+    </section>
+
+    <section class="space-y-5">
+      <div class="surface-card rounded-[2rem] p-6">
+        <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Live coupons</p>
+        <h2 class="section-title mt-2 text-2xl font-semibold text-slate-950">Storefront offers your team can manage</h2>
+        <p class="mt-3 text-sm leading-6 text-slate-600">Customers can apply these codes in cart and checkout. Edit a coupon anytime to pause it, change the value, or update timing.</p>
+      </div>
+
+      <% if (couponList.length) { %>
+        <% couponList.forEach((coupon) => { %>
+          <article class="surface-card rounded-[2rem] p-5">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <h3 class="text-xl font-semibold text-slate-950"><%= coupon.code %></h3>
+                  <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] <%= statusBadgeClass(coupon) %>"><%= coupon.is_active ? 'Active' : 'Paused' %></span>
+                  <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= coupon.discount_type === 'percentage' ? `${coupon.discount_value}% off` : `${coupon.discount_value} off` %></span>
+                </div>
+                <p class="mt-2 text-sm leading-6 text-slate-600"><%= coupon.description || 'No description added yet.' %></p>
+              </div>
+              <a href="/admin/marketing?edit=<%= encodeURIComponent(coupon.id) %>" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Edit</a>
+            </div>
+
+            <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Minimum order</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900"><%= coupon.minimum_order_amount || 0 %></p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Usage</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900"><%= coupon.usage_count || 0 %><%= coupon.usage_limit ? ` / ${coupon.usage_limit}` : ' used' %></p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Starts</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900"><%= coupon.starts_at ? new Date(coupon.starts_at).toLocaleString() : 'Immediately' %></p>
+              </div>
+              <div class="rounded-2xl bg-slate-50 p-4">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Ends</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900"><%= coupon.ends_at ? new Date(coupon.ends_at).toLocaleString() : 'No expiry' %></p>
+              </div>
+            </div>
+          </article>
+        <% }) %>
+      <% } else { %>
+        <div class="surface-card rounded-[2rem] px-6 py-16 text-center">
+          <h2 class="section-title text-2xl font-semibold text-slate-950">No coupons yet</h2>
+          <p class="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">Create your first code to launch welcome offers, campaign discounts, or limited-time checkout incentives.</p>
+        </div>
+      <% } %>
+    </section>
+  </div>
+</section>

@@ -1,0 +1,21 @@
+<%
+  const item = product || {};
+  const hasDiscount = Boolean(item.has_discount) && item.compare_at_price && Number(item.compare_at_price) > Number(item.price || 0);
+  const wrapperClassName = wrapperClass || 'flex flex-wrap items-center gap-2';
+  const currentPriceClass = priceClass || 'text-base font-semibold text-slate-950';
+  const originalPriceClass = compareAtClass || 'text-sm text-slate-400 line-through';
+  const savingsClass = discountClass || 'inline-flex rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-700';
+  const saleLabel = item.discount_label || (item.is_flash_sale ? 'Flash sale' : '');
+%>
+<div class="<%= wrapperClassName %>">
+  <% if (hasDiscount) { %>
+    <span class="<%= originalPriceClass %>"><%= money(item.compare_at_price) %></span>
+  <% } %>
+  <% if (hasDiscount && item.discount_percentage) { %>
+    <span class="<%= savingsClass %>">-<%= item.discount_percentage %>%</span>
+  <% } %>
+  <span class="<%= currentPriceClass %>"><%= money(item.price || 0) %></span>
+  <% if (saleLabel && showLabel) { %>
+    <span class="text-xs font-medium uppercase tracking-[0.14em] text-primary"><%= saleLabel %></span>
+  <% } %>
+</div>

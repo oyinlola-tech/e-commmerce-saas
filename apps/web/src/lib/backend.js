@@ -193,9 +193,24 @@ const normalizeProduct = (product) => {
     category: product.category || 'General',
     description: product.description || '',
     price: Number(product.price || 0),
+    base_price: product.base_price === null || product.base_price === undefined
+      ? Number(product.price || 0)
+      : Number(product.base_price),
     compare_at_price: product.compare_at_price === null || product.compare_at_price === undefined
       ? null
       : Number(product.compare_at_price),
+    has_discount: Boolean(product.has_discount),
+    discount_amount: Number(product.discount_amount || 0),
+    discount_percentage: Number(product.discount_percentage || 0),
+    discount_type: product.discount_type || 'none',
+    discount_value: product.discount_value === null || product.discount_value === undefined
+      ? null
+      : Number(product.discount_value),
+    promotion_type: product.promotion_type || 'none',
+    is_flash_sale: Boolean(product.is_flash_sale),
+    discount_label: product.discount_label || '',
+    discount_starts_at: product.discount_starts_at || null,
+    discount_ends_at: product.discount_ends_at || null,
     sku: product.sku || '',
     inventory,
     inventory_count: Number(product.inventory_count || 0),
@@ -252,7 +267,10 @@ const normalizeOrder = (order) => {
     payment_method: order.payment_method || 'Card',
     currency: order.currency || 'USD',
     subtotal: Number(order.subtotal || 0),
+    discount_total: Number(order.discount_total || 0),
     total: Number(order.total || 0),
+    coupon_code: order.coupon_code || null,
+    coupon: order.coupon || null,
     shipping_address: shippingAddress,
     customer: {
       name: customerSnapshot.name || '',
@@ -275,6 +293,31 @@ const normalizeOrder = (order) => {
       : [],
     created_at: order.created_at,
     updated_at: order.updated_at
+  };
+};
+
+const normalizeCoupon = (coupon) => {
+  if (!coupon) {
+    return null;
+  }
+
+  return {
+    id: String(coupon.id),
+    store_id: coupon.store_id ? String(coupon.store_id) : null,
+    code: coupon.code || '',
+    description: coupon.description || '',
+    discount_type: coupon.discount_type || 'percentage',
+    discount_value: Number(coupon.discount_value || 0),
+    minimum_order_amount: Number(coupon.minimum_order_amount || 0),
+    starts_at: coupon.starts_at || null,
+    ends_at: coupon.ends_at || null,
+    usage_limit: coupon.usage_limit === null || coupon.usage_limit === undefined
+      ? null
+      : Number(coupon.usage_limit),
+    usage_count: Number(coupon.usage_count || 0),
+    is_active: Boolean(coupon.is_active),
+    created_at: coupon.created_at || null,
+    updated_at: coupon.updated_at || null
   };
 };
 
@@ -522,9 +565,11 @@ const mergeCartIntoCustomer = async (req, store, customerId, sessionId) => {
 };
 
 const listStoreProducts = async (req, store, options = {}) => {
+  const page = Math.max(1, Number(options.page || 1));
+  const limit = Math.max(1, Number(options.limit || 100));
   const query = new globalThis.URLSearchParams({
-    page: '1',
-    limit: String(Number(options.limit || 100))
+    page: String(page),
+    limit: String(limit)
   });
 
   if (options.category && options.category !== 'All') {
@@ -554,6 +599,9 @@ const listStoreProducts = async (req, store, options = {}) => {
 
   if (!options.category || options.category === 'All') {
     return {
+      total: Number(response?.total || products.length || 0),
+      page,
+      limit,
       products,
       categories: Array.from(new Map(products
         .filter((entry) => entry.category)
@@ -566,6 +614,9 @@ const listStoreProducts = async (req, store, options = {}) => {
 
   const normalizedCategory = normalizeStoreCategory(options.category);
   return {
+    total: Number(response?.total || products.length || 0),
+    page,
+    limit,
     products: products.filter((product) => normalizeStoreCategory(product.category) === normalizedCategory),
     categories: Array.from(new Map(products
       .filter((entry) => entry.category)
@@ -610,9 +661,18 @@ const createAdminStoreProduct = async (req, store, auth, payload = {}) => {
       category: payload.category || null,
       description: payload.description || '',
       price: Number(payload.price || 0),
+      base_price: payload.base_price === undefined ? undefined : Number(payload.base_price),
       compare_at_price: payload.compare_at_price === '' || payload.compare_at_price === null || payload.compare_at_price === undefined
         ? null
         : Number(payload.compare_at_price),
+      discount_type: payload.discount_type || 'none',
+      discount_value: payload.discount_value === '' || payload.discount_value === null || payload.discount_value === undefined
+        ? null
+        : Number(payload.discount_value),
+      promotion_type: payload.promotion_type || 'none',
+      discount_label: payload.discount_label || '',
+      discount_starts_at: payload.discount_starts_at || null,
+      discount_ends_at: payload.discount_ends_at || null,
       sku: payload.sku || '',
       inventory_count: Number(payload.inventory_count || 0),
       images: Array.isArray(payload.images) ? payload.images : [],
@@ -643,11 +703,22 @@ const updateAdminStoreProduct = async (req, store, auth, productId, payload = {}
         category: payload.category,
         description: payload.description,
         price: payload.price === undefined ? undefined : Number(payload.price),
+        base_price: payload.base_price === undefined ? undefined : Number(payload.base_price),
         compare_at_price: payload.compare_at_price === '' || payload.compare_at_price === null
           ? null
           : payload.compare_at_price === undefined
             ? undefined
             : Number(payload.compare_at_price),
+        discount_type: payload.discount_type,
+        discount_value: payload.discount_value === '' || payload.discount_value === null
+          ? null
+          : payload.discount_value === undefined
+            ? undefined
+            : Number(payload.discount_value),
+        promotion_type: payload.promotion_type,
+        discount_label: payload.discount_label,
+        discount_starts_at: payload.discount_starts_at,
+        discount_ends_at: payload.discount_ends_at,
         sku: payload.sku,
         inventory_count: payload.inventory_count === undefined ? undefined : Number(payload.inventory_count),
         images: Array.isArray(payload.images) ? payload.images : undefined,
@@ -699,6 +770,105 @@ const listAdminStoreOrders = async (req, store, auth, options = {}) => {
   return Array.isArray(response?.orders)
     ? response.orders.map(normalizeOrder)
     : [];
+};
+
+const listStoreCoupons = async (req, store, auth) => {
+  const response = await requestServiceJson(req, env.serviceUrls.order, '/coupons', {
+    auth: {
+      storeId: store.id,
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    }
+  });
+
+  return Array.isArray(response?.coupons)
+    ? response.coupons.map(normalizeCoupon)
+    : [];
+};
+
+const createStoreCoupon = async (req, store, auth, payload = {}) => {
+  const response = await requestServiceJson(req, env.serviceUrls.order, '/coupons', {
+    method: 'POST',
+    auth: {
+      storeId: store.id,
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    },
+    body: {
+      code: payload.code,
+      description: payload.description || '',
+      discount_type: payload.discount_type,
+      discount_value: Number(payload.discount_value || 0),
+      minimum_order_amount: Number(payload.minimum_order_amount || 0),
+      starts_at: payload.starts_at || null,
+      ends_at: payload.ends_at || null,
+      usage_limit: payload.usage_limit === '' || payload.usage_limit === null || payload.usage_limit === undefined
+        ? null
+        : Number(payload.usage_limit),
+      is_active: payload.is_active === undefined ? true : Boolean(payload.is_active)
+    }
+  });
+
+  return normalizeCoupon(response?.coupon || null);
+};
+
+const updateStoreCoupon = async (req, store, auth, couponId, payload = {}) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.order,
+    `/coupons/${encodeURIComponent(couponId)}`,
+    {
+      method: 'PUT',
+      auth: {
+        storeId: store.id,
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      },
+      body: {
+        code: payload.code,
+        description: payload.description,
+        discount_type: payload.discount_type,
+        discount_value: payload.discount_value === undefined ? undefined : Number(payload.discount_value),
+        minimum_order_amount: payload.minimum_order_amount === undefined ? undefined : Number(payload.minimum_order_amount),
+        starts_at: payload.starts_at,
+        ends_at: payload.ends_at,
+        usage_limit: payload.usage_limit === '' || payload.usage_limit === null
+          ? null
+          : payload.usage_limit === undefined
+            ? undefined
+            : Number(payload.usage_limit),
+        is_active: payload.is_active
+      }
+    }
+  );
+
+  return normalizeCoupon(response?.coupon || null);
+};
+
+const previewStoreCoupon = async (req, store, payload = {}, auth = null) => {
+  const response = await requestServiceJson(req, env.serviceUrls.order, '/coupons/preview', {
+    method: 'POST',
+    auth: {
+      storeId: store.id,
+      customerId: auth?.customerId || '',
+      actorType: auth?.actorType || ''
+    },
+    body: {
+      code: payload.code,
+      subtotal: Number(payload.subtotal || 0)
+    }
+  });
+
+  return {
+    ...response,
+    coupon: normalizeCoupon(response?.coupon || null),
+    subtotal: Number(response?.subtotal || 0),
+    discount_total: Number(response?.discount_total || 0),
+    total: Number(response?.total || 0)
+  };
 };
 
 const getAdminStoreOrderById = async (req, store, auth, orderId) => {
@@ -1192,7 +1362,8 @@ const checkoutStorefrontCart = async (req, store, auth, payload = {}) => {
         name: payload.name,
         email: payload.email,
         phone: payload.phone || null
-      }
+      },
+      coupon_code: payload.coupon_code || null
     },
     headers: {
       'x-session-id': payload.sessionId
@@ -1305,6 +1476,7 @@ module.exports = {
   getStoreByHost,
   getStoreProductById,
   listCustomerOrders,
+  listStoreCoupons,
   listAdminStoreCustomers,
   listAdminStoreOrders,
   listPlatformStores,
@@ -1326,10 +1498,13 @@ module.exports = {
   registerStorefrontCustomer,
   requestPublicJson,
   requestServiceJson,
+  createStoreCoupon,
   addToCart,
+  previewStoreCoupon,
   updateAdminStoreOrderStatus,
   updateAdminBillingPlan,
   updateAdminStoreProduct,
+  updateStoreCoupon,
   updatePlatformStore,
   updateCartItem,
   removeCartItem,

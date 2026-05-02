@@ -10,11 +10,14 @@ const registerAdminRoutes = (app, deps) => {
     handleFormValidation,
     saveLogoFile,
     listStoreProducts,
+    listStoreCoupons,
     listAdminStoreOrders,
     listAdminStoreCustomers,
     getAdminStoreProductById,
     createAdminStoreProduct,
+    createStoreCoupon,
     updateAdminStoreProduct,
+    updateStoreCoupon,
     deleteAdminStoreProduct,
     getAdminStoreOrderById,
     updateAdminStoreOrderStatus,
@@ -36,10 +39,12 @@ const registerAdminRoutes = (app, deps) => {
     buildProductPresentationPayload,
     buildStoreServicePayload,
     buildStoreContentPayload,
-    handleMultipartLogo
+    handleMultipartLogo,
+    parseCheckbox
   } = helpers;
   const {
     productValidation,
+    couponValidation,
     orderStatusValidation,
     storeSettingsValidation,
     domainValidation
@@ -48,7 +53,8 @@ const registerAdminRoutes = (app, deps) => {
     renderStoreAdmin,
     renderProductForm,
     renderSettingsPage,
-    renderDomainPage
+    renderDomainPage,
+    renderMarketingPage
   } = renderers;
   const {
     loadStorePaymentProviderConfigs,
@@ -57,6 +63,35 @@ const registerAdminRoutes = (app, deps) => {
     shouldPersistPaymentProviderConfig,
     upsertStorePaymentProviderConfig
   } = paymentProviderService;
+
+  const buildCouponFormData = (coupon = {}) => {
+    return {
+      id: coupon.id || '',
+      code: coupon.code || '',
+      description: coupon.description || '',
+      discount_type: coupon.discount_type || 'percentage',
+      discount_value: coupon.discount_value === null || coupon.discount_value === undefined ? '' : coupon.discount_value,
+      minimum_order_amount: coupon.minimum_order_amount === null || coupon.minimum_order_amount === undefined ? '' : coupon.minimum_order_amount,
+      starts_at: coupon.starts_at || '',
+      ends_at: coupon.ends_at || '',
+      usage_limit: coupon.usage_limit === null || coupon.usage_limit === undefined ? '' : coupon.usage_limit,
+      is_active: coupon.is_active === undefined ? true : Boolean(coupon.is_active)
+    };
+  };
+
+  const loadMarketingCoupons = async (req, res, next) => {
+    try {
+      if (!req.currentStore?.id || !req.platformAuth) {
+        req.storeCoupons = [];
+        return next();
+      }
+
+      req.storeCoupons = await listStoreCoupons(req, req.currentStore, req.platformAuth);
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
 
   app.get('/admin', async (req, res, next) => {
     try {
@@ -327,6 +362,95 @@ const registerAdminRoutes = (app, deps) => {
     } catch (error) {
       if ([400, 403, 404, 409, 422].includes(Number(error.status))) {
         return res.redirect(`/admin/domain?error=${encodeURIComponent(error.message || 'Unable to update the domain settings.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.get('/admin/marketing', loadMarketingCoupons, (req, res) => {
+    if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
+      return;
+    }
+
+    const editingCoupon = (req.storeCoupons || []).find((coupon) => String(coupon.id) === String(req.query.edit || '')) || null;
+    return renderMarketingPage(req, res, {
+      coupons: req.storeCoupons || [],
+      formData: buildCouponFormData(editingCoupon || {}),
+      editingCouponId: editingCoupon ? String(editingCoupon.id) : null
+    });
+  });
+
+  app.post('/admin/marketing/coupons', loadMarketingCoupons, couponValidation, handleFormValidation((req, res, errors) => {
+    return renderMarketingPage(req, res, {
+      coupons: req.storeCoupons || [],
+      errors,
+      formData: buildCouponFormData({
+        ...req.body,
+        is_active: parseCheckbox(req.body.is_active)
+      })
+    }, 422);
+  }), async (req, res, next) => {
+    try {
+      if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
+        return;
+      }
+
+      await createStoreCoupon(req, req.currentStore, req.platformAuth, {
+        code: req.body.code,
+        description: req.body.description,
+        discount_type: req.body.discount_type,
+        discount_value: req.body.discount_value,
+        minimum_order_amount: req.body.minimum_order_amount || 0,
+        starts_at: req.body.starts_at || null,
+        ends_at: req.body.ends_at || null,
+        usage_limit: req.body.usage_limit || null,
+        is_active: parseCheckbox(req.body.is_active)
+      });
+
+      return res.redirect('/admin/marketing?success=Coupon created');
+    } catch (error) {
+      if ([400, 403, 404, 409, 422].includes(Number(error.status))) {
+        return res.redirect(`/admin/marketing?error=${encodeURIComponent(error.message || 'Unable to save the coupon.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.post('/admin/marketing/coupons/:id', loadMarketingCoupons, couponValidation, handleFormValidation((req, res, errors) => {
+    return renderMarketingPage(req, res, {
+      coupons: req.storeCoupons || [],
+      errors,
+      formData: buildCouponFormData({
+        ...req.body,
+        id: req.params.id,
+        is_active: parseCheckbox(req.body.is_active)
+      }),
+      editingCouponId: String(req.params.id)
+    }, 422);
+  }), async (req, res, next) => {
+    try {
+      if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
+        return;
+      }
+
+      await updateStoreCoupon(req, req.currentStore, req.platformAuth, req.params.id, {
+        code: req.body.code,
+        description: req.body.description,
+        discount_type: req.body.discount_type,
+        discount_value: req.body.discount_value,
+        minimum_order_amount: req.body.minimum_order_amount || 0,
+        starts_at: req.body.starts_at || null,
+        ends_at: req.body.ends_at || null,
+        usage_limit: req.body.usage_limit || null,
+        is_active: parseCheckbox(req.body.is_active)
+      });
+
+      return res.redirect('/admin/marketing?success=Coupon updated');
+    } catch (error) {
+      if ([400, 403, 404, 409, 422].includes(Number(error.status))) {
+        return res.redirect(`/admin/marketing?error=${encodeURIComponent(error.message || 'Unable to update the coupon.')}`);
       }
 
       return next(error);

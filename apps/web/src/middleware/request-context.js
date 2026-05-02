@@ -110,6 +110,7 @@ const applyRequestContextMiddleware = (app, context, helpers) => {
       res.locals.metaKeywords = '';
       res.locals.canonicalUrl = '';
       res.locals.socialImage = '';
+      res.locals.structuredData = [];
       res.locals.metaType = 'website';
       res.locals.metaRobots = 'index, follow';
       res.locals.pageBrandLabel = '';

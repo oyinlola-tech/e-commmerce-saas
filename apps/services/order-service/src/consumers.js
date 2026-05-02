@@ -36,6 +36,10 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
           'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
           ['paid', 'confirmed', orderId]
         );
+        await db.execute(
+          'UPDATE coupon_redemptions SET status = ? WHERE order_id = ?',
+          ['confirmed', orderId]
+        );
         if (order.reservation_id) {
           await requestJson(`${config.serviceUrls.product}/inventory/reservations/${order.reservation_id}/commit`, {
             method: 'POST',
@@ -54,6 +58,10 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
       await db.execute(
         'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
         ['failed', 'payment_failed', orderId]
+      );
+      await db.execute(
+        'UPDATE coupon_redemptions SET status = ? WHERE order_id = ?',
+        ['voided', orderId]
       );
       if (order.reservation_id) {
         await requestJson(`${config.serviceUrls.product}/inventory/reservations/${order.reservation_id}/release`, {

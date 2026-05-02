@@ -48,13 +48,52 @@
 
       <div class="grid gap-5 sm:grid-cols-2">
         <div>
-          <label for="price" class="mb-1 block text-sm font-medium text-slate-700">Price</label>
+          <label for="price" class="mb-1 block text-sm font-medium text-slate-700">Base price</label>
           <input id="price" name="price" type="number" min="0" step="0.01" value="<%= typeof productData.price !== 'undefined' ? productData.price : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="145.00">
           <%- include('../partials/form-error', { field: 'price' }) %>
         </div>
         <div>
-          <label for="compareAtPrice" class="mb-1 block text-sm font-medium text-slate-700">Compare at price</label>
+          <label for="compareAtPrice" class="mb-1 block text-sm font-medium text-slate-700">Legacy compare-at price</label>
           <input id="compareAtPrice" name="compare_at_price" type="number" min="0" step="0.01" value="<%= typeof productData.compare_at_price !== 'undefined' && productData.compare_at_price !== null ? productData.compare_at_price : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="168.00">
+          <p class="mt-2 text-sm leading-6 text-slate-500">Optional fallback for older products. Structured discount pricing below is what powers fixed discounts, percentage discounts, and flash sales.</p>
+        </div>
+        <div>
+          <label for="discountType" class="mb-1 block text-sm font-medium text-slate-700">Discount type</label>
+          <select id="discountType" name="discount_type" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+            <option value="none" <%= (productData.discount_type || 'none') === 'none' ? 'selected' : '' %>>No discount</option>
+            <option value="amount" <%= productData.discount_type === 'amount' ? 'selected' : '' %>>Fixed amount off</option>
+            <option value="percentage" <%= productData.discount_type === 'percentage' ? 'selected' : '' %>>Percentage off</option>
+          </select>
+          <%- include('../partials/form-error', { field: 'discount_type' }) %>
+        </div>
+        <div>
+          <label for="discountValue" class="mb-1 block text-sm font-medium text-slate-700">Discount value</label>
+          <input id="discountValue" name="discount_value" type="number" min="0" step="0.01" value="<%= typeof productData.discount_value !== 'undefined' && productData.discount_value !== null ? productData.discount_value : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="10">
+          <%- include('../partials/form-error', { field: 'discount_value' }) %>
+        </div>
+        <div>
+          <label for="promotionType" class="mb-1 block text-sm font-medium text-slate-700">Promotion style</label>
+          <select id="promotionType" name="promotion_type" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+            <option value="none" <%= (productData.promotion_type || 'none') === 'none' ? 'selected' : '' %>>No campaign label</option>
+            <option value="discount" <%= productData.promotion_type === 'discount' ? 'selected' : '' %>>Standard sale</option>
+            <option value="flash_sale" <%= productData.promotion_type === 'flash_sale' ? 'selected' : '' %>>Flash sale</option>
+          </select>
+          <%- include('../partials/form-error', { field: 'promotion_type' }) %>
+        </div>
+        <div>
+          <label for="discountLabel" class="mb-1 block text-sm font-medium text-slate-700">Promotion label</label>
+          <input id="discountLabel" name="discount_label" type="text" value="<%= productData.discount_label || '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Weekend drop">
+          <%- include('../partials/form-error', { field: 'discount_label' }) %>
+        </div>
+        <div>
+          <label for="discountStartsAt" class="mb-1 block text-sm font-medium text-slate-700">Starts at</label>
+          <input id="discountStartsAt" name="discount_starts_at" type="datetime-local" value="<%= (() => { if (!productData.discount_starts_at) { return ''; } const parsed = new Date(productData.discount_starts_at); if (Number.isNaN(parsed.getTime())) { return String(productData.discount_starts_at).replace(' ', 'T').slice(0, 16); } const offset = parsed.getTimezoneOffset() * 60 * 1000; return new Date(parsed.getTime() - offset).toISOString().slice(0, 16); })() %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+          <%- include('../partials/form-error', { field: 'discount_starts_at' }) %>
+        </div>
+        <div>
+          <label for="discountEndsAt" class="mb-1 block text-sm font-medium text-slate-700">Ends at</label>
+          <input id="discountEndsAt" name="discount_ends_at" type="datetime-local" value="<%= (() => { if (!productData.discount_ends_at) { return ''; } const parsed = new Date(productData.discount_ends_at); if (Number.isNaN(parsed.getTime())) { return String(productData.discount_ends_at).replace(' ', 'T').slice(0, 16); } const offset = parsed.getTimezoneOffset() * 60 * 1000; return new Date(parsed.getTime() - offset).toISOString().slice(0, 16); })() %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+          <%- include('../partials/form-error', { field: 'discount_ends_at' }) %>
         </div>
         <div>
           <label for="inventory" class="mb-1 block text-sm font-medium text-slate-700">Inventory</label>
@@ -64,6 +103,10 @@
           <input id="featured" name="featured" type="checkbox" value="1" <%= productData.featured ? 'checked' : '' %> class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
           <label for="featured" class="text-sm font-medium text-slate-700">Feature on storefront</label>
         </div>
+      </div>
+      <div class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+        <p class="text-sm font-semibold text-slate-900">Storefront pricing behavior</p>
+        <p class="mt-2 text-sm leading-6 text-slate-600">When a discount is active, shoppers will see the original price with a strike-through, the percentage saved, and the live sale price beside it. Flash sales use the same pricing engine with a time window.</p>
       </div>
     </div>
 

@@ -73,6 +73,7 @@ const createAppContext = (appRoot) => {
   const isLocalRoot = ROOT_DOMAIN === 'localhost' || ROOT_DOMAIN === '127.0.0.1';
   const customerCookieName = (storeId) => `customer_${storeId}`;
   const orderCookieName = (storeId) => `last_order_${storeId}`;
+  const couponCookieName = (storeId) => `coupon_${storeId}`;
   const wishlistCookieName = (storeId) => `wishlist_${storeId}`;
   const recentlyViewedCookieName = (storeId) => `recently_viewed_${storeId}`;
   const catalogSortOptions = ['featured', 'newest', 'price-low', 'price-high', 'name'];
@@ -154,6 +155,7 @@ const createAppContext = (appRoot) => {
     isLocalRoot,
     customerCookieName,
     orderCookieName,
+    couponCookieName,
     wishlistCookieName,
     recentlyViewedCookieName,
     catalogSortOptions,
