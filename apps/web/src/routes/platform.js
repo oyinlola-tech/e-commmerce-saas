@@ -1,4 +1,10 @@
 const rateLimit = require('express-rate-limit');
+const {
+  buildOwnerTermsPage,
+  buildOwnerPrivacyPage,
+  buildCustomerTermsPage,
+  buildCustomerPrivacyPage
+} = require('../lib/legal-content');
 
 const buildPlatformAbsoluteUrl = (req, pathname = '/') => {
   const protocol = String(req.headers['x-forwarded-proto'] || '')
@@ -91,6 +97,43 @@ const registerPlatformRoutes = (app, deps) => {
     renderPlatformAdmin,
     renderErrorPage
   } = renderers;
+
+  const renderLegalPage = (req, res, kind) => {
+    const isStorefront = isStorefrontHost(req);
+    const canonicalUrl = buildPlatformAbsoluteUrl(req, kind === 'privacy' ? '/privacy' : '/terms');
+
+    if (isStorefront) {
+      const store = resolveStore(req);
+      if (!store) {
+        return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+      }
+
+      const legalPage = kind === 'privacy'
+        ? buildCustomerPrivacyPage({ store, brand: res.locals.platformBrand })
+        : buildCustomerTermsPage({ store, brand: res.locals.platformBrand });
+
+      return renderStorefront(req, res, 'shared/legal', {
+        pageTitle: legalPage.title,
+        pageBrandLabel: store.name,
+        metaTitle: `${legalPage.title} | ${store.name}`,
+        metaDescription: legalPage.metaDescription,
+        canonicalUrl,
+        legalPage
+      });
+    }
+
+    const legalPage = kind === 'privacy'
+      ? buildOwnerPrivacyPage({ brand: res.locals.platformBrand })
+      : buildOwnerTermsPage({ brand: res.locals.platformBrand });
+
+    return renderPlatform(res, 'shared/legal', {
+      pageTitle: legalPage.title,
+      metaTitle: `${legalPage.title} | ${res.locals.platformBrand?.platformName || 'Aisle'}`,
+      metaDescription: legalPage.metaDescription,
+      canonicalUrl,
+      legalPage
+    });
+  };
 
   const renderPlatformAdminOverview = async (req, res) => {
     const stores = (await listPlatformStores(req, req.platformAuth)).map((store) => mergeStorePresentation(store));
@@ -192,6 +235,14 @@ const registerPlatformRoutes = (app, deps) => {
     } catch (error) {
       return next(error);
     }
+  });
+
+  app.get('/terms', (req, res) => {
+    return renderLegalPage(req, res, 'terms');
+  });
+
+  app.get('/privacy', (req, res) => {
+    return renderLegalPage(req, res, 'privacy');
   });
 
   app.get('/signup', (req, res) => {

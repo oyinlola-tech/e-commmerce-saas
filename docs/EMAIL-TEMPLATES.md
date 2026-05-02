@@ -5,8 +5,15 @@ This document defines the transactional email matrix for Aisle Commerce so custo
 ## Branding rules
 
 - Customer-facing emails use the exact store identity from `store-service`: `name`, `logo_url`, `theme_color`, `support_email`, and storefront URL.
-- Store-owner emails use the platform identity as the visual shell and can optionally mention the owner's store name in the copy.
+- Store-owner emails use the platform identity as the visual shell and can optionally mention the owner's store name in the copy, but only when the triggering event provides an explicit `store_id`.
 - The notification renderer should stay centralized in `apps/services/notification-service` so HTML is not duplicated across services.
+
+## Delivery rules
+
+- Transactional emails should resolve the recipient from the exact account, customer, order, payment, subscription, or compliance record tied to the event.
+- Owner emails must not infer a store by picking the first store owned by that user; if the event does not identify a store, the email should remain owner-scoped and omit store-specific branding or copy.
+- Customer emails should only be store-branded when a valid `store_id` is present or when the sender deliberately supplies explicit store-brand data for preview purposes.
+- Render-ready templates should not be treated as live automation until a real trigger with exact recipient data exists.
 
 ## Implemented now
 
@@ -48,6 +55,7 @@ This document defines the transactional email matrix for Aisle Commerce so custo
 ## Live automation now
 
 - `notification-service` now consumes registration, store creation, order, payment, subscription-state, and compliance events for the templates that already have real data sources.
+- Owner billing and compliance emails now avoid "primary store" guessing; store-specific copy is included only when the event payload carries a real `store_id`.
 - Previewing is supported with `POST /emails/render` in `notification-service` so templates can be inspected without sending a real email.
 - Sending still works through `POST /emails/send`, and template sends now accept `template_key`, `template_data`, `brand`, and `store_id`.
 

@@ -88,21 +88,6 @@ const getStoreById = async ({ config, storeId, requestId }) => {
   return response?.store || null;
 };
 
-const getOwnerStores = async ({ config, ownerId, requestId }) => {
-  const response = await safeRequestJson(`${config.serviceUrls.store}/stores`, {
-    headers: buildHeaders({
-      config,
-      requestId,
-      userId: ownerId,
-      actorRole: PLATFORM_ROLES.STORE_OWNER,
-      actorType: 'platform_user'
-    }),
-    timeoutMs: config.requestTimeoutMs
-  });
-
-  return Array.isArray(response?.stores) ? response.stores : [];
-};
-
 const getCustomer = async ({ config, storeId, customerId, requestId }) => {
   const response = await safeRequestJson(`${config.serviceUrls.customer}/customers/me`, {
     headers: buildHeaders({
@@ -172,19 +157,12 @@ const maybeSend = async ({ db, config, logger, requestId, to, templateKey, templ
   }
 };
 
-const getPrimaryStore = async ({ config, ownerId, requestId, explicitStoreId = null }) => {
-  if (explicitStoreId) {
-    return getStoreById({ config, storeId: explicitStoreId, requestId });
-  }
-
-  const stores = await getOwnerStores({ config, ownerId, requestId });
-  return stores[0] || null;
-};
-
 const buildOwnerContext = async ({ config, ownerId, requestId, explicitStoreId = null }) => {
   const [user, store] = await Promise.all([
     getPlatformUser({ config, ownerId, requestId }),
-    getPrimaryStore({ config, ownerId, requestId, explicitStoreId })
+    explicitStoreId
+      ? getStoreById({ config, storeId: explicitStoreId, requestId })
+      : Promise.resolve(null)
   ]);
 
   return {

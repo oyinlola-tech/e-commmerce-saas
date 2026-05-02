@@ -41,9 +41,11 @@
     <div>
       <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Support</h2>
       <ul class="mt-4 space-y-3 text-sm text-slate-600">
-        <li><span><%= store && store.support_email ? store.support_email : 'support@example.com' %></span></li>
+        <li><a href="mailto:<%= store && store.support_email ? store.support_email : 'support@example.com' %>" class="transition hover:text-primary"><%= store && store.support_email ? store.support_email : 'support@example.com' %></a></li>
         <li><span><%= store && store.contact_phone ? store.contact_phone : '+1 000 000 0000' %></span></li>
         <li><span><%= store && store.return_window_days ? `${store.return_window_days}-day returns` : '30-day returns' %></span></li>
+        <li><a href="/terms" class="transition hover:text-primary">Terms</a></li>
+        <li><a href="/privacy" class="transition hover:text-primary">Privacy</a></li>
       </ul>
     </div>
   </div>
