@@ -15,11 +15,11 @@ const {
 } = require('../../../../packages/shared');
 
 const buildSessionCookieOptions = (req, config) => {
-  // Security: Tie the Secure flag to HTTPS-aware requests so session identifiers are not sent over clear text in production.
+  // Security: Session identifiers must always be marked Secure.
   return buildCookieOptions(config, {
     sameSite: 'lax',
     httpOnly: true,
-    secure: config.isProduction ? isSecureRequest(req) : Boolean(config.cookieSecure),
+    secure: true,
     maxAge: 30 * 24 * 60 * 60 * 1000
   });
 };
