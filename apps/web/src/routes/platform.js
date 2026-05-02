@@ -38,6 +38,7 @@ const registerPlatformRoutes = (app, deps) => {
     confirmStorefrontPasswordReset,
     requestPlatformPasswordReset,
     confirmPlatformPasswordReset,
+    unsubscribeStorefrontMarketing,
     createOwnerSubscriptionCheckout,
     verifyOwnerSubscriptionCheckout,
     getPublicBillingPlans,
@@ -510,6 +511,53 @@ const registerPlatformRoutes = (app, deps) => {
 
   app.get('/privacy', (req, res) => {
     return renderLegalPage(req, res, 'privacy');
+  });
+
+  app.get('/email/unsubscribe', async (req, res, next) => {
+    const token = String(req.query.token || '').trim();
+
+    if (!token) {
+      return renderPlatform(res, 'shared/marketing-unsubscribe', {
+        pageTitle: 'Email preferences',
+        metaTitle: 'Email preferences | Aisle',
+        metaDescription: 'Marketing email preference update.',
+        unsubscribeSucceeded: false,
+        unsubscribeAlreadyUnsubscribed: false,
+        unsubscribeCustomer: null,
+        unsubscribeStore: null,
+        unsubscribeStorefrontUrl: ''
+      });
+    }
+
+    try {
+      const result = await unsubscribeStorefrontMarketing(req, token);
+      return renderPlatform(res, 'shared/marketing-unsubscribe', {
+        pageTitle: 'Email preferences',
+        metaTitle: `${result.store?.name || 'Store'} email preferences`,
+        metaDescription: `Monthly marketing emails have been turned off for ${result.customer?.email || 'this address'}.`,
+        unsubscribeSucceeded: true,
+        unsubscribeAlreadyUnsubscribed: Boolean(result.already_unsubscribed),
+        unsubscribeCustomer: result.customer,
+        unsubscribeStore: result.store,
+        unsubscribeStorefrontUrl: result.store ? buildStorefrontUrl(result.store) : ''
+      });
+    } catch (error) {
+      if ([400, 404, 422].includes(Number(error.status))) {
+        res.status(Number(error.status) || 400);
+        return renderPlatform(res, 'shared/marketing-unsubscribe', {
+          pageTitle: 'Email preferences',
+          metaTitle: 'Email preferences | Aisle',
+          metaDescription: 'Marketing email preference update.',
+          unsubscribeSucceeded: false,
+          unsubscribeAlreadyUnsubscribed: false,
+          unsubscribeCustomer: null,
+          unsubscribeStore: null,
+          unsubscribeStorefrontUrl: ''
+        });
+      }
+
+      return next(error);
+    }
   });
 
   app.get('/signup', (req, res) => {

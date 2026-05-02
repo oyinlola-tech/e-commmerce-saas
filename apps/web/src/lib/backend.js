@@ -8,7 +8,8 @@ const {
   setPlatformTokenCookie,
   clearAuthCookies,
   verifyToken,
-  isSecureRequest
+  isSecureRequest,
+  PLATFORM_ROLES
 } = require('../../../../packages/shared');
 
 const DEFAULT_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=300&q=80';
@@ -1269,6 +1270,42 @@ const requestStorefrontPasswordReset = async (req, store, payload = {}) => {
   });
 };
 
+const unsubscribeStorefrontMarketing = async (req, token) => {
+  const safeToken = String(token || '').trim();
+  const response = await requestPublicJson(
+    req,
+    env.serviceUrls.customer,
+    `/customers/marketing/unsubscribe?token=${encodeURIComponent(safeToken)}`
+  );
+
+  let store = null;
+  if (response?.customer?.store_id) {
+    try {
+      const storeResponse = await requestServiceJson(
+        req,
+        env.serviceUrls.store,
+        `/stores/${encodeURIComponent(response.customer.store_id)}`,
+        {
+          auth: {
+            actorRole: PLATFORM_ROLES.PLATFORM_OWNER,
+            actorType: 'platform_user'
+          }
+        }
+      );
+      store = normalizeStore(storeResponse?.store || null);
+    } catch {
+      store = null;
+    }
+  }
+
+  return {
+    status: response?.status || 'unsubscribed',
+    already_unsubscribed: Boolean(response?.already_unsubscribed),
+    customer: normalizeCustomer(response?.customer || null),
+    store
+  };
+};
+
 const confirmStorefrontPasswordReset = async (req, store, payload = {}) => {
   return requestPublicJson(req, env.serviceUrls.customer, '/customers/password-reset/confirm', {
     method: 'POST',
@@ -1484,6 +1521,7 @@ module.exports = {
   requestPlatformPasswordReset,
   confirmPlatformPasswordReset,
   requestStorefrontPasswordReset,
+  unsubscribeStorefrontMarketing,
   confirmStorefrontPasswordReset,
   createOwnerSubscriptionCheckout,
   verifyOwnerSubscriptionCheckout,
