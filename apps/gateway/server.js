@@ -620,7 +620,12 @@ const bootstrap = async () => {
     });
   });
 
-  app.use('/api', gatewayCsrfMiddleware);
+  app.use('/api', (req, res, next) => {
+    if (req.path === '/csrf-token') {
+      return next();
+    }
+    return gatewayCsrfMiddleware(req, res, next);
+  });
   app.use('/payments', gatewayCsrfMiddleware);
 
   app.get('/api/platform/billing/plans', createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' }));
