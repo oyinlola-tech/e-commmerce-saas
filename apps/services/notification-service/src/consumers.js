@@ -8,6 +8,16 @@ const {
   sanitizePlainText
 } = require('../../../../packages/shared');
 const { sendTemplatedEmail } = require('./outbound-email');
+const {
+  MARKETING_CAMPAIGN_SCHEDULER_INTERVAL_MS,
+  MONTHLY_MARKETING_TEMPLATE_KEY,
+  buildNextMonthlySendAt,
+  ensureStoreMarketingCampaign,
+  listDueMarketingCampaigns,
+  markMarketingCampaignSent,
+  snoozeMarketingCampaign,
+  buildMonthlyMarketingTemplateData
+} = require('./marketing-campaigns');
 
 const OWNER_STATUS_NOTIFICATION_STATUSES = new Set([
   'processing',
@@ -98,6 +108,20 @@ const getStoreById = async ({ config, storeId, requestId }) => {
   return response?.store || null;
 };
 
+const listStores = async ({ config, requestId }) => {
+  const response = await safeRequestJson(`${config.serviceUrls.store}/stores`, {
+    headers: buildHeaders({
+      config,
+      requestId,
+      actorRole: PLATFORM_ROLES.PLATFORM_OWNER,
+      actorType: 'platform_user'
+    }),
+    timeoutMs: config.requestTimeoutMs
+  });
+
+  return response?.stores || null;
+};
+
 const getCustomer = async ({ config, storeId, customerId, requestId }) => {
   const response = await safeRequestJson(`${config.serviceUrls.customer}/customers/me`, {
     headers: buildHeaders({
@@ -126,6 +150,36 @@ const getOrder = async ({ config, storeId, orderId, requestId }) => {
   });
 
   return response?.order || null;
+};
+
+const listMarketingSubscribers = async ({ config, storeId, requestId }) => {
+  const response = await safeRequestJson(`${config.serviceUrls.customer}/customers/marketing/subscribers`, {
+    headers: buildHeaders({
+      config,
+      requestId,
+      storeId,
+      actorRole: 'system',
+      actorType: 'service'
+    }),
+    timeoutMs: config.requestTimeoutMs
+  });
+
+  return response?.customers || null;
+};
+
+const listLatestStoreProducts = async ({ config, storeId, requestId }) => {
+  const response = await safeRequestJson(`${config.serviceUrls.product}/products?page=1&limit=15`, {
+    headers: buildHeaders({
+      config,
+      requestId,
+      storeId,
+      actorRole: 'system',
+      actorType: 'service'
+    }),
+    timeoutMs: config.requestTimeoutMs
+  });
+
+  return response?.products || null;
 };
 
 const getOwnerBilling = async ({ config, ownerId, requestId }) => {
@@ -215,6 +269,111 @@ const buildOwnerContext = async ({ config, ownerId, requestId, explicitStoreId =
   };
 };
 
+const seedExistingStoreMarketingCampaigns = async ({ db, config, logger }) => {
+  const requestId = `notification-marketing-seed-${Date.now()}`;
+  const stores = await listStores({ config, requestId });
+  if (!Array.isArray(stores) || !stores.length) {
+    return;
+  }
+
+  for (const store of stores) {
+    const storeId = Number(store.id || 0);
+    if (!storeId) {
+      continue;
+    }
+
+    try {
+      await ensureStoreMarketingCampaign(db, {
+        storeId,
+        nextSendAt: buildNextMonthlySendAt(store.created_at || new Date())
+      });
+    } catch (error) {
+      logger.error('Failed to seed store marketing campaign', {
+        storeId,
+        error: error.message
+      });
+    }
+  }
+};
+
+const runMonthlyStoreMarketingCampaign = async ({ campaign, db, config, logger }) => {
+  const requestId = `notification-marketing-${campaign.store_id}-${Date.now()}`;
+  const store = await getStoreById({
+    config,
+    storeId: Number(campaign.store_id),
+    requestId
+  });
+
+  if (!store || !store.is_active) {
+    await snoozeMarketingCampaign(db, campaign.id, new Date());
+    return;
+  }
+
+  const [customers, products] = await Promise.all([
+    listMarketingSubscribers({
+      config,
+      storeId: Number(store.id),
+      requestId
+    }),
+    listLatestStoreProducts({
+      config,
+      storeId: Number(store.id),
+      requestId
+    })
+  ]);
+
+  if (!Array.isArray(customers) || !Array.isArray(products)) {
+    throw new Error('Unable to load marketing subscribers or products for the campaign.');
+  }
+
+  if (!customers.length || !products.length) {
+    await snoozeMarketingCampaign(db, campaign.id, new Date());
+    return;
+  }
+
+  const storefrontUrl = buildStorefrontUrl(config, store);
+  const storeContext = {
+    ...store,
+    storefront_url: storefrontUrl
+  };
+  const sendTimestamp = new Date();
+
+  for (const customer of customers) {
+    const templateData = buildMonthlyMarketingTemplateData({
+      config,
+      store: storeContext,
+      customer,
+      products,
+      currency: products[0]?.currency || 'USD'
+    });
+
+    await maybeSend({
+      db,
+      config,
+      logger,
+      requestId,
+      to: customer.email,
+      templateKey: MONTHLY_MARKETING_TEMPLATE_KEY,
+      templateData,
+      metadata: {
+        kind: 'monthly_product_marketing',
+        store_id: Number(store.id || 0),
+        customer_id: Number(customer.id || 0),
+        campaign_id: Number(campaign.id || 0)
+      },
+      storeId: Number(store.id)
+    });
+  }
+
+  await markMarketingCampaignSent(db, campaign.id, sendTimestamp);
+  logger.info('Processed monthly product marketing campaign', {
+    campaignId: campaign.id,
+    storeId: store.id,
+    recipients: customers.length,
+    products: products.length
+  });
+};
+
 const registerConsumers = async ({ bus, db, config, logger }) => {
   await bus.subscribe({
     queueName: 'notification-service.lifecycle',
@@ -284,6 +443,11 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
         if (!store) {
           return;
         }
+
+        await ensureStoreMarketingCampaign(db, {
+          storeId: Number(store.id),
+          nextSendAt: buildNextMonthlySendAt(store.created_at || new Date())
+        });
 
         await maybeSend({
           db,
@@ -786,6 +950,51 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
       });
     }
   });
+
+  let marketingSchedulerActive = false;
+  const runMarketingScheduler = async () => {
+    if (marketingSchedulerActive) {
+      return;
+    }
+
+    marketingSchedulerActive = true;
+    try {
+      const dueCampaigns = await listDueMarketingCampaigns(db);
+      for (const campaign of dueCampaigns) {
+        try {
+          await runMonthlyStoreMarketingCampaign({
+            campaign,
+            db,
+            config,
+            logger
+          });
+        } catch (error) {
+          logger.error('Scheduled monthly marketing campaign failed', {
+            campaignId: campaign.id,
+            storeId: campaign.store_id,
+            error: error.message
+          });
+        }
+      }
+    } finally {
+      marketingSchedulerActive = false;
+    }
+  };
+
+  const marketingInterval = globalThis.setInterval(() => {
+    void runMarketingScheduler();
+  }, MARKETING_CAMPAIGN_SCHEDULER_INTERVAL_MS);
+
+  if (typeof marketingInterval.unref === 'function') {
+    marketingInterval.unref();
+  }
+
+  await seedExistingStoreMarketingCampaigns({
+    db,
+    config,
+    logger
+  });
+  await runMarketingScheduler();
 };
 
 module.exports = {

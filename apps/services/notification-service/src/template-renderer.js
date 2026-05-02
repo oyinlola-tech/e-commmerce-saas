@@ -661,6 +661,108 @@ const renderCustomerSummaryPanel = ({ brand, customer, title = 'Customer details
   });
 };
 
+const renderMarketingProductCards = ({ brand, products = [] }) => {
+  const safeProducts = normalizeArray(products)
+    .map((product) => {
+      if (!product || typeof product !== 'object' || Array.isArray(product)) {
+        return null;
+      }
+
+      const title = sanitizeDisplayValue(product.title || product.name || 'Product', 180, 'Product');
+      const category = sanitizeDisplayValue(product.category || '', 120);
+      const description = sanitizeDisplayValue(product.description || '', 220);
+      const price = formatMoney(product.price || 0, product.currency || 'USD');
+      const compareAtPrice = hasContent(product.compare_at_price)
+        ? formatMoney(product.compare_at_price, product.currency || 'USD')
+        : '';
+      const discountLabel = sanitizeDisplayValue(product.discount_label || '', 120);
+      const productUrl = sanitizeOptionalUrl(product.product_url || product.url || '');
+      const imageUrl = sanitizeOptionalUrl(product.image_url || product.image || '');
+      if (!title || !productUrl) {
+        return null;
+      }
+
+      return {
+        title,
+        category,
+        description,
+        price,
+        compareAtPrice,
+        discountLabel,
+        productUrl,
+        imageUrl
+      };
+    })
+    .filter(Boolean);
+
+  if (!safeProducts.length) {
+    return '';
+  }
+
+  return renderPanel({
+    brand,
+    title: 'Your latest monthly product edit',
+    eyebrow: 'Latest arrivals',
+    bodyHtml: `
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0 14px">
+        ${safeProducts.map((product) => `
+          <tr>
+            <td>
+              <div style="border-radius:24px;border:1px solid ${withAlpha(brand.primaryColor, 0.12)};background:${withAlpha(brand.primaryColor, 0.03)};padding:18px">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse">
+                  <tr>
+                    <td width="132" style="width:132px;vertical-align:top;padding-right:18px">
+                      ${product.imageUrl
+                        ? `<img src="${product.imageUrl}" alt="${product.title}" width="132" height="132" style="display:block;width:132px;height:132px;border-radius:18px;object-fit:cover;border:0">`
+                        : `<div style="width:132px;height:132px;border-radius:18px;background:${withAlpha(brand.primaryColor, 0.12)};display:flex;align-items:center;justify-content:center;color:${brand.primaryColor};font-size:13px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase">New</div>`}
+                    </td>
+                    <td style="vertical-align:top">
+                      ${product.category ? `<p style="margin:0 0 8px;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:${brand.primaryColor};font-weight:700">${product.category}</p>` : ''}
+                      <p style="margin:0 0 8px;font-size:20px;line-height:1.35;color:${DEFAULT_TEXT_COLOR};font-weight:700">${product.title}</p>
+                      ${product.description ? `<p style="margin:0 0 12px;font-size:14px;line-height:1.7;color:${DEFAULT_MUTED_TEXT_COLOR}">${product.description}</p>` : ''}
+                      <p style="margin:0;font-size:18px;line-height:1.5;color:${DEFAULT_TEXT_COLOR};font-weight:700">${product.price}</p>
+                      ${product.compareAtPrice ? `<p style="margin:6px 0 0;font-size:13px;line-height:1.6;color:${DEFAULT_MUTED_TEXT_COLOR}">Previously ${product.compareAtPrice}</p>` : ''}
+                      ${product.discountLabel ? `<p style="margin:8px 0 0;font-size:12px;line-height:1.6;color:${brand.primaryColor};font-weight:700">${product.discountLabel}</p>` : ''}
+                      <div style="margin-top:16px">
+                        <a
+                          href="${product.productUrl}"
+                          style="display:inline-block;padding:12px 16px;border-radius:999px;text-decoration:none;font-size:13px;font-weight:700;color:#ffffff;background:${brand.primaryColor}"
+                        >View product</a>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </table>
+    `
+  });
+};
+
+const renderMarketingPreferencePanel = ({ brand, unsubscribeUrl }) => {
+  const safeUnsubscribeUrl = sanitizeOptionalUrl(unsubscribeUrl || '');
+  if (!safeUnsubscribeUrl) {
+    return '';
+  }
+
+  return renderPanel({
+    brand,
+    title: 'Control these monthly emails',
+    eyebrow: 'Preferences',
+    bodyHtml: `
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.75;color:${DEFAULT_TEXT_COLOR}">
+        You are receiving this monthly product roundup because your customer email is subscribed to store marketing updates.
+      </p>
+      <a
+        href="${safeUnsubscribeUrl}"
+        style="display:inline-block;padding:12px 16px;border-radius:999px;text-decoration:none;font-size:13px;font-weight:700;color:${brand.primaryColor};background:${withAlpha(brand.primaryColor, 0.08)};border:1px solid ${withAlpha(brand.primaryColor, 0.18)}"
+      >Unsubscribe from monthly emails</a>
+    `
+  });
+};
+
 const renderShell = ({ brand, preheader, eyebrow, title, intro, bodyHtml, footerNote, actions = [] }) => {
   const safePreheader = sanitizeDisplayValue(preheader, 180);
   const safeEyebrow = sanitizeDisplayValue(eyebrow, 80);
@@ -2178,6 +2280,84 @@ const templateRenderers = {
         ...items.map((item) => `- ${item.name} x${item.quantity}`),
         '',
         `Return to cart: ${cartUrl}`
+      ])
+    };
+  },
+  'store.monthly_product_marketing': async ({ brand, templateData, config }) => {
+    const name = sanitizeDisplayValue(templateData.name || 'there', 120, 'there');
+    const products = normalizeArray(templateData.products);
+    const productCount = Math.max(0, Number(templateData.products_count || products.length || 0));
+    const categoryCount = Math.max(0, Number(templateData.category_count || 0));
+    const discountedProductsCount = Math.max(0, Number(templateData.discounted_products_count || 0));
+    const monthLabel = sanitizeDisplayValue(templateData.month_label || 'this month', 40, 'this month');
+    const catalogUrl = sanitizeOptionalUrl(templateData.catalog_url || joinUrl(brand.websiteUrl || buildStorefrontUrl(config), '/products'));
+    const storeUrl = sanitizeOptionalUrl(templateData.store_url || brand.websiteUrl || buildStorefrontUrl(config));
+    const unsubscribeUrl = sanitizeOptionalUrl(templateData.unsubscribe_url || '');
+    const summaryCards = [
+      {
+        label: 'Latest products',
+        value: String(productCount || products.length || 0),
+        note: `Fresh picks for ${monthLabel}.`
+      }
+    ];
+
+    if (categoryCount > 0) {
+      summaryCards.push({
+        label: 'Categories',
+        value: String(categoryCount),
+        note: 'A wider spread of choices this month.'
+      });
+    }
+
+    summaryCards.push({
+      label: 'Worth a click',
+      value: discountedProductsCount > 0 ? `${discountedProductsCount} offers` : 'New arrivals',
+      note: discountedProductsCount > 0
+        ? 'Some picks currently carry extra value cues.'
+        : 'Every product below links straight to the storefront.'
+    });
+
+    return {
+      subject: productCount >= 10
+        ? `${productCount} fresh picks from ${brand.storeName}`
+        : `New arrivals from ${brand.storeName}`,
+      html: renderShell({
+        brand,
+        preheader: `See the latest products added to ${brand.storeName} this month.`,
+        eyebrow: 'Monthly product edit',
+        title: `Fresh products from ${brand.storeName}`,
+        intro: `Hi ${name}, we pulled together the latest arrivals from ${brand.storeName} so you can browse what is new without hunting through the full catalog.`,
+        actions: [
+          { label: 'Shop new arrivals', href: catalogUrl, tone: 'primary' },
+          { label: 'Visit storefront', href: storeUrl, tone: 'secondary' }
+        ],
+        bodyHtml: `
+          ${renderHighlightCards(summaryCards, brand)}
+          ${renderMarketingProductCards({ brand, products })}
+          ${renderNotice({
+            brand,
+            title: 'Quick shopping note',
+            body: 'Availability, pricing, and active offers can move over time. If something below catches your eye, open the product page while it is still fresh.',
+            tone: 'primary'
+          })}
+          ${renderMarketingPreferencePanel({ brand, unsubscribeUrl })}
+        `,
+        footerNote: 'This monthly roundup is designed to keep you close to the newest products from this store.'
+      }),
+      text: buildTextBlock([
+        `Hi ${name},`,
+        '',
+        `Here are the latest ${productCount || products.length || 0} products from ${brand.storeName} for ${monthLabel}.`,
+        `Browse the full catalog: ${catalogUrl}`,
+        '',
+        ...products.map((product) => {
+          const title = sanitizeDisplayValue(product.title || product.name || 'Product', 180, 'Product');
+          const price = formatMoney(product.price || 0, product.currency || templateData.currency || 'USD');
+          const productUrl = sanitizeOptionalUrl(product.product_url || product.url || '');
+          return `- ${title} | ${price} | ${productUrl}`;
+        }),
+        '',
+        ...(unsubscribeUrl ? [`Unsubscribe from monthly marketing emails: ${unsubscribeUrl}`] : [])
       ])
     };
   },

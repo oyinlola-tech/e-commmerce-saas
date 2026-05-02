@@ -16,6 +16,21 @@ const schemaStatements = [
       KEY idx_outbound_emails_status (status)
     )
   `
+  ,
+  `
+    CREATE TABLE IF NOT EXISTS marketing_campaigns (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      store_id BIGINT UNSIGNED NOT NULL,
+      frequency VARCHAR(20) NOT NULL DEFAULT 'monthly',
+      status VARCHAR(20) NOT NULL DEFAULT 'active',
+      last_sent_at DATETIME NULL,
+      next_send_at DATETIME NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_marketing_campaigns_store_id (store_id),
+      KEY idx_marketing_campaigns_due (status, next_send_at)
+    )
+  `
 ];
 
 module.exports = {

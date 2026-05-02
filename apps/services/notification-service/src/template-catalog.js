@@ -335,6 +335,16 @@ const EMAIL_TEMPLATE_CATALOG = [
     required_data: ['name', 'cart_url', 'items']
   },
   {
+    key: 'store.monthly_product_marketing',
+    audience: 'customer',
+    brand_mode: 'store',
+    category: 'marketing',
+    status: TEMPLATE_STATUS.IMPLEMENTED,
+    description: 'Monthly branded product roundup featuring the latest store arrivals.',
+    trigger: 'Monthly marketing scheduler for subscribed customers',
+    required_data: ['name', 'products', 'catalog_url', 'unsubscribe_url']
+  },
+  {
     key: 'store.wishlist_back_in_stock',
     audience: 'customer',
     brand_mode: 'store',
