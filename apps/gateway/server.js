@@ -626,7 +626,7 @@ const bootstrap = async () => {
 
   app.get('/api/platform/billing/plans', createServiceProxy(config.serviceUrls.billing, { '^/api/platform': '' }));
 
-  app.post('/api/platform/auth/register', authRateLimiter, validate([
+  app.post('/api/platform/auth/register', gatewayCsrfMiddleware, authRateLimiter, validate([
     allowBodyFields(['name', 'email', 'password', 'role', '_csrf']),
     commonRules.name('name', 120),
     commonRules.email(),
@@ -651,7 +651,7 @@ const bootstrap = async () => {
     return res.status(201).json(response);
   }));
 
-  app.post('/api/platform/auth/login', authRateLimiter, validate([
+  app.post('/api/platform/auth/login', gatewayCsrfMiddleware, authRateLimiter, validate([
     allowBodyFields(['email', 'password', '_csrf']),
     commonRules.email(),
     body('password').isString().notEmpty().withMessage('Password is required.')
@@ -681,7 +681,7 @@ const bootstrap = async () => {
     return res.status(204).send();
   });
 
-  app.post('/api/customers/register', authRateLimiter, validate([
+  app.post('/api/customers/register', gatewayCsrfMiddleware, authRateLimiter, validate([
     allowBodyFields(['store_id', 'name', 'email', 'password', 'phone', 'addresses', 'metadata', '_csrf']),
     commonRules.name('name', 120),
     commonRules.email(),
@@ -714,7 +714,7 @@ const bootstrap = async () => {
     return res.status(201).json(response);
   }));
 
-  app.post('/api/customers/login', authRateLimiter, validate([
+  app.post('/api/customers/login', gatewayCsrfMiddleware, authRateLimiter, validate([
     allowBodyFields(['store_id', 'email', 'password', '_csrf']),
     commonRules.email(),
     body('password').isString().notEmpty().withMessage('Password is required.')
