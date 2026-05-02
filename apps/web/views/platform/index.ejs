@@ -1,7 +1,9 @@
 <%
   const signedIn = Boolean(platformUser && platformUser.id);
-  const primaryCtaHref = signedIn ? '/dashboard' : '/signup';
-  const primaryCtaLabel = signedIn ? 'Open owner workspace' : 'Create your account';
+  const primaryCtaHref = signedIn ? (platformHomeUrl || '/dashboard') : '/signup';
+  const primaryCtaLabel = signedIn
+    ? (platformIsAdmin ? 'Open platform dashboard' : 'Open owner workspace')
+    : 'Create your account';
   const secondaryCtaHref = signedIn ? '/#pricing' : '/login';
   const secondaryCtaLabel = signedIn ? 'View plans' : 'Sign in';
   const availableBillingPlans = Array.isArray(billingPlans) && billingPlans.length

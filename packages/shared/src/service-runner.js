@@ -1,5 +1,6 @@
 const http = require('http');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
 const {
   createServiceConfig
 } = require('./env');
@@ -40,7 +41,7 @@ const buildRateLimitKey = (req) => {
     .filter(Boolean)
     .join(':');
 
-  return scopedIdentity || req.ip;
+  return scopedIdentity || ipKeyGenerator(req.ip || '') || 'anonymous';
 };
 
 const createServiceRateLimiter = ({ windowMs, limit, store }) => {

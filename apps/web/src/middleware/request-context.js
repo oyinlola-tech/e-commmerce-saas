@@ -24,6 +24,7 @@ const applyRequestContextMiddleware = (app, context, helpers) => {
     requiresStoreContext,
     isStorefrontHost,
     isPlatformAdminUser,
+    getPlatformHomePath,
     resolveRequestedStoreId,
     shouldLoadStorefrontIdentity,
     isStoreScopedPath,
@@ -122,6 +123,7 @@ const applyRequestContextMiddleware = (app, context, helpers) => {
       };
       res.locals.platformUser = req.currentPlatformUser;
       res.locals.platformIsAdmin = isPlatformAdminUser(req.currentPlatformUser);
+      res.locals.platformHomeUrl = getPlatformHomePath(req.currentPlatformUser || req.platformAuth);
       res.locals.systemAdminUser = systemAdminUser;
       res.locals.success = req.query.success || null;
       res.locals.error = req.query.error || null;

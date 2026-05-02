@@ -560,8 +560,12 @@ const createAppHelpers = (context) => {
   };
 
   const isPlatformAdminUser = (user) => {
-    const role = String(user?.role || '').trim().toLowerCase();
+    const role = String(user?.role || user?.actorRole || '').trim().toLowerCase();
     return role === PLATFORM_ROLES.PLATFORM_OWNER || role === PLATFORM_ROLES.SUPPORT_AGENT;
+  };
+
+  const getPlatformHomePath = (identity = null) => {
+    return isPlatformAdminUser(identity) ? '/platform-admin' : '/dashboard';
   };
 
   const requirePlatformAdmin = (req, res, fallback = '/platform-admin') => {
@@ -676,6 +680,7 @@ const createAppHelpers = (context) => {
     buildProductDraft,
     filterCatalogProducts,
     isPlatformAdminUser,
+    getPlatformHomePath,
     requirePlatformUser,
     requirePlatformAdmin,
     requireActiveStore,

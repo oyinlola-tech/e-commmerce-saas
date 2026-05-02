@@ -63,6 +63,7 @@ const registerPlatformRoutes = (app, deps) => {
     decorateProducts,
     buildProductDiscovery,
     buildStoreStats,
+    getPlatformHomePath,
     isPlatformAdminUser,
     requirePlatformUser,
     requirePlatformAdmin,
@@ -259,7 +260,7 @@ const registerPlatformRoutes = (app, deps) => {
     }
 
     if (req.platformAuth && req.currentPlatformUser) {
-      return res.redirect('/dashboard');
+      return res.redirect(getPlatformHomePath(req.currentPlatformUser));
     }
 
     return renderOwnerSignup(req, res);
@@ -341,7 +342,7 @@ const registerPlatformRoutes = (app, deps) => {
           }
         }
 
-        return res.redirect('/dashboard?success=Welcome to Aisle');
+        return res.redirect(`${getPlatformHomePath(registration?.user || ownerAuth)}?success=Welcome%20to%20Aisle`);
       } catch (error) {
         if ([400, 401, 403, 409, 422].includes(Number(error.status))) {
           return res.redirect(`/signup?error=${encodeURIComponent(error.message || 'Unable to create the account right now.')}`);
@@ -367,7 +368,7 @@ const registerPlatformRoutes = (app, deps) => {
     }
 
     if (req.platformAuth && req.currentPlatformUser) {
-      return res.redirect('/dashboard');
+      return res.redirect(getPlatformHomePath(req.currentPlatformUser));
     }
 
     return renderOwnerLogin(req, res);
@@ -401,12 +402,16 @@ const registerPlatformRoutes = (app, deps) => {
         return res.redirect(redirectTarget);
       }
 
-      await loginPlatformUser(req, res, {
+      const response = await loginPlatformUser(req, res, {
         email: req.body.email,
         password: req.body.password
       });
 
-      return res.redirect(resolveSafeLocalRedirect(req, req.body.returnTo || req.query.returnTo, '/dashboard'));
+      return res.redirect(resolveSafeLocalRedirect(
+        req,
+        req.body.returnTo || req.query.returnTo,
+        getPlatformHomePath(response?.user || req.platformAuth)
+      ));
     } catch (error) {
       if ([400, 401, 403].includes(Number(error.status))) {
         return res.redirect(`/login?error=${encodeURIComponent(error.message || 'Unable to sign in with those credentials.')}`);
@@ -629,6 +634,10 @@ const registerPlatformRoutes = (app, deps) => {
     try {
       if (requirePlatformUser(req, res)) {
         return;
+      }
+
+      if (isPlatformAdminUser(req.currentPlatformUser)) {
+        return res.redirect(getPlatformHomePath(req.currentPlatformUser));
       }
 
       return await renderOwnerDashboard(req, res);

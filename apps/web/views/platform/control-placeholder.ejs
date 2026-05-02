@@ -3,6 +3,8 @@
   const title = placeholderTitle || 'This workspace is not enabled in this build.';
   const body = placeholderBody || 'Aisle keeps unfinished platform operations tooling behind an honest placeholder instead of filling it with fabricated demo data.';
   const highlights = Array.isArray(placeholderHighlights) ? placeholderHighlights : [];
+  const workspaceHref = platformHomeUrl || '/dashboard';
+  const workspaceLabel = platformIsAdmin ? 'Return to platform dashboard' : 'Return to owner workspace';
 %>
 <section class="space-y-8">
   <div class="surface-card relative overflow-hidden rounded-[2rem] p-8 sm:p-10">
@@ -13,8 +15,8 @@
       <h1 class="section-title mt-5 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl"><%= title %></h1>
       <p class="mt-4 max-w-3xl text-lg leading-8 text-slate-600"><%= body %></p>
       <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-        <a href="/dashboard" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">
-          Return to owner workspace
+        <a href="<%= workspaceHref %>" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+          <%= workspaceLabel %>
         </a>
         <a href="/" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">
           Back to Aisle home

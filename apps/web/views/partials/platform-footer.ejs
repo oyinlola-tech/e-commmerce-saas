@@ -1,5 +1,7 @@
 <%
   const isSignedIn = Boolean(platformUser && platformUser.id);
+  const workspaceHref = platformHomeUrl || '/dashboard';
+  const workspaceLabel = platformIsAdmin ? 'Platform dashboard' : 'Owner workspace';
 %>
 <footer class="border-t border-slate-200/70 bg-white/85 backdrop-blur">
   <div class="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.35fr_repeat(3,1fr)] lg:px-8">
@@ -29,7 +31,7 @@
       <h2 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Account</h2>
       <ul class="mt-4 space-y-3 text-sm text-slate-600">
         <% if (isSignedIn) { %>
-          <li><a href="/dashboard" class="transition hover:text-primary">Owner workspace</a></li>
+          <li><a href="<%= workspaceHref %>" class="transition hover:text-primary"><%= workspaceLabel %></a></li>
           <li>
             <form action="/logout" method="post">
               <%- include('./csrf-field') %>

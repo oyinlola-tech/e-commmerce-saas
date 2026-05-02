@@ -1,38 +1,110 @@
+const fs = require('fs');
 const { promisify } = require('util');
 const path = require('path');
 const readline = require('readline');
 const { execFile, spawn } = require('child_process');
-const { asNumber, loadEnvFiles } = require('../packages/shared/src/env');
+const { asNumber, loadEnvFiles, toEnvPrefix } = require('../packages/shared/src/env');
 
 const workspaceRoot = path.resolve(__dirname, '..');
 const execFileAsync = promisify(execFile);
 
 loadEnvFiles(workspaceRoot);
 
-const processCatalog = {
-  web: {
-    label: 'web',
-    color: '\x1b[36m',
-    entry: path.join('apps', 'web', 'app.js'),
-    defaultPort: 3000,
-    envVarName: 'WEB_PORT'
-  },
-  gateway: {
+const serviceColors = [
+  '\x1b[32m',
+  '\x1b[35m',
+  '\x1b[34m',
+  '\x1b[31m',
+  '\x1b[96m',
+  '\x1b[95m'
+];
+
+const readServiceDefaultPort = (absoluteEntryPath) => {
+  const contents = fs.readFileSync(absoluteEntryPath, 'utf8');
+  const match = contents.match(/defaultPort:\s*(\d+)/);
+  return match ? Number(match[1]) : null;
+};
+
+const discoverServiceProcesses = () => {
+  const servicesRoot = path.join(workspaceRoot, 'apps', 'services');
+  if (!fs.existsSync(servicesRoot)) {
+    return [];
+  }
+
+  const discovered = fs.readdirSync(servicesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const label = entry.name;
+      const relativeEntry = path.join('apps', 'services', label, 'server.js');
+      const absoluteEntry = path.join(workspaceRoot, relativeEntry);
+      if (!fs.existsSync(absoluteEntry)) {
+        return null;
+      }
+
+      const defaultPort = readServiceDefaultPort(absoluteEntry);
+      if (!defaultPort) {
+        return null;
+      }
+
+      return {
+        label,
+        group: 'service',
+        entry: relativeEntry,
+        defaultPort,
+        envVarName: `${toEnvPrefix(label)}_PORT`
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.defaultPort - right.defaultPort || left.label.localeCompare(right.label));
+
+  return discovered.map((processDefinition, index) => ({
+    ...processDefinition,
+    color: serviceColors[index % serviceColors.length]
+  }));
+};
+
+const processCatalog = [
+  ...discoverServiceProcesses(),
+  {
     label: 'gateway',
+    group: 'browser',
     color: '\x1b[33m',
     entry: path.join('apps', 'gateway', 'server.js'),
     defaultPort: 4000,
     envVarName: 'GATEWAY_PORT'
+  },
+  {
+    label: 'web',
+    group: 'browser',
+    color: '\x1b[36m',
+    entry: path.join('apps', 'web', 'app.js'),
+    defaultPort: 3000,
+    envVarName: 'WEB_PORT'
   }
-};
+];
 
 const resetColor = '\x1b[0m';
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has('--dry-run');
 const backendOnly = args.has('--backend-only');
 const frontendOnly = args.has('--frontend-only');
+const browserOnly = args.has('--browser-only');
+const servicesOnly = args.has('--services-only');
 
-const selectedProcesses = Object.values(processCatalog).filter((processDefinition) => {
+if ([backendOnly, frontendOnly, browserOnly, servicesOnly].filter(Boolean).length > 1) {
+  console.error('Please choose only one of --backend-only, --frontend-only, --browser-only, or --services-only.');
+  process.exit(1);
+}
+
+const selectedProcesses = processCatalog.filter((processDefinition) => {
+  if (servicesOnly) {
+    return processDefinition.group === 'service';
+  }
+
+  if (browserOnly) {
+    return processDefinition.group === 'browser';
+  }
+
   if (backendOnly) {
     return processDefinition.label === 'gateway';
   }

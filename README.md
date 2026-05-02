@@ -95,9 +95,13 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 
 | Command | Behavior |
 | --- | --- |
-| `npm start` | Starts the SSR web app and gateway together with `nodemon` restarts |
-| `npm run start:once` | Starts the SSR web app and gateway together without `nodemon` |
-| `npm run dev` | Starts the SSR web app and gateway together with `nodemon` restarts |
+| `npm start` | Starts the implemented services, gateway, and SSR web app together with `nodemon` restarts |
+| `npm run start:once` | Starts the implemented services, gateway, and SSR web app together without `nodemon` |
+| `npm run dev` | Starts the implemented services, gateway, and SSR web app together with `nodemon` restarts |
+| `npm run start:browser` | Starts only the SSR web app plus gateway through the shared launcher |
+| `npm run dev:browser` | Starts only the SSR web app plus gateway through the shared launcher with `nodemon` restarts |
+| `npm run start:services` | Starts only the implemented services through the shared launcher |
+| `npm run dev:services` | Starts only the implemented services through the shared launcher with `nodemon` restarts |
 | `npm run start:frontend` | Starts only the SSR web app through the shared launcher |
 | `npm run dev:frontend` | Starts only the SSR web app through the shared launcher with `nodemon` restarts |
 | `npm run start:backend` | Starts only the gateway through the shared launcher |
@@ -222,9 +226,9 @@ RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back
 2. Ensure MySQL is available.
 3. Start RabbitMQ if you want active event subscriptions.
 4. Configure environment variables.
-5. Start the gateway and the services you need.
+5. Run `npm run dev` for the full local stack, or use `npm run start:once` when you do not want `nodemon`.
 6. On a fresh database, each implemented service will create its own tables and indexes from its `src/schema.js` file during startup. No separate migration step is required for first-time setup.
-7. Start the web app if you want the SSR interface.
+7. Use `npm run dev:browser` if you only want the web app plus gateway, or `npm run dev:services` if you only want the internal service mesh.
 8. Run `npm run smoke` after startup if you want a quick health/docs/storefront probe.
 
 ### API docs and endpoint testing
@@ -244,7 +248,7 @@ The Swagger preview also exposes:
 
 ### Minimal UI preview
 
-If you only want to preview the interface, the SSR app can run by itself because it uses local state helpers and sample data instead of depending on the full service mesh for every screen.
+If you only want to preview the interface, use `npm run dev:browser` for the SSR app plus gateway, or `npm run dev:frontend` for just the SSR app with local state helpers and sample data.
 
 ### Deployment note
 
