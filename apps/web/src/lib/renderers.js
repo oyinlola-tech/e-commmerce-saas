@@ -239,7 +239,9 @@ const createRenderers = (context, helpers, paymentProviderService) => {
       errors: payload.errors || {},
       formData: payload.formData || {},
       coupons: payload.coupons || [],
-      editingCouponId: payload.editingCouponId || null
+      editingCouponId: payload.editingCouponId || null,
+      subscriptionAccess: payload.subscriptionAccess || null,
+      marketingFeatureLocked: Boolean(payload.marketingFeatureLocked)
     });
   };
 

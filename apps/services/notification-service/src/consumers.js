@@ -206,6 +206,12 @@ const getOwnerBilling = async ({ config, ownerId, requestId }) => {
   });
 };
 
+const hasAutomatedMarketingAccess = (billing = null) => {
+  const status = String(billing?.subscription?.status || '').trim().toLowerCase();
+  return ['trialing', 'active'].includes(status)
+    && Boolean(billing?.entitlements?.capabilities?.automated_marketing);
+};
+
 const maybeSend = async ({ db, config, logger, requestId, to, templateKey, templateData, metadata, storeId }) => {
   const recipient = sanitizeEmail(to || '');
   if (!recipient) {
@@ -318,6 +324,24 @@ const runMonthlyStoreMarketingCampaign = async ({ campaign, db, config, logger }
 
   if (!store || !store.is_active) {
     await snoozeMarketingCampaign(db, campaign.id, new Date());
+    return;
+  }
+
+  const billing = store.owner_id
+    ? await getOwnerBilling({
+      config,
+      ownerId: Number(store.owner_id),
+      requestId
+    })
+    : null;
+
+  if (!hasAutomatedMarketingAccess(billing)) {
+    await snoozeMarketingCampaign(db, campaign.id, new Date());
+    logger.info('Skipped monthly marketing campaign because automated marketing is not enabled for the current plan', {
+      campaignId: campaign.id,
+      storeId: store.id,
+      ownerId: store.owner_id || null
+    });
     return;
   }
 

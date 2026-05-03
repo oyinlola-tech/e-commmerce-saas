@@ -27,6 +27,10 @@ const {
   serializeCoupon,
   buildCouponPreview
 } = require('./coupons');
+const {
+  hasPlanCapability,
+  isCouponPauseOnlyUpdate
+} = require('./coupon-plan-access');
 
 const MANUAL_ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'payment_failed', 'refund_pending', 'refunded'];
 const DEFAULT_TAX_LABEL = 'Tax';
@@ -75,6 +79,70 @@ const buildSystemHeaders = ({ config, requestId, storeId }) => {
     actorRole: PLATFORM_ROLES.PLATFORM_OWNER,
     secret: config.internalSharedSecret
   });
+};
+
+const fetchStoreBillingAccess = async ({ config, req, storeId }) => {
+  const headers = buildSystemHeaders({
+    config,
+    requestId: `${req.requestId || 'order'}:coupon-plan:${storeId}`,
+    storeId
+  });
+  const storeResponse = await requestJson(
+    `${config.serviceUrls.store}/stores/${encodeURIComponent(storeId)}`,
+    {
+      headers,
+      timeoutMs: config.requestTimeoutMs
+    }
+  );
+  const store = storeResponse?.store || null;
+  if (!store?.owner_id) {
+    throw createHttpError(404, 'Store not found for plan enforcement.', null, { expose: true });
+  }
+
+  const access = await requestJson(
+    `${config.serviceUrls.billing}/internal/subscriptions/check?owner_id=${encodeURIComponent(store.owner_id)}`,
+    {
+      headers,
+      timeoutMs: config.requestTimeoutMs
+    }
+  );
+
+  if (!access?.allowed) {
+    throw createHttpError(403, 'An active subscription or trial is required for coupon management.', null, { expose: true });
+  }
+
+  return {
+    store,
+    access
+  };
+};
+
+const enforceCouponPlanAccess = async ({
+  config,
+  req,
+  storeId,
+  existingCoupon = null,
+  couponDraft = null
+}) => {
+  const { access } = await fetchStoreBillingAccess({
+    config,
+    req,
+    storeId
+  });
+
+  if (hasPlanCapability(access, 'automated_marketing')) {
+    return access;
+  }
+
+  if (existingCoupon && couponDraft && isCouponPauseOnlyUpdate(existingCoupon, couponDraft)) {
+    return access;
+  }
+
+  const message = existingCoupon
+    ? 'The current plan keeps existing coupons read-only. Upgrade to Scale to create or edit marketing offers. Pause-only updates remain allowed after downgrade.'
+    : 'Automated marketing and coupon creation are available on the Scale plan and above.';
+
+  throw createHttpError(403, message, null, { expose: true });
 };
 
 const determineShippingCharge = ({ storeConfig, discountedSubtotal, shippingAddress }) => {
@@ -709,6 +777,11 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       payload: req.body
     });
     validateCouponDraft(couponDraft);
+    await enforceCouponPlanAccess({
+      config,
+      req,
+      storeId
+    });
 
     const existingCoupon = await getCouponByCode(db, storeId, couponDraft.code);
     if (existingCoupon) {
@@ -771,6 +844,13 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       existingCoupon
     });
     validateCouponDraft(couponDraft);
+    await enforceCouponPlanAccess({
+      config,
+      req,
+      storeId,
+      existingCoupon,
+      couponDraft
+    });
 
     const duplicateCoupon = await getCouponByCode(db, storeId, couponDraft.code);
     if (duplicateCoupon && Number(duplicateCoupon.id) !== Number(existingCoupon.id)) {

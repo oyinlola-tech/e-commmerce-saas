@@ -22,6 +22,7 @@ const registerAdminRoutes = (app, deps) => {
     getAdminStoreOrderById,
     refundAdminStoreOrder,
     updateAdminStoreOrderStatus,
+    getOwnerSubscriptionAccess,
     updatePlatformStore,
     storePaymentProviders,
     doubleCsrfProtection,
@@ -36,6 +37,7 @@ const registerAdminRoutes = (app, deps) => {
     requireActiveStore,
     resolveStore,
     decorateProducts,
+    hasPlanCapability,
     buildStoreStats,
     buildStoreLaunchChecklist,
     buildProductDraft,
@@ -96,6 +98,30 @@ const registerAdminRoutes = (app, deps) => {
       return next(error);
     }
   };
+
+  const loadStoreSubscriptionAccess = async (req, res, next) => {
+    try {
+      if (!req.currentStore?.owner_id || !req.platformAuth) {
+        req.storeSubscriptionAccess = null;
+        return next();
+      }
+
+      req.storeSubscriptionAccess = await getOwnerSubscriptionAccess(
+        req,
+        req.platformAuth,
+        req.currentStore.owner_id
+      );
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
+
+  const automatedMarketingLocked = (req) => {
+    return !hasPlanCapability(req.storeSubscriptionAccess?.entitlements, 'automated_marketing');
+  };
+
+  const automatedMarketingUpgradeMessage = 'Automated marketing requires the Scale plan or higher. Existing coupons stay visible, but editing is locked until you upgrade.';
 
   app.get('/admin', loadStorePaymentProviderConfigs, async (req, res, next) => {
     try {
@@ -424,7 +450,7 @@ const registerAdminRoutes = (app, deps) => {
     }
   });
 
-  app.get('/admin/marketing', loadMarketingCoupons, (req, res) => {
+  app.get('/admin/marketing', loadStoreSubscriptionAccess, loadMarketingCoupons, (req, res) => {
     if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
       return;
     }
@@ -433,23 +459,31 @@ const registerAdminRoutes = (app, deps) => {
     return renderMarketingPage(req, res, {
       coupons: req.storeCoupons || [],
       formData: buildCouponFormData(editingCoupon || {}),
-      editingCouponId: editingCoupon ? String(editingCoupon.id) : null
+      editingCouponId: editingCoupon ? String(editingCoupon.id) : null,
+      subscriptionAccess: req.storeSubscriptionAccess,
+      marketingFeatureLocked: automatedMarketingLocked(req)
     });
   });
 
-  app.post('/admin/marketing/coupons', loadMarketingCoupons, couponValidation, handleFormValidation((req, res, errors) => {
+  app.post('/admin/marketing/coupons', loadStoreSubscriptionAccess, loadMarketingCoupons, couponValidation, handleFormValidation((req, res, errors) => {
     return renderMarketingPage(req, res, {
       coupons: req.storeCoupons || [],
       errors,
       formData: buildCouponFormData({
         ...req.body,
         is_active: parseCheckbox(req.body.is_active)
-      })
+      }),
+      subscriptionAccess: req.storeSubscriptionAccess,
+      marketingFeatureLocked: automatedMarketingLocked(req)
     }, 422);
   }), async (req, res, next) => {
     try {
       if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
         return;
+      }
+
+      if (automatedMarketingLocked(req)) {
+        return res.redirect(`/admin/marketing?error=${encodeURIComponent(automatedMarketingUpgradeMessage)}`);
       }
 
       await createStoreCoupon(req, req.currentStore, req.platformAuth, {
@@ -474,7 +508,7 @@ const registerAdminRoutes = (app, deps) => {
     }
   });
 
-  app.post('/admin/marketing/coupons/:id', loadMarketingCoupons, couponValidation, handleFormValidation((req, res, errors) => {
+  app.post('/admin/marketing/coupons/:id', loadStoreSubscriptionAccess, loadMarketingCoupons, couponValidation, handleFormValidation((req, res, errors) => {
     return renderMarketingPage(req, res, {
       coupons: req.storeCoupons || [],
       errors,
@@ -483,12 +517,18 @@ const registerAdminRoutes = (app, deps) => {
         id: req.params.id,
         is_active: parseCheckbox(req.body.is_active)
       }),
-      editingCouponId: String(req.params.id)
+      editingCouponId: String(req.params.id),
+      subscriptionAccess: req.storeSubscriptionAccess,
+      marketingFeatureLocked: automatedMarketingLocked(req)
     }, 422);
   }), async (req, res, next) => {
     try {
       if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
         return;
+      }
+
+      if (automatedMarketingLocked(req)) {
+        return res.redirect(`/admin/marketing?error=${encodeURIComponent(automatedMarketingUpgradeMessage)}`);
       }
 
       await updateStoreCoupon(req, req.currentStore, req.platformAuth, req.params.id, {

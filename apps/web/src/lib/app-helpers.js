@@ -41,6 +41,10 @@ const createAppHelpers = (context) => {
     }, {});
   };
 
+  const hasPlanCapability = (entitlements = null, capability = '') => {
+    return Boolean(entitlements?.capabilities?.[capability]);
+  };
+
   const safeDecodeURIComponent = (value = '') => {
     try {
       return decodeURIComponent(String(value || ''));
@@ -847,6 +851,7 @@ const createAppHelpers = (context) => {
     commonRules,
     createHttpError,
     buildFormData,
+    hasPlanCapability,
     handleMultipartLogo,
     safeDecodeURIComponent,
     parseCheckbox,

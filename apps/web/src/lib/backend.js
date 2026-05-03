@@ -335,6 +335,28 @@ const normalizeCoupon = (coupon) => {
   };
 };
 
+const normalizeEntitlements = (entitlements = null) => {
+  if (!entitlements || typeof entitlements !== 'object') {
+    return {
+      limits: {
+        stores: null,
+        products: null
+      },
+      capabilities: {}
+    };
+  }
+
+  return {
+    limits: {
+      stores: entitlements?.limits?.stores ?? null,
+      products: entitlements?.limits?.products ?? null
+    },
+    capabilities: {
+      ...(entitlements.capabilities || {})
+    }
+  };
+};
+
 const normalizeCart = (cart, identity = {}) => {
   const safeCart = cart || createEmptyCart(identity);
 
@@ -1049,7 +1071,16 @@ const updatePlatformStore = async (req, auth, storeId, payload = {}) => {
 };
 
 const getOwnerSubscription = async (req, auth) => {
-  const response = await requestServiceJson(req, env.serviceUrls.billing, '/subscriptions/me', {
+  return getOwnerSubscriptionAccess(req, auth, auth?.userId || '');
+};
+
+const getOwnerSubscriptionAccess = async (req, auth, ownerId) => {
+  const normalizedOwnerId = String(ownerId || auth?.userId || '').trim();
+  const isSelf = normalizedOwnerId && String(auth?.userId || '').trim() === normalizedOwnerId;
+  const pathname = isSelf
+    ? '/subscriptions/me'
+    : `/subscriptions/${encodeURIComponent(normalizedOwnerId)}`;
+  const response = await requestServiceJson(req, env.serviceUrls.billing, pathname, {
     auth: {
       userId: auth.userId,
       actorRole: auth.actorRole,
@@ -1059,7 +1090,8 @@ const getOwnerSubscription = async (req, auth) => {
 
   return {
     subscription: response?.subscription || null,
-    latestInvoice: response?.latest_invoice || null
+    latestInvoice: response?.latest_invoice || null,
+    entitlements: normalizeEntitlements(response?.entitlements || null)
   };
 };
 
@@ -1631,6 +1663,7 @@ module.exports = {
   getCustomerAuthForStore,
   getCustomerOrderById,
   getOwnerSubscription,
+  getOwnerSubscriptionAccess,
   getPlatformAuth,
   getPlatformStoreById,
   getRequestHost,
