@@ -86,6 +86,98 @@ const ensureStoreAccess = async (db, storeId, userId, actorRole) => {
   };
 };
 
+const buildBillingHeaders = (config, req) => {
+  return buildSignedInternalHeaders({
+    requestId: req.requestId,
+    userId: req.authContext.userId || '',
+    actorRole: req.authContext.actorRole || PLATFORM_ROLES.PLATFORM_OWNER,
+    actorType: req.authContext.actorType || 'platform_user',
+    secret: config.internalSharedSecret
+  });
+};
+
+const getPlanLimit = (access = {}, key) => {
+  const rawValue = access?.entitlements?.limits?.[key];
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : null;
+};
+
+const hasPlanCapability = (access = {}, capability) => {
+  return Boolean(access?.entitlements?.capabilities?.[capability]);
+};
+
+const fetchOwnerSubscriptionAccess = async ({ config, req, ownerId }) => {
+  return requestJson(
+    `${config.serviceUrls.billing}/internal/subscriptions/check?owner_id=${encodeURIComponent(ownerId)}`,
+    {
+      headers: buildBillingHeaders(config, req),
+      timeoutMs: config.requestTimeoutMs
+    }
+  );
+};
+
+const enforceStorePlanAccess = async ({
+  db,
+  config,
+  req,
+  ownerId,
+  existingStore = null,
+  payload = {}
+}) => {
+  const access = await fetchOwnerSubscriptionAccess({
+    config,
+    req,
+    ownerId
+  });
+
+  if (!access.allowed) {
+    throw createHttpError(403, 'An active subscription or trial is required for this store action.', null, { expose: true });
+  }
+
+  const normalizedCustomDomain = payload.custom_domain === undefined
+    ? undefined
+    : normalizeDomain(payload.custom_domain || '');
+  const hasExistingCustomDomain = Boolean(existingStore?.custom_domain);
+  const isChangingCustomDomain = normalizedCustomDomain !== undefined
+    && normalizedCustomDomain !== normalizeDomain(existingStore?.custom_domain || '');
+
+  if (normalizedCustomDomain && !hasPlanCapability(access, 'custom_domain') && (!hasExistingCustomDomain || isChangingCustomDomain)) {
+    throw createHttpError(403, 'Custom domains are not available on the current billing plan.', null, { expose: true });
+  }
+
+  const maxStores = getPlanLimit(access, 'stores');
+  const nextIsActive = payload.is_active === undefined
+    ? Boolean(existingStore?.is_active ?? true)
+    : Boolean(payload.is_active);
+
+  if (nextIsActive && maxStores !== null) {
+    const rows = await db.query(
+      `
+        SELECT COUNT(*) AS total
+        FROM stores
+        WHERE owner_id = ?
+          AND is_active = 1
+          AND (? IS NULL OR id <> ?)
+      `,
+      [
+        ownerId,
+        existingStore?.id || null,
+        existingStore?.id || null
+      ]
+    );
+    const activeStoreCount = Number(rows[0]?.total || 0);
+    if (activeStoreCount + 1 > maxStores) {
+      throw createHttpError(403, `The current plan allows up to ${maxStores} active store${maxStores === 1 ? '' : 's'}. Upgrade before activating another store.`, null, {
+        expose: true
+      });
+    }
+  }
+
+  return access;
+};
+
 const buildStoreCacheKey = (suffix) => `store:${suffix}`;
 
 const invalidateStoreCache = async (cache, store) => {
@@ -312,24 +404,16 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       throw createHttpError(400, 'owner_id is required.', null, { expose: true });
     }
 
-    const subscriptionCheckHeaders = buildSignedInternalHeaders({
-      requestId: req.requestId,
-      userId: req.authContext.userId,
-      actorRole: req.authContext.actorRole,
-      actorType: 'platform_user',
-      secret: config.internalSharedSecret
-    });
-    const subscriptionCheck = await requestJson(
-      `${config.serviceUrls.billing}/internal/subscriptions/check?owner_id=${encodeURIComponent(ownerId)}`,
-      {
-        headers: subscriptionCheckHeaders,
-        timeoutMs: config.requestTimeoutMs
+    await enforceStorePlanAccess({
+      db,
+      config,
+      req,
+      ownerId,
+      payload: {
+        ...req.body,
+        is_active: req.body.is_active === false ? false : true
       }
-    );
-
-    if (!subscriptionCheck.allowed) {
-      throw createHttpError(403, 'An active subscription or trial is required before creating a store.', null, { expose: true });
-    }
+    });
 
     const theme = normalizeThemeContract(req.body);
     const name = String(req.body.name || '').trim();
@@ -469,6 +553,15 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
     }
 
+    await enforceStorePlanAccess({
+      db,
+      config,
+      req,
+      ownerId: result.store.owner_id,
+      existingStore: result.store,
+      payload: req.body
+    });
+
     const store = await updateStoreRecord({
       db,
       cache,
@@ -540,6 +633,15 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     if (!result.allowed || !result.store) {
       throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
     }
+
+    await enforceStorePlanAccess({
+      db,
+      config,
+      req,
+      ownerId: result.store.owner_id,
+      existingStore: result.store,
+      payload: req.body
+    });
 
     const store = await updateStoreRecord({
       db,

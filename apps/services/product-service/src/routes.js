@@ -3,6 +3,8 @@ const { randomUUID } = require('crypto');
 const {
   requireInternalRequest,
   EVENT_NAMES,
+  buildSignedInternalHeaders,
+  requestJson,
   parsePagination,
   createAuditLog,
   asyncHandler,
@@ -216,6 +218,81 @@ const buildRequireInternal = (config) => {
     maxAgeMs: config.internalRequestMaxAgeMs,
     nonceTtlMs: config.internalRequestNonceTtlMs
   });
+};
+
+const buildPlanHeaders = (config, req, storeId) => {
+  return buildSignedInternalHeaders({
+    requestId: req.requestId,
+    storeId,
+    userId: req.authContext.userId || '',
+    actorRole: req.authContext.actorRole || '',
+    actorType: req.authContext.actorType || 'platform_user',
+    secret: config.internalSharedSecret
+  });
+};
+
+const getPlanProductLimit = (access = {}) => {
+  const parsed = Number(access?.entitlements?.limits?.products);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : null;
+};
+
+const fetchProductPlanAccess = async ({ config, req, storeId }) => {
+  const headers = buildPlanHeaders(config, req, storeId);
+  const storeResponse = await requestJson(
+    `${config.serviceUrls.store}/stores/${encodeURIComponent(storeId)}`,
+    {
+      headers,
+      timeoutMs: config.requestTimeoutMs
+    }
+  );
+  const store = storeResponse?.store || null;
+  if (!store?.owner_id) {
+    throw createHttpError(404, 'Store not found for plan enforcement.', null, { expose: true });
+  }
+
+  const access = await requestJson(
+    `${config.serviceUrls.billing}/internal/subscriptions/check?owner_id=${encodeURIComponent(store.owner_id)}`,
+    {
+      headers,
+      timeoutMs: config.requestTimeoutMs
+    }
+  );
+
+  if (!access.allowed) {
+    throw createHttpError(403, 'An active subscription or trial is required for product management.', null, { expose: true });
+  }
+
+  return {
+    store,
+    access
+  };
+};
+
+const enforceProductPlanAccess = async ({ db, config, req, storeId }) => {
+  const { access } = await fetchProductPlanAccess({
+    config,
+    req,
+    storeId
+  });
+  const maxProducts = getPlanProductLimit(access);
+  if (maxProducts === null) {
+    return access;
+  }
+
+  const rows = await db.query(
+    'SELECT COUNT(*) AS total FROM products WHERE store_id = ? AND deleted_at IS NULL',
+    [storeId]
+  );
+  const productCount = Number(rows[0]?.total || 0);
+  if (productCount >= maxProducts) {
+    throw createHttpError(403, `The current plan allows up to ${maxProducts} product${maxProducts === 1 ? '' : 's'}. Upgrade before adding another product.`, null, {
+      expose: true
+    });
+  }
+
+  return access;
 };
 
 const buildProductCacheKey = (storeId, suffix) => `product:${storeId}:${suffix}`;
@@ -469,6 +546,13 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     if (!storeId || !title || !slug) {
       throw createHttpError(400, 'store_id, title, and slug are required.', null, { expose: true });
     }
+
+    await enforceProductPlanAccess({
+      db,
+      config,
+      req,
+      storeId
+    });
 
     const pricingInput = buildStoredPricingInput({
       payload: req.body

@@ -6,6 +6,20 @@ const PLAN_ALIASES = {
   basic: 'launch',
   growth: 'scale'
 };
+const createEntitlements = ({ limits = {}, capabilities = {} } = {}) => ({
+  limits: {
+    stores: limits.stores ?? null,
+    products: limits.products ?? null
+  },
+  capabilities: {
+    custom_domain: Boolean(capabilities.custom_domain),
+    analytics: Boolean(capabilities.analytics),
+    automated_marketing: Boolean(capabilities.automated_marketing),
+    priority_support: Boolean(capabilities.priority_support),
+    api_access: Boolean(capabilities.api_access),
+    dedicated_support: Boolean(capabilities.dedicated_support)
+  }
+});
 
 const roundPlanAmount = (value) => {
   return Number(Number(value || 0).toFixed(2));
@@ -54,7 +68,21 @@ const DEFAULT_PLANS = {
       'Owner workspace',
       'Domain management',
       'Email support'
-    ]
+    ],
+    entitlements: createEntitlements({
+      limits: {
+        stores: 1,
+        products: 100
+      },
+      capabilities: {
+        custom_domain: true,
+        analytics: false,
+        automated_marketing: false,
+        priority_support: false,
+        api_access: false,
+        dedicated_support: false
+      }
+    })
   },
   scale: {
     code: 'scale',
@@ -70,7 +98,21 @@ const DEFAULT_PLANS = {
       'Priority support',
       'Advanced analytics',
       'Operational flexibility'
-    ]
+    ],
+    entitlements: createEntitlements({
+      limits: {
+        stores: 5,
+        products: 1000
+      },
+      capabilities: {
+        custom_domain: true,
+        analytics: true,
+        automated_marketing: true,
+        priority_support: true,
+        api_access: false,
+        dedicated_support: false
+      }
+    })
   },
   enterprise: {
     code: 'enterprise',
@@ -86,7 +128,21 @@ const DEFAULT_PLANS = {
       'Custom onboarding',
       'Dedicated support lane',
       'Implementation planning'
-    ]
+    ],
+    entitlements: createEntitlements({
+      limits: {
+        stores: null,
+        products: null
+      },
+      capabilities: {
+        custom_domain: true,
+        analytics: true,
+        automated_marketing: true,
+        priority_support: true,
+        api_access: true,
+        dedicated_support: true
+      }
+    })
   }
 };
 
@@ -136,6 +192,7 @@ module.exports = {
   TRIAL_AUTHORIZATION_BASE_AMOUNT,
   DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
   PLAN_ALIASES,
+  createEntitlements,
   roundPlanAmount,
   clampDiscountPercentage,
   calculateYearlyAmount,

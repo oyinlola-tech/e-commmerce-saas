@@ -51,6 +51,28 @@ const isSubscriptionAllowed = (subscription) => {
   return subscription && ['trialing', 'active'].includes(String(subscription.status || '').toLowerCase());
 };
 
+const normalizeEntitlements = (entitlements = null) => {
+  if (!entitlements || typeof entitlements !== 'object') {
+    return {
+      limits: {
+        stores: null,
+        products: null
+      },
+      capabilities: {}
+    };
+  }
+
+  return {
+    limits: {
+      stores: entitlements?.limits?.stores ?? null,
+      products: entitlements?.limits?.products ?? null
+    },
+    capabilities: {
+      ...(entitlements.capabilities || {})
+    }
+  };
+};
+
 const buildRequireInternal = (config) => {
   return requireInternalRequest(config.internalSharedSecret, {
     maxAgeMs: config.internalRequestMaxAgeMs,
@@ -107,6 +129,14 @@ const resolveOwnerId = (req) => {
 
 const getOwnerSubscription = async (db, ownerId) => {
   return (await db.query('SELECT * FROM subscriptions WHERE owner_id = ?', [ownerId]))[0] || null;
+};
+
+const getSubscriptionPlanDetails = async (db, subscription) => {
+  if (!subscription?.plan) {
+    return null;
+  }
+
+  return getResolvedBillingPlan(db, subscription.plan);
 };
 
 const getSubscriptionById = async (db, subscriptionId) => {
@@ -632,9 +662,11 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     const ownerId = Number(req.authContext.userId);
     const subscription = await getOwnerSubscription(db, ownerId);
     const latestInvoice = await getLatestInvoice(db, ownerId);
+    const plan = await getSubscriptionPlanDetails(db, subscription);
     return res.json({
       subscription: serializeSubscription(subscription),
-      latest_invoice: serializeInvoice(latestInvoice)
+      latest_invoice: serializeInvoice(latestInvoice),
+      entitlements: normalizeEntitlements(plan?.entitlements || null)
     });
   }));
 
@@ -864,9 +896,18 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   ]), asyncHandler(async (req, res) => {
     const ownerId = Number(req.query.owner_id || req.authContext.userId);
     const subscription = await getOwnerSubscription(db, ownerId);
+    const plan = await getSubscriptionPlanDetails(db, subscription);
     return res.json({
       allowed: isSubscriptionAllowed(subscription),
-      subscription: serializeSubscription(subscription)
+      subscription: serializeSubscription(subscription),
+      entitlements: normalizeEntitlements(plan?.entitlements || null),
+      plan: plan
+        ? {
+            code: normalizePlanCode(plan.code),
+            name: plan.name,
+            entitlements: normalizeEntitlements(plan.entitlements || null)
+          }
+        : null
     });
   }));
 
@@ -880,9 +921,11 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     const ownerId = Number(req.params.ownerId);
     const subscription = await getOwnerSubscription(db, ownerId);
     const latestInvoice = await getLatestInvoice(db, ownerId);
+    const plan = await getSubscriptionPlanDetails(db, subscription);
     return res.json({
       subscription: serializeSubscription(subscription),
-      latest_invoice: serializeInvoice(latestInvoice)
+      latest_invoice: serializeInvoice(latestInvoice),
+      entitlements: normalizeEntitlements(plan?.entitlements || null)
     });
   }));
 };
