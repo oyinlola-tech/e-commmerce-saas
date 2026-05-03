@@ -27,3 +27,5 @@ This package is not free to use.
 
 - Publishes `KYC_SUBMITTED`, `KYB_SUBMITTED`, and `COMPLIANCE_STATUS_CHANGED`.
 - Review access is limited to platform owners and support agents.
+- External KYC/KYB providers can be prepared with `COMPLIANCE_PROVIDER_*` env vars, with optional `COMPLIANCE_SERVICE_PROVIDER_*` service-specific overrides.
+- `GET /compliance/provider-status` exposes a reviewer-only, secret-safe view of whether the provider integration is fully configured.

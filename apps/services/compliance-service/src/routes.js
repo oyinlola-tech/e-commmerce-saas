@@ -15,6 +15,7 @@ const {
   sanitizeJsonObject,
   sanitizePlainText
 } = require('../../../../packages/shared');
+const { buildComplianceProvider } = require('./provider');
 
 const allowedReviewRoles = [PLATFORM_ROLES.PLATFORM_OWNER, PLATFORM_ROLES.SUPPORT_AGENT];
 
@@ -415,10 +416,21 @@ const backfillSensitiveComplianceData = async (db, config) => {
   }
 };
 
-const registerRoutes = async ({ app, db, bus, config }) => {
+const registerRoutes = async ({ app, db, bus, config, logger }) => {
   const requireInternal = buildRequireInternal(config);
   const encryptionSecret = getComplianceEncryptionSecret(config);
+  const provider = buildComplianceProvider(config, logger);
   await backfillSensitiveComplianceData(db, config);
+
+  app.get('/compliance/provider-status', requireInternal, asyncHandler(async (req, res) => {
+    if (!allowedReviewRoles.includes(req.authContext.actorRole)) {
+      throw createHttpError(403, 'Only compliance reviewers can view provider integration status.', null, { expose: true });
+    }
+
+    return res.json({
+      provider: provider.describe()
+    });
+  }));
 
   app.post('/compliance/kyc', requireInternal, validate([
     allowBodyFields(['first_name', 'last_name', 'bvn', 'country', 'metadata']),

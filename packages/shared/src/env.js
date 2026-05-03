@@ -120,6 +120,39 @@ const getScopedSecretEnv = (prefix, name, { environment }) => {
   return crypto.randomBytes(32).toString('hex');
 };
 
+const getScopedOrGlobalEnvValue = (prefix, scopedName, globalName) => {
+  const scopedValue = getScopedEnvValue(prefix, scopedName);
+  if (scopedValue !== undefined) {
+    return scopedValue;
+  }
+
+  return hasEnvValue(process.env[globalName])
+    ? process.env[globalName]
+    : undefined;
+};
+
+const getScopedOrGlobalEnv = (
+  prefix,
+  scopedName,
+  globalName,
+  fallback,
+  { requiredInProduction = false, environment = 'development' } = {}
+) => {
+  const value = getScopedOrGlobalEnvValue(prefix, scopedName, globalName);
+  if (value !== undefined) {
+    return value;
+  }
+
+  if (requiredInProduction && environment === 'production') {
+    const displayName = prefix
+      ? `${prefix}_${scopedName} or ${globalName}`
+      : globalName;
+    throw new Error(`${displayName} must be set in production.`);
+  }
+
+  return fallback;
+};
+
 const normalizeSameSite = (value = 'lax') => {
   const normalized = String(value || 'lax').trim().toLowerCase();
   return ['lax', 'strict', 'none'].includes(normalized)
@@ -281,6 +314,26 @@ const createServiceConfig = ({
     authRateLimitMax: asNumber(getScopedEnv(servicePrefix, 'AUTH_RATE_LIMIT_MAX', 10), 10),
     mutationRateLimitWindowMs: asNumber(getScopedEnv(servicePrefix, 'MUTATION_RATE_LIMIT_WINDOW_MS', 10 * 60 * 1000), 10 * 60 * 1000),
     mutationRateLimitMax: asNumber(getScopedEnv(servicePrefix, 'MUTATION_RATE_LIMIT_MAX', 60), 60),
+    complianceProvider: {
+      enabled: asBoolean(getScopedOrGlobalEnv(servicePrefix, 'PROVIDER_ENABLED', 'COMPLIANCE_PROVIDER_ENABLED', false), false),
+      name: String(getScopedOrGlobalEnv(servicePrefix, 'PROVIDER_NAME', 'COMPLIANCE_PROVIDER_NAME', 'manual-review')).trim() || 'manual-review',
+      mode: String(getScopedOrGlobalEnv(servicePrefix, 'PROVIDER_MODE', 'COMPLIANCE_PROVIDER_MODE', 'sandbox')).trim() || 'sandbox',
+      baseUrl: String(getScopedOrGlobalEnv(servicePrefix, 'PROVIDER_BASE_URL', 'COMPLIANCE_PROVIDER_BASE_URL', '')).trim() || null,
+      apiKey: String(getScopedOrGlobalEnv(servicePrefix, 'PROVIDER_API_KEY', 'COMPLIANCE_PROVIDER_API_KEY', '')).trim() || null,
+      webhookSecret: String(getScopedOrGlobalEnv(servicePrefix, 'PROVIDER_WEBHOOK_SECRET', 'COMPLIANCE_PROVIDER_WEBHOOK_SECRET', '')).trim() || null,
+      timeoutMs: asNumber(
+        getScopedOrGlobalEnv(
+          servicePrefix,
+          'PROVIDER_TIMEOUT_MS',
+          'COMPLIANCE_PROVIDER_TIMEOUT_MS',
+          getEnv('EXTERNAL_API_TIMEOUT_MS', 2500)
+        ),
+        asNumber(getEnv('EXTERNAL_API_TIMEOUT_MS', 2500), 2500)
+      ),
+      kycPath: String(getScopedOrGlobalEnv(servicePrefix, 'PROVIDER_KYC_PATH', 'COMPLIANCE_PROVIDER_KYC_PATH', '/kyc')).trim() || '/kyc',
+      kybPath: String(getScopedOrGlobalEnv(servicePrefix, 'PROVIDER_KYB_PATH', 'COMPLIANCE_PROVIDER_KYB_PATH', '/kyb')).trim() || '/kyb',
+      documentPath: String(getScopedOrGlobalEnv(servicePrefix, 'PROVIDER_DOCUMENT_PATH', 'COMPLIANCE_PROVIDER_DOCUMENT_PATH', '/documents')).trim() || '/documents'
+    },
     serviceUrls: {
       user: getEnv('USER_SERVICE_URL', 'http://127.0.0.1:4101'),
       store: getEnv('STORE_SERVICE_URL', 'http://127.0.0.1:4102'),
