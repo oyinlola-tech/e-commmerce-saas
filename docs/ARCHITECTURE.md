@@ -38,12 +38,12 @@ Aisle Commerce SaaS is organized as a monorepo with an SSR web experience, an HT
 - `billing-service` subscribes to `USER_REGISTERED` to provision trial subscriptions for store owners.
 - `order-service` subscribes to `PAYMENT_SUCCEEDED` and `PAYMENT_FAILED` to confirm or fail orders and to commit or release inventory reservations.
 - Published event names are centralized in `packages/shared/src/constants.js`.
-- RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back to a no-op publisher.
+- RabbitMQ is optional at runtime. If unavailable, the shared event bus falls back to a Redis-backed durable queue with retry and dead-letter handling.
 
 ## Data Ownership
 
 - `user-service` owns platform staff and owner identities.
-- `store-service` owns tenant records and store presentation settings.
+- `store-service` owns tenant records, store presentation settings, and persisted launch/onboarding state.
 - `compliance-service` owns KYC, KYB, uploaded documents, and reviews.
 - `customer-service` owns storefront customer identities and profile data.
 - `product-service` owns product records and inventory reservations.
@@ -73,4 +73,4 @@ Aisle Commerce SaaS is organized as a monorepo with an SSR web experience, an HT
 
 ## Current State
 
-The repository already contains the core commerce services, but some platform-adjacent packages are placeholders and some cross-service assumptions are ahead of implementation. See [KNOWN-GAPS.md](KNOWN-GAPS.md) before production rollout.
+The repository contains the core commerce flows, durable event/email infrastructure, shipping/tax-aware checkout, plan enforcement, and guided store-launch onboarding. Platform support/chat operations, deeper compliance integrations, and fuller test coverage still remain before a production rollout. See [KNOWN-GAPS.md](KNOWN-GAPS.md) and [PRODUCTION-AUDIT-2026-05-03.md](PRODUCTION-AUDIT-2026-05-03.md) before launch.
