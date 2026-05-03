@@ -73,6 +73,7 @@ const SUPPORTED_PLATFORM_CURRENCIES = [
   'EUR',
   'GBP',
   'CAD',
+  'NGN',
   'AUD',
   'NZD',
   'CHF',
