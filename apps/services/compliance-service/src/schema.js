@@ -14,6 +14,41 @@ const schemaStatements = [
       UNIQUE KEY uq_kyc_owner_id (owner_id)
     )
   `,
+  {
+    sql: `
+      ALTER TABLE kyc_profiles
+      ADD COLUMN first_name_encrypted TEXT NULL AFTER first_name
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE kyc_profiles
+      ADD COLUMN last_name_encrypted TEXT NULL AFTER last_name
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE kyc_profiles
+      ADD COLUMN bvn_encrypted TEXT NULL AFTER bvn
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE kyc_profiles
+      ADD COLUMN country_encrypted TEXT NULL AFTER country
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE kyc_profiles
+      ADD COLUMN metadata_encrypted MEDIUMTEXT NULL AFTER metadata
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
   `
     CREATE TABLE IF NOT EXISTS kyb_profiles (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -29,6 +64,34 @@ const schemaStatements = [
       UNIQUE KEY uq_kyb_owner_id (owner_id)
     )
   `,
+  {
+    sql: `
+      ALTER TABLE kyb_profiles
+      ADD COLUMN business_name_encrypted TEXT NULL AFTER business_name
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE kyb_profiles
+      ADD COLUMN registration_number_encrypted TEXT NULL AFTER registration_number
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE kyb_profiles
+      ADD COLUMN country_encrypted TEXT NULL AFTER country
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE kyb_profiles
+      ADD COLUMN metadata_encrypted MEDIUMTEXT NULL AFTER metadata
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
   `
     CREATE TABLE IF NOT EXISTS compliance_documents (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -45,6 +108,13 @@ const schemaStatements = [
       KEY idx_compliance_documents_profile (profile_type, profile_id)
     )
   `,
+  {
+    sql: `
+      ALTER TABLE compliance_documents
+      ADD COLUMN file_url_encrypted TEXT NULL AFTER file_url
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
   `
     CREATE TABLE IF NOT EXISTS compliance_reviews (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
