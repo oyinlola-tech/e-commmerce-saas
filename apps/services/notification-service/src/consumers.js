@@ -7,7 +7,11 @@ const {
   sanitizeEmail,
   sanitizePlainText
 } = require('../../../../packages/shared');
-const { sendTemplatedEmail } = require('./outbound-email');
+const {
+  sendTemplatedEmail,
+  listDueOutboundEmailIds,
+  processQueuedOutboundEmail
+} = require('./outbound-email');
 const {
   MARKETING_CAMPAIGN_SCHEDULER_INTERVAL_MS,
   MONTHLY_MARKETING_TEMPLATE_KEY,
@@ -28,6 +32,14 @@ const OWNER_STATUS_NOTIFICATION_STATUSES = new Set([
   'completed',
   'cancelled'
 ]);
+const EMAIL_DELIVERY_BATCH_SIZE = Math.max(
+  1,
+  Number(process.env.EMAIL_DELIVERY_BATCH_SIZE || 50)
+);
+const EMAIL_DELIVERY_POLL_INTERVAL_MS = Math.max(
+  15 * 1000,
+  Number(process.env.EMAIL_DELIVERY_POLL_INTERVAL_MS || 30 * 1000)
+);
 
 const joinUrl = (baseUrl, relativePath) => {
   try {
@@ -951,6 +963,42 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
     }
   });
 
+  let emailDeliveryActive = false;
+  const runEmailDelivery = async () => {
+    if (emailDeliveryActive) {
+      return;
+    }
+
+    emailDeliveryActive = true;
+    try {
+      const emailRows = await listDueOutboundEmailIds(db, EMAIL_DELIVERY_BATCH_SIZE);
+      for (const row of emailRows) {
+        try {
+          await processQueuedOutboundEmail({
+            db,
+            emailId: Number(row.id),
+            logger
+          });
+        } catch (error) {
+          logger.error('Queued outbound email processing failed', {
+            emailId: Number(row.id || 0),
+            error: error.message
+          });
+        }
+      }
+    } finally {
+      emailDeliveryActive = false;
+    }
+  };
+
+  const emailInterval = globalThis.setInterval(() => {
+    void runEmailDelivery();
+  }, EMAIL_DELIVERY_POLL_INTERVAL_MS);
+
+  if (typeof emailInterval.unref === 'function') {
+    emailInterval.unref();
+  }
+
   let marketingSchedulerActive = false;
   const runMarketingScheduler = async () => {
     if (marketingSchedulerActive) {
@@ -994,6 +1042,7 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
     config,
     logger
   });
+  await runEmailDelivery();
   await runMarketingScheduler();
 };
 
