@@ -1024,6 +1024,62 @@ const getPlatformStoreById = async (req, auth, storeId) => {
   return normalizeStore(response?.store || null);
 };
 
+const getPlatformStoreOnboarding = async (req, auth, storeId) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.store,
+    `/stores/${encodeURIComponent(storeId)}/onboarding`,
+    {
+      auth: {
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      }
+    }
+  );
+
+  return {
+    state: response?.state || null,
+    tasks: Array.isArray(response?.tasks) ? response.tasks : []
+  };
+};
+
+const syncPlatformStoreOnboarding = async (req, auth, storeId, tasks = []) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.store,
+    `/stores/${encodeURIComponent(storeId)}/onboarding/sync`,
+    {
+      method: 'POST',
+      auth: {
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      },
+      body: {
+        tasks: Array.isArray(tasks)
+          ? tasks.map((task) => ({
+              key: task?.key,
+              title: task?.title,
+              description: task?.description,
+              step: task?.step,
+              complete: Boolean(task?.complete),
+              required: task?.required !== false,
+              action: task?.action,
+              href: task?.href,
+              estimate_minutes: Number(task?.estimate_minutes || 0)
+            }))
+          : []
+      }
+    }
+  );
+
+  return {
+    state: response?.state || null,
+    tasks: Array.isArray(response?.tasks) ? response.tasks : []
+  };
+};
+
 const createPlatformStore = async (req, auth, payload = {}) => {
   const response = await requestServiceJson(req, env.serviceUrls.store, '/stores', {
     method: 'POST',
@@ -1666,6 +1722,7 @@ module.exports = {
   getOwnerSubscriptionAccess,
   getPlatformAuth,
   getPlatformStoreById,
+  getPlatformStoreOnboarding,
   getRequestHost,
   getRequestHostname,
   getStoreByHost,
@@ -1695,6 +1752,7 @@ module.exports = {
   registerStorefrontCustomer,
   requestPublicJson,
   requestServiceJson,
+  syncPlatformStoreOnboarding,
   createStoreCoupon,
   addToCart,
   previewStoreCoupon,

@@ -11,8 +11,13 @@
   const orderList = Array.isArray(orders) ? orders : [];
   const recent = Array.isArray(recentOrders) ? recentOrders : orderList.slice(0, 5);
   const checklist = Array.isArray(launchChecklist) ? launchChecklist : [];
+  const onboardingState = onboardingProgress || {};
   const completedChecklistCount = checklist.filter((item) => item.complete).length;
   const nextMilestone = checklist.find((item) => !item.complete) || null;
+  const onboardingStepLabel = String(onboardingState.current_step || 'initial')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+  const minutesRemaining = Number(onboardingState.estimated_minutes_remaining || 0);
   const paidOrdersCount = orderList.filter((entry) => String(entry.payment_status || '').trim().toLowerCase() === 'paid').length;
   const pendingOrdersCount = orderList.filter((entry) => ['pending', 'confirmed', 'refund_pending'].includes(String(entry.status || '').trim().toLowerCase())).length;
   const storefrontHost = store && store.custom_domain
@@ -58,8 +63,8 @@
           This workspace now centers the launch path: store identity, payment readiness, catalog quality, and the orders that actually convert into paid revenue.
         </p>
         <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-          <a href="/admin/products/new" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">Add first product</a>
-          <a href="/admin/settings" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Configure payments</a>
+          <a href="/admin/onboarding" class="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-dark">Continue launch guide</a>
+          <a href="/admin/products/new" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Add first product</a>
           <a href="<%= storefrontUrl || '/' %>" target="_blank" rel="noreferrer" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary">Open storefront</a>
         </div>
       </div>
@@ -81,6 +86,7 @@
             <div>
               <p class="text-sm font-medium text-slate-500">Launch checklist</p>
               <p class="mt-2 text-2xl font-semibold text-slate-950"><%= completedChecklistCount %> of <%= checklist.length || 0 %> complete</p>
+              <p class="mt-2 text-sm text-slate-500"><%= onboardingStepLabel %><%= minutesRemaining ? ` • about ${minutesRemaining} min remaining` : '' %></p>
             </div>
             <span class="inline-flex rounded-full <%= checklist.length && completedChecklistCount === checklist.length ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800' %> px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"><%= checklist.length && completedChecklistCount === checklist.length ? 'Launch ready' : 'In progress' %></span>
           </div>
@@ -94,7 +100,10 @@
               <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Next best action</p>
               <p class="mt-2 text-sm font-semibold text-slate-900"><%= nextMilestone.title %></p>
               <p class="mt-2 text-sm leading-6 text-slate-500"><%= nextMilestone.description %></p>
-              <a href="<%= nextMilestone.href %>" class="mt-4 inline-flex text-sm font-semibold text-primary transition hover:underline"><%= nextMilestone.action %></a>
+              <div class="mt-4 flex flex-wrap gap-4">
+                <a href="<%= nextMilestone.href %>" class="inline-flex text-sm font-semibold text-primary transition hover:underline"><%= nextMilestone.action %></a>
+                <a href="/admin/onboarding" class="inline-flex text-sm font-semibold text-slate-600 transition hover:text-primary hover:underline">Open full guide</a>
+              </div>
             </div>
           <% } %>
         </article>

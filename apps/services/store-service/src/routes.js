@@ -17,7 +17,10 @@ const {
   allowQueryFields,
   commonRules,
   sanitizePlainText,
-  sanitizeSlug
+  sanitizeSlug,
+  ONBOARDING_STEP_SEQUENCE,
+  normalizeOnboardingTask,
+  buildOnboardingProgress
 } = require('../../../../packages/shared');
 const {
   validateUploadedFile,
@@ -317,6 +320,193 @@ const buildStoreAuditDetails = ({ existingStore = null, nextStore = null, payloa
   };
 };
 
+const ONBOARDING_TASK_STEPS = ONBOARDING_STEP_SEQUENCE.filter((step) => step !== 'completed');
+
+const parseJsonField = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const sanitizeOnboardingState = (state = null) => {
+  if (!state) {
+    return null;
+  }
+
+  const metadata = parseJsonField(state.step_metadata) || {};
+  return {
+    current_step: state.current_step || 'initial',
+    completed: state.current_step === 'completed',
+    completed_at: state.completed_at || null,
+    created_at: state.created_at || null,
+    updated_at: state.updated_at || null,
+    total_tasks: Number(metadata.total_tasks || 0),
+    completed_tasks: Number(metadata.completed_tasks || 0),
+    required_tasks: Number(metadata.required_tasks || 0),
+    completed_required_tasks: Number(metadata.completed_required_tasks || 0),
+    remaining_required_tasks: Number(metadata.remaining_required_tasks || 0),
+    next_task_key: metadata.next_task_key || null,
+    next_task_title: metadata.next_task_title || null,
+    next_action: metadata.next_action || null,
+    next_href: metadata.next_href || null,
+    estimated_minutes_remaining: Number(metadata.estimated_minutes_remaining || 0),
+    synced_at: metadata.synced_at || null
+  };
+};
+
+const sanitizeOnboardingTaskRecord = (task = null) => {
+  if (!task) {
+    return null;
+  }
+
+  const normalized = normalizeOnboardingTask({
+    key: task.task_key,
+    title: task.task_title,
+    description: task.task_description,
+    step: task.task_step,
+    complete: Boolean(task.is_complete),
+    required: Boolean(task.required)
+  });
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    ...normalized,
+    completed_at: task.completed_at || null,
+    created_at: task.created_at || null,
+    updated_at: task.updated_at || null
+  };
+};
+
+const loadStoreOnboarding = async (db, storeId) => {
+  const state = (await db.query(
+    'SELECT * FROM store_onboarding_states WHERE store_id = ? LIMIT 1',
+    [storeId]
+  ))[0] || null;
+  const stepOrder = ONBOARDING_TASK_STEPS.map(() => '?').join(', ');
+  const tasks = await db.query(
+    `
+      SELECT *
+      FROM onboarding_tasks
+      WHERE store_id = ?
+      ORDER BY FIELD(task_step, ${stepOrder}), required DESC, created_at ASC
+    `,
+    [storeId, ...ONBOARDING_TASK_STEPS]
+  );
+
+  return {
+    state: sanitizeOnboardingState(state),
+    tasks: tasks.map((task) => sanitizeOnboardingTaskRecord(task)).filter(Boolean)
+  };
+};
+
+const syncStoreOnboarding = async (db, storeId, tasks = []) => {
+  const normalizedTasks = tasks
+    .map((task) => normalizeOnboardingTask(task))
+    .filter(Boolean);
+
+  if (!normalizedTasks.length) {
+    throw createHttpError(422, 'At least one onboarding task is required.', null, { expose: true });
+  }
+
+  const previousStateRow = (await db.query(
+    'SELECT * FROM store_onboarding_states WHERE store_id = ? LIMIT 1',
+    [storeId]
+  ))[0] || null;
+  const progress = buildOnboardingProgress(normalizedTasks);
+  const now = new Date();
+  const metadata = JSON.stringify({
+    total_tasks: progress.total_tasks,
+    completed_tasks: progress.completed_tasks,
+    required_tasks: progress.required_tasks,
+    completed_required_tasks: progress.completed_required_tasks,
+    remaining_required_tasks: progress.remaining_required_tasks,
+    next_task_key: progress.next_task_key,
+    next_task_title: progress.next_task_title,
+    next_action: progress.next_action,
+    next_href: progress.next_href,
+    estimated_minutes_remaining: progress.estimated_minutes_remaining,
+    synced_at: now.toISOString()
+  });
+  const completedAt = progress.completed
+    ? (previousStateRow?.completed_at || now)
+    : null;
+
+  await db.execute(
+    `
+      INSERT INTO store_onboarding_states (
+        store_id, current_step, step_metadata, completed_at
+      ) VALUES (?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        current_step = VALUES(current_step),
+        step_metadata = VALUES(step_metadata),
+        completed_at = VALUES(completed_at)
+    `,
+    [
+      storeId,
+      progress.current_step,
+      metadata,
+      completedAt
+    ]
+  );
+
+  for (const task of normalizedTasks) {
+    await db.execute(
+      `
+        INSERT INTO onboarding_tasks (
+          store_id, task_key, task_title, task_description, task_step, is_complete, required, completed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          task_title = VALUES(task_title),
+          task_description = VALUES(task_description),
+          task_step = VALUES(task_step),
+          is_complete = VALUES(is_complete),
+          required = VALUES(required),
+          completed_at = IF(VALUES(is_complete) = 1, COALESCE(completed_at, VALUES(completed_at)), NULL)
+      `,
+      [
+        storeId,
+        task.key,
+        task.title,
+        task.description || null,
+        task.step,
+        task.complete ? 1 : 0,
+        task.required ? 1 : 0,
+        task.complete ? now : null
+      ]
+    );
+  }
+
+  const keys = normalizedTasks.map((task) => task.key);
+  const placeholders = keys.map(() => '?').join(', ');
+  await db.execute(
+    `
+      DELETE FROM onboarding_tasks
+      WHERE store_id = ?
+        AND task_key NOT IN (${placeholders})
+    `,
+    [storeId, ...keys]
+  );
+
+  const current = await loadStoreOnboarding(db, storeId);
+  return {
+    previousState: sanitizeOnboardingState(previousStateRow),
+    currentState: current.state,
+    tasks: current.tasks
+  };
+};
+
 const updateStoreRecord = async ({ db, cache, bus, storeId, existingStore, payload }) => {
   const theme = normalizeThemeContract({
     store_type: payload.store_type || existingStore.store_type,
@@ -601,6 +791,75 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
 
     return res.json({
       store: sanitizeStore(result.store)
+    });
+  }));
+
+  app.get('/stores/:id/onboarding', requireInternal, validate([
+    allowQueryFields([]),
+    commonRules.paramId('id')
+  ]), asyncHandler(async (req, res) => {
+    const result = await ensureStoreAccess(db, req.params.id, req.authContext.userId, req.authContext.actorRole);
+    if (!result.store) {
+      throw createHttpError(404, 'Store not found.', null, { expose: true });
+    }
+
+    if (!result.allowed) {
+      throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
+    }
+
+    const onboarding = await loadStoreOnboarding(db, req.params.id);
+    return res.json(onboarding);
+  }));
+
+  app.post('/stores/:id/onboarding/sync', requireInternal, validate([
+    allowBodyFields(['tasks']),
+    commonRules.paramId('id'),
+    body('tasks').isArray({ min: 1, max: 10 }),
+    body('tasks.*.key').trim().notEmpty().customSanitizer((value) => sanitizePlainText(value, { maxLength: 100 })),
+    body('tasks.*.title').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
+    body('tasks.*.description').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 1000 })),
+    body('tasks.*.step').optional().isIn(ONBOARDING_TASK_STEPS),
+    body('tasks.*.complete').optional().isBoolean().toBoolean(),
+    body('tasks.*.required').optional().isBoolean().toBoolean(),
+    body('tasks.*.action').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 80 })),
+    body('tasks.*.href').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
+    body('tasks.*.estimate_minutes').optional().isInt({ min: 0, max: 60 }).toInt()
+  ]), asyncHandler(async (req, res) => {
+    const result = await ensureStoreAccess(db, req.params.id, req.authContext.userId, req.authContext.actorRole);
+    if (!result.store) {
+      throw createHttpError(404, 'Store not found.', null, { expose: true });
+    }
+
+    if (!result.allowed) {
+      throw createHttpError(403, 'You do not have access to this store.', null, { expose: true });
+    }
+
+    const synced = await syncStoreOnboarding(db, req.params.id, req.body.tasks || []);
+    if (
+      synced.previousState?.current_step !== synced.currentState?.current_step
+      || Boolean(synced.previousState?.completed_at) !== Boolean(synced.currentState?.completed_at)
+    ) {
+      await createAuditLog(db, {
+        actorType: req.authContext.actorType || 'platform_user',
+        actorId: req.authContext.userId || null,
+        action: 'store.onboarding_synced',
+        resourceType: 'store',
+        resourceId: result.store.id,
+        storeId: result.store.id,
+        details: {
+          previous_step: synced.previousState?.current_step || null,
+          current_step: synced.currentState?.current_step || 'initial',
+          completed_required_tasks: synced.currentState?.completed_required_tasks || 0,
+          required_tasks: synced.currentState?.required_tasks || 0,
+          remaining_required_tasks: synced.currentState?.remaining_required_tasks || 0
+        },
+        req
+      });
+    }
+
+    return res.json({
+      state: synced.currentState,
+      tasks: synced.tasks
     });
   }));
 

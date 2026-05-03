@@ -23,6 +23,7 @@ const registerAdminRoutes = (app, deps) => {
     refundAdminStoreOrder,
     updateAdminStoreOrderStatus,
     getOwnerSubscriptionAccess,
+    syncPlatformStoreOnboarding,
     updatePlatformStore,
     storePaymentProviders,
     doubleCsrfProtection,
@@ -39,6 +40,7 @@ const registerAdminRoutes = (app, deps) => {
     decorateProducts,
     hasPlanCapability,
     buildStoreStats,
+    buildStoreOnboardingGuide,
     buildStoreLaunchChecklist,
     buildProductDraft,
     buildProductServicePayload,
@@ -123,7 +125,39 @@ const registerAdminRoutes = (app, deps) => {
 
   const automatedMarketingUpgradeMessage = 'Automated marketing requires the Scale plan or higher. Existing coupons stay visible, but editing is locked until you upgrade.';
 
-  app.get('/admin', loadStorePaymentProviderConfigs, async (req, res, next) => {
+  const buildAndSyncStoreOnboarding = async (req, store, products = [], orders = []) => {
+    const onboarding = buildStoreOnboardingGuide({
+      store,
+      products,
+      orders,
+      paymentProviderConfigs: req.storePaymentProviderConfigs || {},
+      entitlements: req.storeSubscriptionAccess?.entitlements || null
+    });
+
+    let syncedState = null;
+    if (store?.id && req.platformAuth && onboarding.tasks.length) {
+      try {
+        const synced = await syncPlatformStoreOnboarding(req, req.platformAuth, store.id, onboarding.tasks);
+        syncedState = synced?.state || null;
+      } catch (error) {
+        req.log?.warn('store_onboarding_sync_failed', {
+          storeId: store.id,
+          status: error.status,
+          error: error.message
+        });
+      }
+    }
+
+    return {
+      ...onboarding,
+      state: syncedState || {
+        ...onboarding.progress,
+        current_step: onboarding.progress.current_step
+      }
+    };
+  };
+
+  app.get('/admin', loadStorePaymentProviderConfigs, loadStoreSubscriptionAccess, async (req, res, next) => {
     try {
       if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
         return;
@@ -136,6 +170,7 @@ const registerAdminRoutes = (app, deps) => {
         listAdminStoreCustomers(req, store, req.platformAuth)
       ]);
       const products = decorateProducts(productResult.products || []);
+      const onboarding = await buildAndSyncStoreOnboarding(req, store, products, orders);
 
       return renderStoreAdmin(req, res, 'admin/dashboard', {
         pageTitle: 'Store admin',
@@ -147,10 +182,41 @@ const registerAdminRoutes = (app, deps) => {
           store,
           products,
           orders,
-          paymentProviderConfigs: req.storePaymentProviderConfigs || {}
+          paymentProviderConfigs: req.storePaymentProviderConfigs || {},
+          entitlements: req.storeSubscriptionAccess?.entitlements || null
         }),
+        onboardingProgress: onboarding.state,
         supportQueue: [],
         customers: customers.slice(0, 5)
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get('/admin/onboarding', loadStorePaymentProviderConfigs, loadStoreSubscriptionAccess, async (req, res, next) => {
+    try {
+      if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
+        return;
+      }
+
+      const store = resolveStore(req);
+      const [productResult, orders] = await Promise.all([
+        listStoreProducts(req, store, { limit: 200, auth: req.platformAuth }),
+        listAdminStoreOrders(req, store, req.platformAuth, { limit: 100 })
+      ]);
+      const products = decorateProducts(productResult.products || []);
+      const onboarding = await buildAndSyncStoreOnboarding(req, store, products, orders);
+
+      return renderStoreAdmin(req, res, 'admin/onboarding', {
+        pageTitle: 'Launch guide',
+        onboardingTasks: onboarding.tasks,
+        onboardingProgress: onboarding.state,
+        orderCount: orders.length,
+        publishedProductsCount: products.filter((entry) => String(entry.status || '').trim().toLowerCase() === 'published').length,
+        paymentProvidersReady: Object.values(req.storePaymentProviderConfigs || {})
+          .filter((entry) => String(entry?.status || '').trim().toLowerCase() === 'active')
+          .length
       });
     } catch (error) {
       return next(error);

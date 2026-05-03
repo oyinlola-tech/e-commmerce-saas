@@ -19,6 +19,8 @@ const createAppHelpers = (context) => {
     sanitizeEmail,
     sanitizeSlug,
     sanitizeUrl,
+    buildStoreOnboardingTasks,
+    buildOnboardingProgress,
     readSignedCookie,
     setSignedCookie,
     clearSignedCookie,
@@ -554,50 +556,16 @@ const createAppHelpers = (context) => {
     };
   };
 
-  const buildStoreLaunchChecklist = ({ store = null, products = [], orders = [], paymentProviderConfigs = {} } = {}) => {
-    const providerEntries = Object.values(paymentProviderConfigs || {});
-    const hasActiveGateway = providerEntries.some((entry) => String(entry?.status || '').trim().toLowerCase() === 'active');
-    const publishedProducts = products.filter((entry) => String(entry.status || '').toLowerCase() === 'published');
-    const hasStoreIdentity = Boolean(
-      sanitizePlainText(store?.name || '', { maxLength: 150 })
-      && sanitizeEmail(store?.support_email || '')
-      && sanitizePlainText(store?.fulfillment_sla || '', { maxLength: 120 })
-    );
+  const buildStoreOnboardingGuide = (options = {}) => {
+    const tasks = buildStoreOnboardingTasks(options);
+    return {
+      tasks,
+      progress: buildOnboardingProgress(tasks)
+    };
+  };
 
-    return [
-      {
-        key: 'identity',
-        title: 'Add store identity and support details',
-        description: 'Customers should see a real support email, fulfillment promise, and branded storefront before launch.',
-        complete: hasStoreIdentity,
-        href: '/admin/settings',
-        action: 'Open settings'
-      },
-      {
-        key: 'catalog',
-        title: 'Publish the first product',
-        description: 'A store cannot reach its first sale until at least one product is live on the storefront.',
-        complete: publishedProducts.length > 0,
-        href: '/admin/products/new',
-        action: 'Add product'
-      },
-      {
-        key: 'payments',
-        title: 'Activate Paystack or Flutterwave',
-        description: 'Hosted checkout should be connected before shoppers reach the payment step.',
-        complete: hasActiveGateway,
-        href: '/admin/settings',
-        action: 'Connect payments'
-      },
-      {
-        key: 'launch',
-        title: 'Get the first paid order',
-        description: 'The final milestone is a verified payment that moves an order from pending into confirmed.',
-        complete: orders.some((entry) => String(entry.payment_status || '').trim().toLowerCase() === 'paid'),
-        href: '/admin/orders',
-        action: 'Review orders'
-      }
-    ];
+  const buildStoreLaunchChecklist = (options = {}) => {
+    return buildStoreOnboardingGuide(options).tasks.filter((task) => task.required);
   };
 
   const resolveRequestedStoreId = (req) => {
@@ -890,6 +858,7 @@ const createAppHelpers = (context) => {
     sortProducts,
     buildProductDiscovery,
     buildStoreStats,
+    buildStoreOnboardingGuide,
     buildStoreLaunchChecklist,
     resolveRequestedStoreId,
     parseLineList,
