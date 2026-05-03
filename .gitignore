@@ -50,6 +50,3 @@ temp/
 Thumbs.db
 .idea/
 .vscode/
-
-tests/
-tests

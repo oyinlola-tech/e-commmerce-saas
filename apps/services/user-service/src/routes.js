@@ -17,13 +17,16 @@ const {
   sanitizeEmail,
   sanitizePlainText
 } = require('../../../../packages/shared');
+const {
+  isLikelyEmailAddress,
+  isPlaceholderPlatformAdminEmail,
+  isDefaultPlatformAdminPassword,
+  resolveBootstrapAdminConfig
+} = require('./bootstrap-admin');
 
 const allowedRoles = Object.values(PLATFORM_ROLES);
 const PASSWORD_RESET_OTP_TTL_MINUTES = Math.max(5, Number(process.env.PASSWORD_RESET_OTP_TTL_MINUTES || 15));
 const PLATFORM_ADMIN_BOOTSTRAP_KEY = 'platform-admin-env';
-const DEFAULT_PLATFORM_ADMIN_NAME = 'Platform Admin';
-const DEFAULT_PLATFORM_ADMIN_PASSWORD = 'ChangeMe123!';
-const DEFAULT_PLATFORM_ADMIN_EMAIL = 'platform-admin@example.com';
 
 const sanitizeUser = (user) => {
   if (!user) {
@@ -54,19 +57,6 @@ const normalizeEmail = (value = '') => {
 
 const normalizeStatus = (value = '') => {
   return String(value || '').trim().toLowerCase();
-};
-
-const isLikelyEmailAddress = (value = '') => {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
-};
-
-const buildBootstrapAdminEmail = (rootDomain = '') => {
-  const normalizedRootDomain = String(rootDomain || '').trim().toLowerCase();
-  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(normalizedRootDomain)) {
-    return `admin@${normalizedRootDomain}`;
-  }
-
-  return DEFAULT_PLATFORM_ADMIN_EMAIL;
 };
 
 const buildGenericPasswordResetResponse = () => ({
@@ -118,28 +108,28 @@ const sendPasswordResetOtpEmail = async (config, requestId, payload = {}) => {
 };
 
 const upsertBootstrappedPlatformAdmin = async ({ db, logger, config }) => {
-  const configuredName = sanitizePlainText(process.env.PLATFORM_ADMIN_NAME || DEFAULT_PLATFORM_ADMIN_NAME, {
-    maxLength: 120
-  }) || DEFAULT_PLATFORM_ADMIN_NAME;
-  const requestedEmail = normalizeEmail(process.env.PLATFORM_ADMIN_EMAIL || '');
-  const fallbackEmail = buildBootstrapAdminEmail(config.rootDomain);
-  const configuredEmail = isLikelyEmailAddress(requestedEmail)
-    ? requestedEmail
-    : fallbackEmail;
-  const configuredPassword = String(process.env.PLATFORM_ADMIN_PASSWORD || DEFAULT_PLATFORM_ADMIN_PASSWORD);
-
-  if (!isLikelyEmailAddress(configuredEmail)) {
-    throw new Error('PLATFORM_ADMIN_EMAIL must resolve to a valid email address for platform admin bootstrap.');
-  }
-
-  if (configuredPassword.length < 8) {
-    throw new Error('PLATFORM_ADMIN_PASSWORD must be at least 8 characters long.');
-  }
+  const {
+    configuredName,
+    requestedEmail,
+    configuredEmail,
+    configuredPassword
+  } = resolveBootstrapAdminConfig({
+    env: process.env,
+    rootDomain: config.rootDomain,
+    isProduction: config.isProduction
+  });
 
   if (requestedEmail && !isLikelyEmailAddress(requestedEmail)) {
     logger.warn('PLATFORM_ADMIN_EMAIL is not a usable login email; falling back to a safe bootstrap email.', {
       requestedEmail,
       fallbackEmail: configuredEmail
+    });
+  }
+
+  if (!config.isProduction && (isPlaceholderPlatformAdminEmail(configuredEmail) || isDefaultPlatformAdminPassword(configuredPassword))) {
+    logger.warn('Bootstrapped platform admin is using development placeholder credentials.', {
+      email: configuredEmail,
+      password_is_default: isDefaultPlatformAdminPassword(configuredPassword)
     });
   }
 

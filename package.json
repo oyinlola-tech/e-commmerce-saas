@@ -68,7 +68,8 @@
     "swagger": "node scripts/swagger.js",
     "swagger:export": "node scripts/swagger.js --export-only",
     "api:request": "node scripts/internal-request.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
