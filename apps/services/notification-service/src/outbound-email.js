@@ -1,10 +1,10 @@
 const nodemailer = require('nodemailer');
+const { createHttpError } = require('../../../../packages/shared/src/errors');
 const {
-  createHttpError,
   sanitizeEmail,
   sanitizeJsonObject,
   sanitizePlainText
-} = require('../../../../packages/shared');
+} = require('../../../../packages/shared/src/sanitization');
 const { renderEmailTemplate } = require('./template-renderer');
 const { sanitizeStructuredData } = require('./structured-data');
 
@@ -148,8 +148,102 @@ const parseStoredPayload = (payload) => {
   }
 };
 
+const parseStoredJson = (value) => {
+  if (!value) {
+    return {};
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
 const getOutboundEmailById = async (db, emailId) => {
   return (await db.query('SELECT * FROM outbound_emails WHERE id = ?', [emailId]))[0] || null;
+};
+
+const listFailedOutboundEmails = async (db, limit = 25) => {
+  const rows = await db.query(
+    `
+      SELECT id, recipient_email, subject, status, attempt_count, last_error, next_attempt_at,
+             failed_at, dead_lettered_at, created_at, updated_at, metadata, provider_response
+      FROM outbound_emails
+      WHERE status IN ('retrying', 'dead_lettered')
+      ORDER BY
+        CASE status WHEN 'dead_lettered' THEN 0 ELSE 1 END,
+        COALESCE(dead_lettered_at, failed_at, updated_at, created_at) DESC,
+        id DESC
+      LIMIT ?
+    `,
+    [limit]
+  );
+
+  return rows.map((row) => ({
+    id: Number(row.id),
+    recipient_email: row.recipient_email || '',
+    subject: row.subject || '',
+    status: row.status || 'queued',
+    attempt_count: Number(row.attempt_count || 0),
+    last_error: row.last_error || null,
+    next_attempt_at: row.next_attempt_at || null,
+    failed_at: row.failed_at || null,
+    dead_lettered_at: row.dead_lettered_at || null,
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null,
+    metadata: parseStoredJson(row.metadata),
+    provider_response: parseStoredJson(row.provider_response)
+  }));
+};
+
+const summarizeFailedOutboundEmails = async (db) => {
+  const rows = await db.query(
+    `
+      SELECT status, COUNT(*) AS count
+      FROM outbound_emails
+      WHERE status IN ('retrying', 'dead_lettered')
+      GROUP BY status
+    `
+  );
+
+  return rows.reduce((summary, row) => {
+    const status = String(row.status || '').trim().toLowerCase();
+    const count = Number(row.count || 0);
+    if (status === 'retrying') {
+      summary.retrying_count = count;
+    }
+    if (status === 'dead_lettered') {
+      summary.dead_lettered_count = count;
+    }
+    summary.total_count += count;
+    return summary;
+  }, {
+    retrying_count: 0,
+    dead_lettered_count: 0,
+    total_count: 0
+  });
+};
+
+const buildOperatorReplayMetadata = (metadata = {}, actor = {}) => {
+  const existingReplay = metadata && typeof metadata.operator_replay === 'object'
+    ? metadata.operator_replay
+    : {};
+
+  return {
+    ...metadata,
+    operator_replay: {
+      replay_count: Number(existingReplay.replay_count || 0) + 1,
+      last_replayed_at: new Date().toISOString(),
+      last_replayed_by: actor.userId ? String(actor.userId) : null,
+      last_replayed_role: actor.actorRole || null
+    }
+  };
 };
 
 const queueOutboundEmail = async ({
@@ -361,6 +455,37 @@ const processQueuedOutboundEmail = async ({ db, emailId, logger = null }) => {
   }
 };
 
+const requeueOutboundEmail = async ({ db, emailId, actor = {} }) => {
+  const email = await getOutboundEmailById(db, emailId);
+  if (!email) {
+    throw createHttpError(404, 'Outbound email not found.', null, { expose: true });
+  }
+
+  const status = String(email.status || '').trim().toLowerCase();
+  if (!['retrying', 'dead_lettered'].includes(status)) {
+    throw createHttpError(409, 'Only retrying or dead-lettered emails can be replayed.', null, { expose: true });
+  }
+
+  const nextMetadata = buildOperatorReplayMetadata(parseStoredJson(email.metadata), actor);
+  await db.execute(
+    `
+      UPDATE outbound_emails
+      SET status = 'queued',
+          next_attempt_at = CURRENT_TIMESTAMP,
+          locked_at = NULL,
+          dead_lettered_at = NULL,
+          metadata = ?
+      WHERE id = ?
+    `,
+    [
+      JSON.stringify(nextMetadata),
+      emailId
+    ]
+  );
+
+  return getOutboundEmailById(db, emailId);
+};
+
 const sendTemplatedEmail = async ({
   db,
   config,
@@ -408,7 +533,11 @@ module.exports = {
   renderTemplatedEmail,
   queueOutboundEmail,
   deliverOutboundEmail,
+  listFailedOutboundEmails,
+  summarizeFailedOutboundEmails,
   listDueOutboundEmailIds,
   processQueuedOutboundEmail,
+  requeueOutboundEmail,
+  buildOperatorReplayMetadata,
   sendTemplatedEmail
 };

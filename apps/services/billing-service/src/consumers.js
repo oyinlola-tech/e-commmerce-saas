@@ -1,5 +1,6 @@
 const {
   EVENT_NAMES,
+  EVENT_QUEUE_NAMES,
   PLATFORM_ROLES,
   requestJson
 } = require('../../../../packages/shared');
@@ -242,7 +243,7 @@ const chargeDueSubscription = async ({ db, bus, config, subscription, logger }) 
 
 const registerConsumers = async ({ bus, db, logger, config }) => {
   await bus.subscribe({
-    queueName: 'billing-service.user-registered',
+    queueName: EVENT_QUEUE_NAMES.BILLING_SERVICE_USER_REGISTERED,
     events: [EVENT_NAMES.USER_REGISTERED],
     onMessage: async (payload) => {
       const data = payload.data || {};
@@ -263,7 +264,7 @@ const registerConsumers = async ({ bus, db, logger, config }) => {
   });
 
   await bus.subscribe({
-    queueName: 'billing-service.subscription-payments',
+    queueName: EVENT_QUEUE_NAMES.BILLING_SERVICE_SUBSCRIPTION_PAYMENTS,
     events: [EVENT_NAMES.PAYMENT_SUCCEEDED, EVENT_NAMES.PAYMENT_FAILED],
     onMessage: async (payload) => {
       const data = payload.data || {};

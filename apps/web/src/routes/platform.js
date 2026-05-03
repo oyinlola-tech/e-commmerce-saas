@@ -1,4 +1,5 @@
 const rateLimit = require('express-rate-limit');
+const { body } = require('express-validator');
 const {
   buildOwnerTermsPage,
   buildOwnerPrivacyPage,
@@ -24,6 +25,8 @@ const registerPlatformRoutes = (app, deps) => {
     buildCurrencyContext,
     normalizeCurrencyCode,
     handleFormValidation,
+    validate,
+    allowBodyFields,
     saveLogoFile,
     safeRedirect,
     createHttpError,
@@ -44,10 +47,13 @@ const registerPlatformRoutes = (app, deps) => {
     getPublicBillingPlans,
     getAdminBillingPlans,
     updateAdminBillingPlan,
+    getPlatformAsyncFailures,
     listPlatformStores,
     doubleCsrfProtection,
     createPlatformStore,
     getPlatformStoreById,
+    replayPlatformAsyncEmail,
+    replayPlatformAsyncEvent,
     clearWebAuthCookies
   } = context;
   const {
@@ -289,6 +295,73 @@ const registerPlatformRoutes = (app, deps) => {
       editablePricing: String(req.currentPlatformUser?.role || '').trim().toLowerCase() === PLATFORM_ROLES.PLATFORM_OWNER
     });
   };
+
+  const createEmptyAsyncOperations = () => ({
+    generated_at: null,
+    email_failures: {
+      summary: {
+        retrying_count: 0,
+        dead_lettered_count: 0,
+        total_count: 0
+      },
+      items: []
+    },
+    event_failures: {
+      summary: {
+        rabbitmq_count: 0,
+        redis_count: 0,
+        total_count: 0
+      },
+      transports: {
+        rabbitmq: {
+          available: false,
+          error: null
+        },
+        redis: {
+          available: false,
+          error: null
+        }
+      },
+      queues: [],
+      items: []
+    }
+  });
+
+  const renderPlatformAdminIncidentCenter = async (req, res) => {
+    let asyncOperations = createEmptyAsyncOperations();
+    let loadError = '';
+
+    try {
+      asyncOperations = await getPlatformAsyncFailures(req, req.platformAuth, {
+        limit: 25
+      });
+    } catch (error) {
+      req.log?.error('platform_async_ops_load_failed', {
+        status: error.status,
+        error: error.message
+      });
+      loadError = error.message || 'Unable to load async operations right now.';
+    }
+
+    return renderPlatformAdmin(res, 'platform/admin-incidents', {
+      pageTitle: 'Incident Center',
+      asyncOperations,
+      asyncOperationsLoadError: loadError
+    });
+  };
+
+  const replayAsyncEmailValidation = validate([
+    allowBodyFields(['_csrf']),
+    body('_csrf').optional().isString()
+  ]);
+
+  const replayAsyncEventValidation = validate([
+    allowBodyFields(['transport', 'queue_name', 'message_id', '_csrf']),
+    body('_csrf').optional().isString(),
+    body('transport').isIn(['rabbitmq', 'redis']).withMessage('Choose RabbitMQ or Redis before replaying the event.'),
+    body('queue_name').trim().notEmpty().isLength({ max: 160 }).withMessage('Choose a valid async queue.'),
+    body('message_id').trim().notEmpty().isLength({ max: 120 }).withMessage('Choose a valid dead-letter event.')
+  ]);
 
   app.post('/preferences/currency', currencyValidation, handleFormValidation((req, res) => {
     return res.redirect('/?error=Update the currency selection and try again.');
@@ -1111,21 +1184,55 @@ const registerPlatformRoutes = (app, deps) => {
     });
   });
 
-  app.get('/platform-admin/incidents', (req, res) => {
-    if (requirePlatformAdmin(req, res)) {
-      return;
-    }
+  app.get('/platform-admin/incidents', async (req, res, next) => {
+    try {
+      if (requirePlatformAdmin(req, res)) {
+        return;
+      }
 
-    return renderPlatformAdmin(res, 'platform/control-placeholder', {
-      pageTitle: 'Incident preview',
-      placeholderEyebrow: 'Incident operations',
-      placeholderTitle: 'Incident management is reserved for a future release.',
-      placeholderBody: 'This area is intentionally withheld until there is a real reliability workflow behind it. No mock incidents, fabricated severities, or placeholder responders are shown as if they were live.',
-      placeholderHighlights: [
-        'The storefront and store admin operate on real service data.',
-        'Platform-wide reliability tooling will land here when it is ready to be trusted.'
-      ]
-    });
+      return await renderPlatformAdminIncidentCenter(req, res);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post('/platform-admin/incidents/emails/:emailId/replay', replayAsyncEmailValidation, async (req, res, next) => {
+    try {
+      if (requirePlatformAdmin(req, res)) {
+        return;
+      }
+
+      await replayPlatformAsyncEmail(req, req.platformAuth, req.params.emailId);
+      return res.redirect('/platform-admin/incidents?success=Queued%20the%20email%20for%20another%20delivery%20attempt.');
+    } catch (error) {
+      if ([400, 403, 404, 409, 422, 503].includes(Number(error.status))) {
+        return res.redirect(`/platform-admin/incidents?error=${encodeURIComponent(error.message || 'Unable to replay that email right now.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.post('/platform-admin/incidents/events/replay', replayAsyncEventValidation, async (req, res, next) => {
+    try {
+      if (requirePlatformAdmin(req, res)) {
+        return;
+      }
+
+      await replayPlatformAsyncEvent(req, req.platformAuth, {
+        transport: req.body.transport,
+        queue_name: req.body.queue_name,
+        message_id: req.body.message_id
+      });
+
+      return res.redirect('/platform-admin/incidents?success=Queued%20the%20dead-lettered%20event%20for%20reprocessing.');
+    } catch (error) {
+      if ([400, 403, 404, 409, 422, 503].includes(Number(error.status))) {
+        return res.redirect(`/platform-admin/incidents?error=${encodeURIComponent(error.message || 'Unable to replay that event right now.')}`);
+      }
+
+      return next(error);
+    }
   });
 };
 

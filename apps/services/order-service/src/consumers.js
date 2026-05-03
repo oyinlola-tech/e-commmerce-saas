@@ -1,5 +1,6 @@
 const {
   EVENT_NAMES,
+  EVENT_QUEUE_NAMES,
   PLATFORM_ROLES,
   buildSignedInternalHeaders,
   requestJson
@@ -85,7 +86,7 @@ const reconcilePendingOrderPayment = async ({ db, bus, config, logger, orderRow 
 
 const registerConsumers = async ({ bus, db, config, logger }) => {
   await bus.subscribe({
-    queueName: 'order-service.payments',
+    queueName: EVENT_QUEUE_NAMES.ORDER_SERVICE_PAYMENTS,
     events: [EVENT_NAMES.PAYMENT_SUCCEEDED, EVENT_NAMES.PAYMENT_FAILED, EVENT_NAMES.PAYMENT_REFUNDED],
     onMessage: async (payload) => {
       const data = payload.data || {};

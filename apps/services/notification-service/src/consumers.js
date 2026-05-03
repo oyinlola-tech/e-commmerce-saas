@@ -1,6 +1,7 @@
 const { URL } = require('url');
 const {
   EVENT_NAMES,
+  EVENT_QUEUE_NAMES,
   PLATFORM_ROLES,
   buildSignedInternalHeaders,
   requestJson,
@@ -412,7 +413,7 @@ const runMonthlyStoreMarketingCampaign = async ({ campaign, db, config, logger }
 
 const registerConsumers = async ({ bus, db, config, logger }) => {
   await bus.subscribe({
-    queueName: 'notification-service.lifecycle',
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_LIFECYCLE,
     events: [EVENT_NAMES.USER_REGISTERED, EVENT_NAMES.CUSTOMER_REGISTERED, EVENT_NAMES.STORE_CREATED],
     onMessage: async (payload) => {
       const data = payload.data || {};
@@ -512,7 +513,7 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
   });
 
   await bus.subscribe({
-    queueName: 'notification-service.orders',
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_ORDERS,
     events: [EVENT_NAMES.ORDER_CREATED, EVENT_NAMES.ORDER_STATUS_CHANGED],
     onMessage: async (payload) => {
       const data = payload.data || {};
@@ -683,7 +684,7 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
   });
 
   await bus.subscribe({
-    queueName: 'notification-service.payments',
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_PAYMENTS,
     events: [EVENT_NAMES.PAYMENT_SUCCEEDED, EVENT_NAMES.PAYMENT_FAILED],
     onMessage: async (payload) => {
       const data = payload.data || {};
@@ -863,7 +864,7 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
   });
 
   await bus.subscribe({
-    queueName: 'notification-service.subscription-state',
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_SUBSCRIPTION_STATE,
     events: [EVENT_NAMES.SUBSCRIPTION_CHANGED],
     onMessage: async (payload) => {
       const data = payload.data || {};
@@ -946,7 +947,7 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
   });
 
   await bus.subscribe({
-    queueName: 'notification-service.compliance',
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_COMPLIANCE,
     events: [EVENT_NAMES.COMPLIANCE_STATUS_CHANGED],
     onMessage: async (payload) => {
       const data = payload.data || {};

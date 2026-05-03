@@ -1,6 +1,4 @@
-const {
-  sanitizePlainText
-} = require('../../../../packages/shared');
+const { sanitizePlainText } = require('../../../../packages/shared/src/sanitization');
 
 const MAX_DEPTH = 8;
 const MAX_ARRAY_ITEMS = 50;

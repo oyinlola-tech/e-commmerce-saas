@@ -24,6 +24,60 @@ const EVENT_NAMES = {
   EMAIL_ENQUEUED: 'EMAIL_ENQUEUED'
 };
 
+const EVENT_QUEUE_NAMES = {
+  ORDER_SERVICE_PAYMENTS: 'order-service.payments',
+  BILLING_SERVICE_USER_REGISTERED: 'billing-service.user-registered',
+  BILLING_SERVICE_SUBSCRIPTION_PAYMENTS: 'billing-service.subscription-payments',
+  NOTIFICATION_SERVICE_LIFECYCLE: 'notification-service.lifecycle',
+  NOTIFICATION_SERVICE_ORDERS: 'notification-service.orders',
+  NOTIFICATION_SERVICE_PAYMENTS: 'notification-service.payments',
+  NOTIFICATION_SERVICE_SUBSCRIPTION_STATE: 'notification-service.subscription-state',
+  NOTIFICATION_SERVICE_COMPLIANCE: 'notification-service.compliance'
+};
+
+const EVENT_QUEUE_CATALOG = [
+  {
+    queueName: EVENT_QUEUE_NAMES.ORDER_SERVICE_PAYMENTS,
+    service: 'order-service',
+    label: 'Order payment synchronization'
+  },
+  {
+    queueName: EVENT_QUEUE_NAMES.BILLING_SERVICE_USER_REGISTERED,
+    service: 'billing-service',
+    label: 'Owner billing bootstrap'
+  },
+  {
+    queueName: EVENT_QUEUE_NAMES.BILLING_SERVICE_SUBSCRIPTION_PAYMENTS,
+    service: 'billing-service',
+    label: 'Subscription payment processing'
+  },
+  {
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_LIFECYCLE,
+    service: 'notification-service',
+    label: 'Lifecycle notifications'
+  },
+  {
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_ORDERS,
+    service: 'notification-service',
+    label: 'Order notifications'
+  },
+  {
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_PAYMENTS,
+    service: 'notification-service',
+    label: 'Payment notifications'
+  },
+  {
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_SUBSCRIPTION_STATE,
+    service: 'notification-service',
+    label: 'Subscription state notifications'
+  },
+  {
+    queueName: EVENT_QUEUE_NAMES.NOTIFICATION_SERVICE_COMPLIANCE,
+    service: 'notification-service',
+    label: 'Compliance notifications'
+  }
+];
+
 const PLATFORM_ROLES = {
   STORE_OWNER: 'store_owner',
   PLATFORM_OWNER: 'platform_owner',
@@ -177,6 +231,8 @@ const normalizeThemeContract = (payload = {}) => {
 
 module.exports = {
   EVENT_NAMES,
+  EVENT_QUEUE_NAMES,
+  EVENT_QUEUE_CATALOG,
   PLATFORM_ROLES,
   STORE_TYPES,
   TEMPLATE_KEYS,

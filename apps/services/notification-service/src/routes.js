@@ -1,4 +1,4 @@
-const { body } = require('express-validator');
+const { body, param } = require('express-validator');
 const {
   requireInternalRequest,
   asyncHandler,
@@ -13,9 +13,18 @@ const {
 const { listEmailTemplates } = require('./template-catalog');
 const {
   renderTemplatedEmail,
-  deliverOutboundEmail
+  deliverOutboundEmail,
+  listFailedOutboundEmails,
+  summarizeFailedOutboundEmails,
+  requeueOutboundEmail
 } = require('./outbound-email');
 const { sanitizeStructuredData } = require('./structured-data');
+const {
+  isPlatformOperationsUser,
+  normalizeAsyncFailureLimit,
+  listEventFailures,
+  replayEventFailure
+} = require('./async-operations');
 
 const buildRequireInternal = (config) => {
   return requireInternalRequest(config.internalSharedSecret, {
@@ -46,7 +55,28 @@ const validateTemplateRequest = ({ requireRecipient = false } = {}) => {
   return chains;
 };
 
-const registerRoutes = async ({ app, db, config }) => {
+const requirePlatformOperationsUser = (req, res, next) => {
+  if (isPlatformOperationsUser(req.authContext)) {
+    return next();
+  }
+
+  return res.status(403).json({
+    error: 'Platform operations access is required.'
+  });
+};
+
+const validateAsyncOpsReplayRequest = validate([
+  allowBodyFields(['transport', 'queue_name', 'message_id']),
+  body('transport').isIn(['rabbitmq', 'redis']).withMessage('Choose RabbitMQ or Redis for event replay.'),
+  commonRules.optionalPlainText('queue_name', 160),
+  commonRules.optionalPlainText('message_id', 120)
+]);
+
+const validateReplayEmailRequest = validate([
+  param('emailId').isInt({ min: 1 }).toInt()
+]);
+
+const registerRoutes = async ({ app, db, config, logger }) => {
   const requireInternal = buildRequireInternal(config);
 
   app.get('/emails/templates', requireInternal, asyncHandler(async (req, res) => {
@@ -132,6 +162,68 @@ const registerRoutes = async ({ app, db, config }) => {
     });
 
     return res.status(201).json(delivery);
+  }));
+
+  app.get('/ops/async-failures', requireInternal, requirePlatformOperationsUser, asyncHandler(async (req, res) => {
+    const limit = normalizeAsyncFailureLimit(req.query.limit);
+    const [emailSummary, emailItems, eventFailures] = await Promise.all([
+      summarizeFailedOutboundEmails(db),
+      listFailedOutboundEmails(db, limit),
+      listEventFailures({
+        config,
+        logger,
+        limit
+      })
+    ]);
+
+    return res.json({
+      generated_at: new Date().toISOString(),
+      email_failures: {
+        summary: emailSummary,
+        items: emailItems
+      },
+      event_failures: eventFailures
+    });
+  }));
+
+  app.post('/ops/async-failures/emails/:emailId/replay', requireInternal, requirePlatformOperationsUser, validateReplayEmailRequest, asyncHandler(async (req, res) => {
+    const email = await requeueOutboundEmail({
+      db,
+      emailId: Number(req.params.emailId),
+      actor: {
+        userId: req.authContext.userId,
+        actorRole: req.authContext.actorRole
+      }
+    });
+
+    return res.json({
+      email: {
+        id: Number(email.id),
+        status: email.status,
+        next_attempt_at: email.next_attempt_at || null
+      }
+    });
+  }));
+
+  app.post('/ops/async-failures/events/replay', requireInternal, requirePlatformOperationsUser, validateAsyncOpsReplayRequest, asyncHandler(async (req, res) => {
+    if (!req.body.queue_name || !req.body.message_id) {
+      throw createHttpError(422, 'queue_name and message_id are required for event replay.', null, { expose: true });
+    }
+
+    const replay = await replayEventFailure({
+      config,
+      queueName: req.body.queue_name,
+      messageId: req.body.message_id,
+      transport: req.body.transport,
+      actor: {
+        userId: req.authContext.userId,
+        actorRole: req.authContext.actorRole
+      }
+    });
+
+    return res.json({
+      replay
+    });
   }));
 };
 

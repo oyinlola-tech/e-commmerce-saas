@@ -397,6 +397,65 @@ const normalizeEntitlements = (entitlements = null) => {
   };
 };
 
+const normalizeAsyncEventFailure = (item) => {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    transport: item.transport || 'unknown',
+    queue_name: item.queue_name || '',
+    queue_label: item.queue_label || item.queue_name || 'Async queue',
+    service: item.service || '',
+    message_id: item.message_id ? String(item.message_id) : '',
+    event: item.event || 'unknown',
+    retry_count: Number(item.retry_count || 0),
+    last_error: item.last_error || '',
+    last_error_at: item.last_error_at || null,
+    timestamp: item.timestamp || null,
+    context_items: Array.isArray(item.context_items) ? item.context_items : []
+  };
+};
+
+const normalizeAsyncQueueSummary = (item) => {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    queue_name: item.queue_name || '',
+    queue_label: item.queue_label || item.queue_name || 'Async queue',
+    service: item.service || '',
+    rabbitmq_dead_letter_count: Number(item.rabbitmq_dead_letter_count || 0),
+    redis_dead_letter_count: Number(item.redis_dead_letter_count || 0),
+    total_dead_letter_count: Number(item.total_dead_letter_count || 0)
+  };
+};
+
+const normalizeAsyncEmailFailure = (item) => {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    id: String(item.id),
+    recipient_email: item.recipient_email || '',
+    subject: item.subject || '',
+    status: item.status || 'queued',
+    attempt_count: Number(item.attempt_count || 0),
+    last_error: item.last_error || '',
+    next_attempt_at: item.next_attempt_at || null,
+    failed_at: item.failed_at || null,
+    dead_lettered_at: item.dead_lettered_at || null,
+    created_at: item.created_at || null,
+    updated_at: item.updated_at || null,
+    metadata: item.metadata && typeof item.metadata === 'object' ? item.metadata : {},
+    provider_response: item.provider_response && typeof item.provider_response === 'object'
+      ? item.provider_response
+      : {}
+  };
+};
+
 const normalizeCart = (cart, identity = {}) => {
   const safeCart = cart || createEmptyCart(identity);
 
@@ -1254,6 +1313,92 @@ const updateAdminBillingPlan = async (req, auth, payload = {}) => {
   });
 };
 
+const getPlatformAsyncFailures = async (req, auth, options = {}) => {
+  const query = new globalThis.URLSearchParams();
+  if (options.limit) {
+    query.set('limit', String(options.limit));
+  }
+
+  const pathname = `/ops/async-failures${query.toString() ? `?${query.toString()}` : ''}`;
+  const response = await requestServiceJson(req, env.serviceUrls.notification, pathname, {
+    auth: {
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    }
+  });
+
+  return {
+    generated_at: response?.generated_at || null,
+    email_failures: {
+      summary: {
+        retrying_count: Number(response?.email_failures?.summary?.retrying_count || 0),
+        dead_lettered_count: Number(response?.email_failures?.summary?.dead_lettered_count || 0),
+        total_count: Number(response?.email_failures?.summary?.total_count || 0)
+      },
+      items: Array.isArray(response?.email_failures?.items)
+        ? response.email_failures.items.map(normalizeAsyncEmailFailure).filter(Boolean)
+        : []
+    },
+    event_failures: {
+      summary: {
+        rabbitmq_count: Number(response?.event_failures?.summary?.rabbitmq_count || 0),
+        redis_count: Number(response?.event_failures?.summary?.redis_count || 0),
+        total_count: Number(response?.event_failures?.summary?.total_count || 0)
+      },
+      transports: {
+        rabbitmq: {
+          available: Boolean(response?.event_failures?.transports?.rabbitmq?.available),
+          error: response?.event_failures?.transports?.rabbitmq?.error || null
+        },
+        redis: {
+          available: Boolean(response?.event_failures?.transports?.redis?.available),
+          error: response?.event_failures?.transports?.redis?.error || null
+        }
+      },
+      queues: Array.isArray(response?.event_failures?.queues)
+        ? response.event_failures.queues.map(normalizeAsyncQueueSummary).filter(Boolean)
+        : [],
+      items: Array.isArray(response?.event_failures?.items)
+        ? response.event_failures.items.map(normalizeAsyncEventFailure).filter(Boolean)
+        : []
+    }
+  };
+};
+
+const replayPlatformAsyncEmail = async (req, auth, emailId) => {
+  return requestServiceJson(
+    req,
+    env.serviceUrls.notification,
+    `/ops/async-failures/emails/${encodeURIComponent(emailId)}/replay`,
+    {
+      method: 'POST',
+      auth: {
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      },
+      body: {}
+    }
+  );
+};
+
+const replayPlatformAsyncEvent = async (req, auth, payload = {}) => {
+  return requestServiceJson(req, env.serviceUrls.notification, '/ops/async-failures/events/replay', {
+    method: 'POST',
+    auth: {
+      userId: auth.userId,
+      actorRole: auth.actorRole,
+      actorType: 'platform_user'
+    },
+    body: {
+      transport: payload.transport,
+      queue_name: payload.queue_name,
+      message_id: payload.message_id
+    }
+  });
+};
+
 const createOwnerSubscriptionCheckout = async (req, auth, payload = {}) => {
   return requestServiceJson(req, env.serviceUrls.billing, '/subscriptions/checkout-session', {
     method: 'POST',
@@ -1839,6 +1984,7 @@ module.exports = {
   getPlatformAuth,
   getPlatformStoreById,
   getPlatformStoreOnboarding,
+  getPlatformAsyncFailures,
   getRequestHost,
   getRequestHostname,
   getStoreByHost,
@@ -1879,6 +2025,8 @@ module.exports = {
   updateAdminBillingPlan,
   updateAdminStoreProduct,
   refundAdminStoreOrder,
+  replayPlatformAsyncEmail,
+  replayPlatformAsyncEvent,
   updateStoreCoupon,
   updatePlatformStore,
   updateCartItem,
