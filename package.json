@@ -63,6 +63,8 @@
     "start:chat-service": "node apps/services/chat-service/server.js",
     "start:notification-service": "node apps/services/notification-service/server.js",
     "dev:notification-service": "nodemon --watch apps/services/notification-service --watch packages/shared --ext js,json --exec \"node apps/services/notification-service/server.js\"",
+    "migrate": "node scripts/migrate.js --up",
+    "migrate:down": "node scripts/migrate.js --down",
     "swagger": "node scripts/swagger.js",
     "swagger:export": "node scripts/swagger.js --export-only",
     "api:request": "node scripts/internal-request.js",
@@ -94,6 +96,7 @@
     "pino": "^10.3.1",
     "prom-client": "^15.1.3",
     "sanitize-html": "^2.17.3",
+    "sharp": "^0.34.5",
     "socket.io": "^4.8.3",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.0"

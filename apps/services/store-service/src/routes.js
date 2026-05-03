@@ -1,9 +1,6 @@
-const crypto = require('crypto');
-const fs = require('fs/promises');
 const path = require('path');
 const express = require('express');
 const multer = require('multer');
-const { fileTypeFromBuffer } = require('file-type');
 const { query, body } = require('express-validator');
 const {
   requireInternalRequest,
@@ -12,6 +9,7 @@ const {
   PLATFORM_ROLES,
   buildSignedInternalHeaders,
   requestJson,
+  createAuditLog,
   asyncHandler,
   createHttpError,
   validate,
@@ -21,10 +19,16 @@ const {
   sanitizePlainText,
   sanitizeSlug
 } = require('../../../../packages/shared');
+const {
+  validateUploadedFile,
+  generateSafeFilename,
+  saveFile,
+  deleteFile,
+  ensureUploadDirectory,
+  LOGO_UPLOAD_LIMIT_BYTES
+} = require('./file-upload-security');
 
 const STORE_CACHE_TTL_SECONDS = 5 * 60;
-const LOGO_UPLOAD_LIMIT_BYTES = 2 * 1024 * 1024;
-const ALLOWED_LOGO_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 const logoUpload = multer({
   storage: multer.memoryStorage(),
@@ -107,35 +111,7 @@ const getLogoUploadDirectory = (config) => {
 };
 
 const ensureLogoDirectory = async (config) => {
-  await fs.mkdir(getLogoUploadDirectory(config), { recursive: true });
-};
-
-const buildLogoUrl = (filename) => `/logos/${filename}`;
-
-const sanitizeLogoFilename = (storeId, mimeType) => {
-  const extensionMap = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/webp': 'webp'
-  };
-
-  const extension = extensionMap[mimeType] || 'bin';
-  return `store-${storeId}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${extension}`;
-};
-
-const resolveLogoUploadPath = (config, filename) => {
-  const uploadDir = path.resolve(getLogoUploadDirectory(config));
-  const safeFilename = path.basename(String(filename || ''));
-  const absolutePath = path.resolve(uploadDir, safeFilename);
-  const directoryPrefix = uploadDir.endsWith(path.sep)
-    ? uploadDir
-    : `${uploadDir}${path.sep}`;
-
-  if (!safeFilename || !absolutePath.startsWith(directoryPrefix)) {
-    throw createHttpError(400, 'Invalid logo filename.', null, { expose: true });
-  }
-
-  return absolutePath;
+  await ensureUploadDirectory(getLogoUploadDirectory(config));
 };
 
 const uploadLogoMiddleware = (req, res, next) => {
@@ -151,6 +127,56 @@ const uploadLogoMiddleware = (req, res, next) => {
       }]
     }, { expose: true }));
   });
+};
+
+const extractManagedLogoFilename = (logoUrl = '') => {
+  const normalized = String(logoUrl || '').trim();
+  if (!normalized.startsWith('/logos/')) {
+    return null;
+  }
+
+  return path.basename(normalized);
+};
+
+const buildStoreAuditDetails = ({ existingStore = null, nextStore = null, payload = {}, extra = {} } = {}) => {
+  const updatedFields = Object.keys(payload || {})
+    .filter((field) => field !== 'owner_id')
+    .sort();
+
+  return {
+    updated_fields: updatedFields,
+    before: existingStore
+      ? {
+          name: existingStore.name,
+          custom_domain: existingStore.custom_domain,
+          logo_url: existingStore.logo_url,
+          theme_color: existingStore.theme_color,
+          store_type: existingStore.store_type,
+          template_key: existingStore.template_key,
+          font_preset: existingStore.font_preset,
+          support_email: existingStore.support_email,
+          contact_phone: existingStore.contact_phone,
+          is_active: Boolean(existingStore.is_active),
+          ssl_status: existingStore.ssl_status
+        }
+      : null,
+    after: nextStore
+      ? {
+          name: nextStore.name,
+          custom_domain: nextStore.custom_domain,
+          logo_url: nextStore.logo_url,
+          theme_color: nextStore.theme_color,
+          store_type: nextStore.store_type,
+          template_key: nextStore.template_key,
+          font_preset: nextStore.font_preset,
+          support_email: nextStore.support_email,
+          contact_phone: nextStore.contact_phone,
+          is_active: Boolean(nextStore.is_active),
+          ssl_status: nextStore.ssl_status
+        }
+      : null,
+    ...extra
+  };
 };
 
 const updateStoreRecord = async ({ db, cache, bus, storeId, existingStore, payload }) => {
@@ -351,6 +377,23 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       owner_id: store.owner_id,
       subdomain: store.subdomain
     });
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'platform_user',
+      actorId: req.authContext.userId || ownerId,
+      action: 'store.created',
+      resourceType: 'store',
+      resourceId: store.id,
+      storeId: store.id,
+      details: buildStoreAuditDetails({
+        nextStore: store,
+        payload: req.body,
+        extra: {
+          owner_id: store.owner_id,
+          subdomain: store.subdomain
+        }
+      }),
+      req
+    });
 
     return res.status(201).json({
       store: sanitizeStore(store)
@@ -434,6 +477,20 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       existingStore: result.store,
       payload: req.body
     });
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'platform_user',
+      actorId: req.authContext.userId || null,
+      action: 'store.updated',
+      resourceType: 'store',
+      resourceId: store.id,
+      storeId: store.id,
+      details: buildStoreAuditDetails({
+        existingStore: result.store,
+        nextStore: store,
+        payload: req.body
+      }),
+      req
+    });
 
     return res.json({
       store: sanitizeStore(store)
@@ -492,6 +549,20 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       existingStore: result.store,
       payload: req.body
     });
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'platform_user',
+      actorId: req.authContext.userId || null,
+      action: 'store.settings_updated',
+      resourceType: 'store',
+      resourceId: store.id,
+      storeId: store.id,
+      details: buildStoreAuditDetails({
+        existingStore: result.store,
+        nextStore: store,
+        payload: req.body
+      }),
+      req
+    });
 
     return res.json({
       store: sanitizeStore(store)
@@ -520,33 +591,85 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       }, { expose: true });
     }
 
-    const detectedFileType = await fileTypeFromBuffer(req.file.buffer);
-    const mimeType = detectedFileType?.mime || req.file.mimetype;
-    if (!ALLOWED_LOGO_MIME_TYPES.has(mimeType)) {
-      throw createHttpError(422, 'Unsupported logo format.', {
-        fields: [{
-          field: 'logo',
-          message: 'Only PNG, JPEG, and WebP logos are supported.'
-        }]
-      }, { expose: true });
-    }
+    const uploadDir = getLogoUploadDirectory(config);
+    const previousLogoFilename = extractManagedLogoFilename(result.store.logo_url);
+    let filename = null;
+    let logoUrl = null;
+    let store = null;
 
-    const filename = sanitizeLogoFilename(req.params.id, mimeType);
-    // Security: Resolve the final logo path inside the upload directory so crafted names cannot escape it.
-    const absolutePath = resolveLogoUploadPath(config, filename);
-    await fs.writeFile(absolutePath, req.file.buffer);
+    try {
+      const sanitizedBuffer = await validateUploadedFile(req.file.buffer, req.file.mimetype);
+      filename = generateSafeFilename(req.params.id, req.file.mimetype);
+      logoUrl = await saveFile(sanitizedBuffer, uploadDir, filename);
+      store = await updateStoreRecord({
+        db,
+        cache,
+        bus,
+        storeId: req.params.id,
+        existingStore: result.store,
+        payload: {
+          logo_url: logoUrl
+        }
+      });
 
-    const logoUrl = buildLogoUrl(filename);
-    const store = await updateStoreRecord({
-      db,
-      cache,
-      bus,
-      storeId: req.params.id,
-      existingStore: result.store,
-      payload: {
-        logo_url: logoUrl
+      if (previousLogoFilename && previousLogoFilename !== filename) {
+        try {
+          await deleteFile(uploadDir, previousLogoFilename);
+        } catch (error) {
+          req.log?.warn('store_logo_delete_failed', {
+            storeId: req.params.id,
+            filename: previousLogoFilename,
+            error: error.message
+          });
+        }
       }
-    });
+
+      await createAuditLog(db, {
+        actorType: req.authContext.actorType || 'platform_user',
+        actorId: req.authContext.userId || null,
+        action: 'store.logo_uploaded',
+        resourceType: 'store',
+        resourceId: store.id,
+        storeId: store.id,
+        details: {
+          filename,
+          logo_url: logoUrl,
+          previous_logo_url: result.store.logo_url || null,
+          size: req.file.size || sanitizedBuffer.length,
+          mime_type: req.file.mimetype
+        },
+        req
+      });
+    } catch (error) {
+      if (filename) {
+        try {
+          await deleteFile(uploadDir, filename);
+        } catch (cleanupError) {
+          req.log?.warn('store_logo_cleanup_failed', {
+            storeId: req.params.id,
+            filename,
+            error: cleanupError.message
+          });
+        }
+      }
+
+      await createAuditLog(db, {
+        actorType: req.authContext.actorType || 'platform_user',
+        actorId: req.authContext.userId || null,
+        action: 'store.logo_upload_failed',
+        resourceType: 'store',
+        resourceId: result.store.id,
+        storeId: result.store.id,
+        details: {
+          error: error.message,
+          mime_type: req.file.mimetype,
+          size: req.file.size || req.file.buffer.length
+        },
+        req,
+        status: 'failure'
+      });
+      throw error;
+    }
 
     return res.status(201).json({
       logo_url: logoUrl,

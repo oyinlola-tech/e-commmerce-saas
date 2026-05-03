@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const http = require('http');
+const { URLSearchParams } = require('url');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -91,6 +92,43 @@ const resolveRouteLabel = (req) => {
   return req.path || '/';
 };
 
+const captureRawBody = (req, res, buffer, encoding) => {
+  req.rawBody = buffer?.length
+    ? buffer.toString(encoding || 'utf8')
+    : '';
+};
+
+const writeProxyRequestBody = (proxyReq, req) => {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return;
+  }
+
+  const contentType = String(req.headers['content-type'] || '').toLowerCase();
+  if (!contentType.includes('application/json') && !contentType.includes('application/x-www-form-urlencoded')) {
+    return;
+  }
+
+  let payload = typeof req.rawBody === 'string' ? req.rawBody : '';
+  if (!payload && req.body && typeof req.body === 'object') {
+    payload = contentType.includes('application/x-www-form-urlencoded')
+      ? new URLSearchParams(Object.entries(req.body).flatMap(([key, value]) => {
+        if (Array.isArray(value)) {
+          return value.map((entry) => [key, entry]);
+        }
+
+        return [[key, value]];
+      })).toString()
+      : JSON.stringify(req.body);
+  }
+
+  if (!payload) {
+    return;
+  }
+
+  proxyReq.setHeader('Content-Length', Buffer.byteLength(payload));
+  proxyReq.write(payload);
+};
+
 app.set('trust proxy', config.isProduction ? 1 : false);
 app.use(helmet({
   crossOriginResourcePolicy: false,
@@ -98,8 +136,8 @@ app.use(helmet({
     policy: 'no-referrer'
   }
 }));
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '2mb', verify: captureRawBody }));
+app.use(express.urlencoded({ extended: true, limit: '2mb', verify: captureRawBody }));
 
 app.use((req, res, next) => {
   req.requestId = req.headers['x-request-id'] || crypto.randomUUID();
@@ -487,6 +525,7 @@ const createServiceProxy = (target, pathRewrite, options = {}) => {
           proxyReq.setHeader(key, value);
         });
         proxyReq.setHeader('x-forwarded-host', req.headers.host || req.publicHost || '');
+        writeProxyRequestBody(proxyReq, req);
       }
     }
   });
@@ -821,6 +860,10 @@ const bootstrap = async () => {
         return res.status(503).json({
           error: 'Payment service is temporarily unavailable.'
         });
+      },
+      proxyReq: (proxyReq, req) => {
+        proxyReq.setHeader('x-forwarded-host', req.headers.host || req.publicHost || '');
+        writeProxyRequestBody(proxyReq, req);
       }
     }
   });
@@ -846,6 +889,7 @@ const bootstrap = async () => {
           proxyReq.setHeader('x-user-id', req.gatewayContext.auth.user_id || '');
           proxyReq.setHeader('x-customer-id', req.gatewayContext.auth.customer_id || '');
         }
+        writeProxyRequestBody(proxyReq, req);
       }
     }
   });

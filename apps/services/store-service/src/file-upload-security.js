@@ -155,7 +155,7 @@ const resolveSafeUploadPath = (uploadDir, filename) => {
 const ensureUploadDirectory = async (uploadDir) => {
   try {
     await fs.mkdir(uploadDir, { recursive: true });
-  } catch (error) {
+  } catch {
     throw createHttpError(500, 'Failed to create upload directory.');
   }
 };
@@ -174,7 +174,7 @@ const saveFile = async (buffer, uploadDir, filename) => {
 
   try {
     await fs.writeFile(filepath, buffer, { mode: 0o644 });
-  } catch (error) {
+  } catch {
     throw createHttpError(500, 'Failed to save file.');
   }
 

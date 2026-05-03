@@ -6,6 +6,7 @@ const {
   EVENT_NAMES,
   PAYMENT_PROVIDERS,
   PLATFORM_ROLES,
+  createAuditLog,
   asyncHandler,
   createHttpError,
   validate,
@@ -685,6 +686,21 @@ const registerRoutes = async ({ app, db, bus, config }) => {
         return orderResult.insertId;
       });
     } catch (error) {
+      await createAuditLog(db, {
+        actorType: req.authContext.actorType || 'customer',
+        actorId: req.authContext.customerId || req.authContext.userId || null,
+        action: 'order.checkout_failed',
+        resourceType: 'order',
+        resourceId: orderId,
+        storeId: Number(req.authContext.storeId || 0) || null,
+        details: {
+          stage: 'order_persist',
+          error: error.message,
+          item_count: cart.items.length
+        },
+        req,
+        status: 'failure'
+      });
       await releaseReservation({
         reservationId,
         headers,
@@ -736,6 +752,21 @@ const registerRoutes = async ({ app, db, bus, config }) => {
         orderId,
         reason: 'payment_session_failure'
       });
+      await createAuditLog(db, {
+        actorType: req.authContext.actorType || 'customer',
+        actorId: req.authContext.customerId || req.authContext.userId || null,
+        action: 'order.checkout_failed',
+        resourceType: 'order',
+        resourceId: orderId,
+        storeId: Number(req.authContext.storeId || 0) || null,
+        details: {
+          stage: 'payment_session',
+          provider: req.body.provider || 'paystack',
+          error: error.message
+        },
+        req,
+        status: 'failure'
+      });
 
       if (!Number(error.status) || Number(error.status) >= 500) {
         throw createHttpError(502, 'Unable to start the payment session right now.', null, {
@@ -772,6 +803,24 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       store_id: order.store_id,
       customer_id: order.customer_id,
       total: order.total
+    });
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'customer',
+      actorId: req.authContext.customerId || req.authContext.userId || null,
+      action: 'order.created',
+      resourceType: 'order',
+      resourceId: order.id,
+      storeId: order.store_id,
+      details: {
+        status: order.status,
+        payment_status: order.payment_status,
+        total: Number(order.total),
+        currency: order.currency,
+        item_count: Array.isArray(order.items) ? order.items.length : 0,
+        provider: req.body.provider || 'paystack',
+        payment_reference: paymentSession.payment.reference
+      },
+      req
     });
 
     return res.status(201).json({
@@ -896,20 +945,34 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     body('status').trim().isIn(MANUAL_ORDER_STATUSES).withMessage('Choose a valid order status.')
   ]), asyncHandler(async (req, res) => {
     requirePlatformOperator(req);
+    const existingOrder = await hydrateOrder(db, req.params.id, req.authContext.storeId);
+    if (!existingOrder) {
+      throw createHttpError(404, 'Order not found.', null, { expose: true });
+    }
 
     await db.execute(
       'UPDATE orders SET status = ? WHERE id = ? AND store_id = ?',
       [req.body.status || 'pending', req.params.id, req.authContext.storeId]
     );
     const order = await hydrateOrder(db, req.params.id, req.authContext.storeId);
-    if (!order) {
-      throw createHttpError(404, 'Order not found.', null, { expose: true });
-    }
-
     await bus.publish(EVENT_NAMES.ORDER_STATUS_CHANGED, {
       order_id: order.id,
       store_id: order.store_id,
       status: order.status
+    });
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'platform_user',
+      actorId: req.authContext.userId || null,
+      action: 'order.status_updated',
+      resourceType: 'order',
+      resourceId: order.id,
+      storeId: order.store_id,
+      details: {
+        previous_status: existingOrder.status,
+        next_status: order.status,
+        payment_status: order.payment_status
+      },
+      req
     });
 
     return res.json({ order });

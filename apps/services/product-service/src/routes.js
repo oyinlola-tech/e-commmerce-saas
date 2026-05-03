@@ -4,6 +4,7 @@ const {
   requireInternalRequest,
   EVENT_NAMES,
   parsePagination,
+  createAuditLog,
   asyncHandler,
   createHttpError,
   validate,
@@ -510,6 +511,22 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       store_id: product.store_id,
       title: product.title
     });
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'platform_user',
+      actorId: req.authContext.userId || null,
+      action: 'product.created',
+      resourceType: 'product',
+      resourceId: product.id,
+      storeId: product.store_id,
+      details: {
+        title: product.title,
+        slug: product.slug,
+        status: product.status,
+        price: Number(product.price),
+        inventory_count: Number(product.inventory_count)
+      },
+      req
+    });
 
     return res.status(201).json({ product: sanitizeProduct(product) });
   }));
@@ -564,6 +581,9 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     }
 
     const slug = slugify(req.body.slug || req.body.title || existing.slug);
+    const updatedFields = Object.keys(req.body || {})
+      .filter((field) => field !== 'store_id')
+      .sort();
     const pricingInput = buildStoredPricingInput({
       payload: req.body,
       existingProduct: existing
@@ -608,6 +628,32 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       product_id: product.id,
       store_id: product.store_id
     });
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'platform_user',
+      actorId: req.authContext.userId || null,
+      action: 'product.updated',
+      resourceType: 'product',
+      resourceId: product.id,
+      storeId: product.store_id,
+      details: {
+        updated_fields: updatedFields,
+        before: {
+          title: existing.title,
+          slug: existing.slug,
+          status: existing.status,
+          price: Number(existing.price),
+          inventory_count: Number(existing.inventory_count)
+        },
+        after: {
+          title: product.title,
+          slug: product.slug,
+          status: product.status,
+          price: Number(product.price),
+          inventory_count: Number(product.inventory_count)
+        }
+      },
+      req
+    });
     return res.json({ product: sanitizeProduct(product) });
   }));
 
@@ -631,6 +677,20 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     await bus.publish(EVENT_NAMES.PRODUCT_DELETED, {
       product_id: existing.id,
       store_id: existing.store_id
+    });
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'platform_user',
+      actorId: req.authContext.userId || null,
+      action: 'product.deleted',
+      resourceType: 'product',
+      resourceId: existing.id,
+      storeId: existing.store_id,
+      details: {
+        title: existing.title,
+        slug: existing.slug,
+        previous_status: existing.status
+      },
+      req
     });
     return res.status(204).send();
   }));

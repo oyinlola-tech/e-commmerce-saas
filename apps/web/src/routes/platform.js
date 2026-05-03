@@ -45,6 +45,7 @@ const registerPlatformRoutes = (app, deps) => {
     getAdminBillingPlans,
     updateAdminBillingPlan,
     listPlatformStores,
+    doubleCsrfProtection,
     createPlatformStore,
     getPlatformStoreById,
     clearWebAuthCookies
@@ -586,6 +587,7 @@ const registerPlatformRoutes = (app, deps) => {
 
       return renderOwnerSignup(req, res, errors, status);
     }),
+    doubleCsrfProtection,
     ownerSignupValidation,
     handleFormValidation((req, res, errors) => {
       if (isStorefrontHost(req)) {
@@ -962,6 +964,7 @@ const registerPlatformRoutes = (app, deps) => {
     handleMultipartLogo((req, res) => {
       return res.redirect('/dashboard?error=Logo upload failed. Please try a PNG, JPEG, or WebP under 2MB.');
     }),
+    doubleCsrfProtection,
     storeCreationValidation,
     handleFormValidation((req, res) => {
       return res.redirect('/dashboard?error=Review the store fields and try again.');

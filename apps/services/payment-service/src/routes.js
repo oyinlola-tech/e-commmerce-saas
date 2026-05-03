@@ -745,11 +745,36 @@ const processWebhook = async ({ req, res, db, bus, config }) => {
   );
 
   if (!reference) {
+    await createAuditLog(db, {
+      actorType: 'system',
+      action: 'payment.webhook_received_without_reference',
+      resourceType: 'payment_webhook',
+      storeId: null,
+      details: {
+        provider,
+        status: incomingStatus
+      },
+      req,
+      status: 'failure'
+    });
     return res.json({ received: true });
   }
 
   const payment = await getPaymentByReference(db, reference);
   if (!payment) {
+    await createAuditLog(db, {
+      actorType: 'system',
+      action: 'payment.webhook_payment_not_found',
+      resourceType: 'payment_webhook',
+      storeId: null,
+      details: {
+        provider,
+        reference,
+        status: incomingStatus
+      },
+      req,
+      status: 'failure'
+    });
     return res.json({ received: true });
   }
 
@@ -775,6 +800,20 @@ const processWebhook = async ({ req, res, db, bus, config }) => {
     secretKey,
     secretHash: webhookSecretHash
   })) {
+    await createAuditLog(db, {
+      actorType: 'system',
+      action: 'payment.webhook_signature_invalid',
+      resourceType: 'payment_webhook',
+      resourceId: payment.id,
+      storeId: payment.store_id,
+      details: {
+        provider,
+        reference,
+        status: incomingStatus
+      },
+      req,
+      status: 'failure'
+    });
     throw createHttpError(401, `Invalid ${provider} webhook signature.`, null, { expose: true });
   }
 
@@ -784,6 +823,19 @@ const processWebhook = async ({ req, res, db, bus, config }) => {
     config,
     payment,
     webhookEvent: String(req.body.event || req.body.type || '').trim().toLowerCase()
+  });
+  await createAuditLog(db, {
+    actorType: 'system',
+    action: 'payment.webhook_verified',
+    resourceType: 'payment_webhook',
+    resourceId: payment.id,
+    storeId: payment.store_id,
+    details: {
+      provider,
+      reference,
+      status: incomingStatus
+    },
+    req
   });
 
   return res.json({ received: true });
