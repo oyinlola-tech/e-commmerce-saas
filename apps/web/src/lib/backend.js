@@ -220,6 +220,10 @@ const normalizeProduct = (product) => {
     discount_label: product.discount_label || '',
     discount_starts_at: product.discount_starts_at || null,
     discount_ends_at: product.discount_ends_at || null,
+    rating: product.rating === null || product.rating === undefined
+      ? null
+      : Number(product.rating),
+    review_count: Number(product.review_count || 0),
     sku: product.sku || '',
     inventory,
     inventory_count: Number(product.inventory_count || 0),
@@ -230,6 +234,42 @@ const normalizeProduct = (product) => {
     status: product.status || 'published',
     created_at: product.created_at,
     updated_at: product.updated_at
+  };
+};
+
+const normalizeProductReview = (review) => {
+  if (!review) {
+    return null;
+  }
+
+  return {
+    id: String(review.id),
+    product_id: review.product_id ? String(review.product_id) : null,
+    store_id: review.store_id ? String(review.store_id) : null,
+    customer_id: review.customer_id ? String(review.customer_id) : null,
+    order_item_id: review.order_item_id ? String(review.order_item_id) : null,
+    rating: Number(review.rating || 0),
+    title: review.title || '',
+    body: review.body || '',
+    verified_purchase: Boolean(review.verified_purchase),
+    is_approved: Boolean(review.is_approved),
+    helpful_count: Number(review.helpful_count || 0),
+    unhelpful_count: Number(review.unhelpful_count || 0),
+    created_at: review.created_at || null,
+    updated_at: review.updated_at || null
+  };
+};
+
+const normalizeReviewEligibility = (eligibility) => {
+  if (!eligibility) {
+    return null;
+  }
+
+  return {
+    can_review: Boolean(eligibility.can_review),
+    verified_purchase: Boolean(eligibility.verified_purchase),
+    order_item_id: eligibility.order_item_id ? String(eligibility.order_item_id) : null,
+    latest_order_id: eligibility.latest_order_id ? String(eligibility.latest_order_id) : null
   };
 };
 
@@ -1281,6 +1321,82 @@ const getStoreProductById = async (req, store, productId, options = {}) => {
   return normalizeProduct(response?.product || null);
 };
 
+const getStoreProductReviews = async (req, store, productId, options = {}) => {
+  const query = new globalThis.URLSearchParams();
+  if (options.includePending) {
+    query.set('include_pending', 'true');
+  }
+
+  const pathname = `/products/id/${encodeURIComponent(productId)}/reviews${query.toString() ? `?${query.toString()}` : ''}`;
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.product,
+    pathname,
+    {
+      auth: {
+        storeId: store.id,
+        userId: options.auth?.userId || '',
+        actorRole: options.auth?.actorRole || '',
+        customerId: options.auth?.customerId || '',
+        actorType: options.auth?.actorType || ''
+      }
+    }
+  );
+
+  return {
+    reviews: Array.isArray(response?.reviews)
+      ? response.reviews.map(normalizeProductReview).filter(Boolean)
+      : [],
+    viewerReview: normalizeProductReview(response?.viewer_review || null),
+    reviewEligibility: normalizeReviewEligibility(response?.review_eligibility || null)
+  };
+};
+
+const createStorefrontProductReview = async (req, store, auth, productId, payload = {}) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.product,
+    `/products/id/${encodeURIComponent(productId)}/reviews`,
+    {
+      method: 'POST',
+      auth: {
+        storeId: store.id,
+        customerId: auth.customerId,
+        actorType: 'customer'
+      },
+      body: {
+        rating: Number(payload.rating || 0),
+        title: payload.title || '',
+        body: payload.body || ''
+      }
+    }
+  );
+
+  return normalizeProductReview(response?.review || null);
+};
+
+const moderateAdminProductReview = async (req, store, auth, productId, reviewId, payload = {}) => {
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.product,
+    `/products/id/${encodeURIComponent(productId)}/reviews/${encodeURIComponent(reviewId)}`,
+    {
+      method: 'PATCH',
+      auth: {
+        storeId: store.id,
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      },
+      body: {
+        is_approved: Boolean(payload.is_approved)
+      }
+    }
+  );
+
+  return normalizeProductReview(response?.review || null);
+};
+
 const addToCart = async (req, store, options = {}) => {
   const sessionId = options.sessionId;
   const response = await requestServiceJson(req, env.serviceUrls.cart, '/cart/items', {
@@ -1728,6 +1844,7 @@ module.exports = {
   getStoreByHost,
   getStoreCheckoutProviders,
   getStoreProductById,
+  getStoreProductReviews,
   listCustomerOrders,
   listStoreCoupons,
   listAdminStoreCustomers,
@@ -1754,7 +1871,9 @@ module.exports = {
   requestServiceJson,
   syncPlatformStoreOnboarding,
   createStoreCoupon,
+  createStorefrontProductReview,
   addToCart,
+  moderateAdminProductReview,
   previewStoreCoupon,
   updateAdminStoreOrderStatus,
   updateAdminBillingPlan,

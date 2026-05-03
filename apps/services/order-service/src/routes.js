@@ -1,4 +1,4 @@
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const {
   requireInternalRequest,
   buildSignedInternalHeaders,
@@ -31,6 +31,9 @@ const {
   hasPlanCapability,
   isCouponPauseOnlyUpdate
 } = require('./coupon-plan-access');
+const {
+  isReviewEligibleOrder
+} = require('./review-eligibility');
 
 const MANUAL_ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'payment_failed', 'refund_pending', 'refunded'];
 const DEFAULT_TAX_LABEL = 'Tax';
@@ -1301,6 +1304,57 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     }
 
     return res.json({ order });
+  }));
+
+  app.get('/orders/review-eligibility', requireInternal, validate([
+    allowBodyFields([]),
+    query('product_id').isInt({ min: 1 }).toInt()
+  ]), asyncHandler(async (req, res) => {
+    const productId = Number(req.query.product_id || 0);
+    if (!req.authContext.storeId) {
+      throw createHttpError(400, 'Store context is required.', null, { expose: true });
+    }
+
+    if (!req.authContext.customerId) {
+      throw createHttpError(401, 'Customer authentication is required for review checks.', null, { expose: true });
+    }
+
+    if (!productId) {
+      throw createHttpError(400, 'product_id is required.', null, { expose: true });
+    }
+
+    const rows = await db.query(
+      `
+        SELECT
+          oi.id AS order_item_id,
+          oi.order_id,
+          oi.product_id,
+          o.customer_id,
+          o.payment_status,
+          o.status,
+          o.created_at
+        FROM order_items AS oi
+        INNER JOIN orders AS o
+          ON o.id = oi.order_id
+        WHERE o.store_id = ?
+          AND o.customer_id = ?
+          AND oi.product_id = ?
+        ORDER BY o.created_at DESC, oi.id DESC
+      `,
+      [
+        Number(req.authContext.storeId),
+        Number(req.authContext.customerId),
+        productId
+      ]
+    );
+    const eligibleItem = rows.find((row) => isReviewEligibleOrder(row)) || null;
+
+    return res.json({
+      can_review: Boolean(eligibleItem),
+      verified_purchase: Boolean(eligibleItem),
+      order_item_id: eligibleItem?.order_item_id || null,
+      latest_order_id: eligibleItem?.order_id || null
+    });
   }));
 
   app.patch('/orders/:id/status', requireInternal, validate([

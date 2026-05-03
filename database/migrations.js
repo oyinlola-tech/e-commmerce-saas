@@ -360,6 +360,107 @@ const migrations = [
         ]);
       }
     }
+  },
+  {
+    id: '006_harden_product_review_constraints',
+    targets: ['product-service'],
+    up: async ({ db }) => {
+      const affectedProducts = new Map();
+      const duplicateGroups = await db.query(`
+        SELECT store_id, product_id, customer_id
+        FROM product_reviews
+        GROUP BY store_id, product_id, customer_id
+        HAVING COUNT(*) > 1
+      `);
+
+      for (const duplicate of duplicateGroups) {
+        const rows = await db.query(
+          `
+            SELECT id
+            FROM product_reviews
+            WHERE store_id = ?
+              AND product_id = ?
+              AND customer_id = ?
+            ORDER BY updated_at DESC, id DESC
+          `,
+          [duplicate.store_id, duplicate.product_id, duplicate.customer_id]
+        );
+        const staleIds = rows.slice(1).map((row) => Number(row.id)).filter(Boolean);
+        if (!staleIds.length) {
+          continue;
+        }
+
+        affectedProducts.set(`${duplicate.store_id}:${duplicate.product_id}`, {
+          store_id: Number(duplicate.store_id),
+          product_id: Number(duplicate.product_id)
+        });
+
+        await db.query(
+          `DELETE FROM product_reviews WHERE id IN (${staleIds.map(() => '?').join(', ')})`,
+          staleIds
+        );
+      }
+
+      await executeStatements(db, [
+        {
+          sql: `
+            ALTER TABLE product_reviews
+            ADD UNIQUE KEY uq_product_reviews_store_product_customer (store_id, product_id, customer_id)
+          `,
+          ignoreErrorCodes: ['ER_DUP_KEYNAME']
+        },
+        {
+          sql: `
+            ALTER TABLE product_reviews
+            ADD INDEX idx_product_reviews_customer_lookup (store_id, customer_id, product_id, is_approved)
+          `,
+          ignoreErrorCodes: ['ER_DUP_KEYNAME']
+        }
+      ]);
+
+      for (const affectedProduct of affectedProducts.values()) {
+        const summary = (await db.query(
+          `
+            SELECT
+              COUNT(*) AS review_count,
+              AVG(rating) AS average_rating
+            FROM product_reviews
+            WHERE store_id = ?
+              AND product_id = ?
+              AND is_approved = 1
+          `,
+          [affectedProduct.store_id, affectedProduct.product_id]
+        ))[0] || {};
+
+        await db.query(
+          `
+            UPDATE products
+            SET review_count = ?, average_rating = ?
+            WHERE store_id = ? AND id = ?
+          `,
+          [
+            Number(summary.review_count || 0),
+            summary.average_rating === null || summary.average_rating === undefined
+              ? null
+              : Number(summary.average_rating),
+            affectedProduct.store_id,
+            affectedProduct.product_id
+          ]
+        );
+      }
+    },
+    down: async ({ db }) => {
+      await executeStatements(db, [
+        {
+          sql: 'ALTER TABLE product_reviews DROP INDEX idx_product_reviews_customer_lookup',
+          ignoreErrorCodes: ['ER_CANT_DROP_FIELD_OR_KEY']
+        },
+        {
+          sql: 'ALTER TABLE product_reviews DROP INDEX uq_product_reviews_store_product_customer',
+          ignoreErrorCodes: ['ER_CANT_DROP_FIELD_OR_KEY']
+        }
+      ]);
+    }
   }
 ];
 

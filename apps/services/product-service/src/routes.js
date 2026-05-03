@@ -4,6 +4,7 @@ const {
   requireInternalRequest,
   EVENT_NAMES,
   buildSignedInternalHeaders,
+  verifySignedInternalHeaders,
   requestJson,
   parsePagination,
   createAuditLog,
@@ -26,6 +27,9 @@ const {
   toDatabaseDateTime,
   resolveProductPricing
 } = require('./pricing');
+const {
+  summarizeApprovedReviews
+} = require('./review-summary');
 
 const PRODUCT_CACHE_TTL_SECONDS = 5 * 60;
 
@@ -60,6 +64,10 @@ const sanitizeProduct = (product) => {
     discount_label: pricing.discountLabel || null,
     discount_starts_at: pricing.discountStartsAt,
     discount_ends_at: pricing.discountEndsAt,
+    rating: product.average_rating === null || product.average_rating === undefined
+      ? null
+      : Number(product.average_rating),
+    review_count: Number(product.review_count || 0),
     sku: product.sku,
     inventory_count: Number(product.inventory_count),
     reserved_count: Number(product.reserved_count),
@@ -213,6 +221,37 @@ const requirePlatformOperator = (req, res, next) => {
   return next();
 };
 
+const buildOptionalSignedAuthContext = (req, config) => {
+  if (req.authContext) {
+    return req.authContext;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req, 'optionalSignedAuthContext')) {
+    return req.optionalSignedAuthContext;
+  }
+
+  const verified = verifySignedInternalHeaders(req.headers, config.internalSharedSecret, {
+    maxAgeMs: config.internalRequestMaxAgeMs,
+    nonceTtlMs: config.internalRequestNonceTtlMs
+  });
+  if (!verified) {
+    req.optionalSignedAuthContext = null;
+    return null;
+  }
+
+  req.optionalSignedAuthContext = {
+    requestId: req.headers['x-request-id'] || req.requestId || '',
+    forwardedHost: req.headers['x-forwarded-host'] || '',
+    storeId: req.headers['x-store-id'] || null,
+    userId: req.headers['x-user-id'] || null,
+    actorRole: req.headers['x-actor-role'] || null,
+    customerId: req.headers['x-customer-id'] || null,
+    actorType: req.headers['x-actor-type'] || null
+  };
+
+  return req.optionalSignedAuthContext;
+};
+
 const buildRequireInternal = (config) => {
   return requireInternalRequest(config.internalSharedSecret, {
     maxAgeMs: config.internalRequestMaxAgeMs,
@@ -293,6 +332,90 @@ const enforceProductPlanAccess = async ({ db, config, req, storeId }) => {
   }
 
   return access;
+};
+
+const serializeProductReview = (review) => {
+  if (!review) {
+    return null;
+  }
+
+  return {
+    id: Number(review.id),
+    product_id: Number(review.product_id),
+    store_id: Number(review.store_id),
+    customer_id: Number(review.customer_id),
+    order_item_id: review.order_item_id ? Number(review.order_item_id) : null,
+    rating: Number(review.rating || 0),
+    title: review.title || '',
+    body: review.body || '',
+    verified_purchase: Boolean(review.verified_purchase),
+    is_approved: Boolean(review.is_approved),
+    helpful_count: Number(review.helpful_count || 0),
+    unhelpful_count: Number(review.unhelpful_count || 0),
+    created_at: review.created_at,
+    updated_at: review.updated_at
+  };
+};
+
+const buildReviewHeaders = (config, req, storeId, authContext = {}) => {
+  return buildSignedInternalHeaders({
+    requestId: authContext.requestId || req.requestId,
+    storeId,
+    userId: authContext.userId || '',
+    actorRole: authContext.actorRole || '',
+    customerId: authContext.customerId || '',
+    actorType: authContext.actorType || (authContext.customerId ? 'customer' : 'platform_user'),
+    secret: config.internalSharedSecret
+  });
+};
+
+const fetchReviewEligibility = async ({ config, req, authContext = {}, storeId, productId }) => {
+  if (!authContext.customerId) {
+    return {
+      can_review: false,
+      verified_purchase: false,
+      order_item_id: null,
+      latest_order_id: null
+    };
+  }
+
+  return requestJson(
+    `${config.serviceUrls.order}/orders/review-eligibility?product_id=${encodeURIComponent(productId)}`,
+    {
+      headers: buildReviewHeaders(config, req, storeId, authContext),
+      timeoutMs: config.requestTimeoutMs
+    }
+  );
+};
+
+const refreshProductReviewSummary = async (db, productId, storeId) => {
+  const approvedReviews = await db.query(
+    `
+      SELECT rating, is_approved
+      FROM product_reviews
+      WHERE product_id = ?
+        AND store_id = ?
+        AND is_approved = 1
+    `,
+    [productId, storeId]
+  );
+  const summary = summarizeApprovedReviews(approvedReviews);
+
+  await db.execute(
+    `
+      UPDATE products
+      SET review_count = ?, average_rating = ?
+      WHERE id = ? AND store_id = ?
+    `,
+    [
+      summary.reviewCount,
+      summary.averageRating,
+      productId,
+      storeId
+    ]
+  );
+
+  return summary;
 };
 
 const buildProductCacheKey = (storeId, suffix) => `product:${storeId}:${suffix}`;
@@ -463,6 +586,260 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     return res.json(await loader());
   }));
 
+  app.get('/products/id/:id/reviews', validate([
+    commonRules.paramId('id'),
+    ...storeIdRule(),
+    query('include_pending').optional().isBoolean().toBoolean()
+  ]), asyncHandler(async (req, res) => {
+    const storeId = Number(req.headers['x-store-id'] || req.query.store_id);
+    const signedAuthContext = buildOptionalSignedAuthContext(req, config);
+    if (!storeId) {
+      throw createHttpError(400, 'Store context is required.', null, { expose: true });
+    }
+
+    const existingProduct = (await db.query(
+      'SELECT id FROM products WHERE id = ? AND store_id = ? AND deleted_at IS NULL LIMIT 1',
+      [req.params.id, storeId]
+    ))[0];
+    if (!existingProduct) {
+      throw createHttpError(404, 'Product not found.', null, { expose: true });
+    }
+
+    const includePending = Boolean(req.query.include_pending) && signedAuthContext?.actorType === 'platform_user';
+    const reviewRows = await db.query(
+      `
+        SELECT *
+        FROM product_reviews
+        WHERE product_id = ?
+          AND store_id = ?
+          ${includePending ? '' : 'AND is_approved = 1'}
+        ORDER BY is_approved DESC, created_at DESC, id DESC
+      `,
+      [req.params.id, storeId]
+    );
+
+    let viewerReview = null;
+    let reviewEligibility = null;
+    if (!includePending && signedAuthContext?.customerId) {
+      const viewerRow = (await db.query(
+        `
+          SELECT *
+          FROM product_reviews
+          WHERE product_id = ?
+            AND store_id = ?
+            AND customer_id = ?
+          LIMIT 1
+        `,
+        [req.params.id, storeId, signedAuthContext.customerId]
+      ))[0] || null;
+      viewerReview = serializeProductReview(viewerRow);
+      try {
+        reviewEligibility = await fetchReviewEligibility({
+          config,
+          req,
+          authContext: signedAuthContext,
+          storeId,
+          productId: req.params.id
+        });
+      } catch (error) {
+        req.log?.warn('product_review_eligibility_lookup_failed', {
+          productId: Number(req.params.id),
+          storeId,
+          customerId: Number(signedAuthContext.customerId),
+          status: error.status,
+          error: error.message
+        });
+        reviewEligibility = {
+          can_review: false,
+          verified_purchase: Boolean(viewerRow?.verified_purchase),
+          order_item_id: viewerRow?.order_item_id ? Number(viewerRow.order_item_id) : null,
+          latest_order_id: null
+        };
+      }
+    }
+
+    return res.json({
+      reviews: reviewRows.map(serializeProductReview).filter(Boolean),
+      viewer_review: viewerReview,
+      review_eligibility: reviewEligibility
+    });
+  }));
+
+  app.post('/products/id/:id/reviews', requireInternal, validate([
+    allowBodyFields(['rating', 'title', 'body']),
+    commonRules.paramId('id'),
+    body('rating').isInt({ min: 1, max: 5 }).toInt(),
+    commonRules.optionalPlainText('title', 255),
+    body('body').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 2000 }))
+  ]), asyncHandler(async (req, res) => {
+    const storeId = Number(req.authContext.storeId);
+    const customerId = Number(req.authContext.customerId);
+    if (!storeId) {
+      throw createHttpError(400, 'Store context is required.', null, { expose: true });
+    }
+
+    if (!customerId || req.authContext.actorType !== 'customer') {
+      throw createHttpError(401, 'Customer authentication is required to submit a review.', null, { expose: true });
+    }
+
+    const product = (await db.query(
+      'SELECT * FROM products WHERE id = ? AND store_id = ? AND deleted_at IS NULL LIMIT 1',
+      [req.params.id, storeId]
+    ))[0] || null;
+    if (!product || String(product.status || '').trim().toLowerCase() !== 'published') {
+      throw createHttpError(404, 'Product not found.', null, { expose: true });
+    }
+
+    const title = sanitizePlainText(req.body.title || '', { maxLength: 255 }) || null;
+    const reviewBody = sanitizePlainText(req.body.body || '', { maxLength: 2000 }) || null;
+    if (!title && !reviewBody) {
+      throw createHttpError(422, 'Add a title or review note before submitting.', {
+        fields: [{
+          field: 'body',
+          message: 'Add a title or review note before submitting.'
+        }]
+      }, { expose: true });
+    }
+
+    const existingReview = (await db.query(
+      `
+        SELECT *
+        FROM product_reviews
+        WHERE product_id = ?
+          AND store_id = ?
+          AND customer_id = ?
+        LIMIT 1
+      `,
+      [req.params.id, storeId, customerId]
+    ))[0] || null;
+    const reviewEligibility = await fetchReviewEligibility({
+      config,
+      req,
+      storeId,
+      productId: req.params.id
+    });
+    if (!reviewEligibility?.can_review && !existingReview) {
+      throw createHttpError(403, 'Only customers with a paid or fulfilled order can review this product.', null, { expose: true });
+    }
+
+    let reviewId = existingReview?.id || null;
+    let reviewAction = existingReview ? 'product.review_updated' : 'product.review_submitted';
+    if (existingReview) {
+      await db.execute(
+        `
+          UPDATE product_reviews
+          SET rating = ?,
+              title = ?,
+              body = ?,
+              order_item_id = ?,
+              verified_purchase = ?,
+              is_approved = 0
+          WHERE id = ? AND store_id = ?
+        `,
+        [
+          Number(req.body.rating),
+          title,
+          reviewBody,
+          reviewEligibility?.order_item_id || existingReview.order_item_id || null,
+          Number(Boolean(reviewEligibility?.verified_purchase || existingReview.verified_purchase)),
+          existingReview.id,
+          storeId
+        ]
+      );
+    } else {
+      try {
+        const result = await db.execute(
+          `
+            INSERT INTO product_reviews (
+              product_id, store_id, customer_id, order_item_id, rating, title, body, verified_purchase, is_approved
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+          `,
+          [
+            req.params.id,
+            storeId,
+            customerId,
+            reviewEligibility?.order_item_id || null,
+            Number(req.body.rating),
+            title,
+            reviewBody,
+            Number(Boolean(reviewEligibility?.verified_purchase))
+          ]
+        );
+        reviewId = result.insertId;
+      } catch (error) {
+        if (error.code !== 'ER_DUP_ENTRY') {
+          throw error;
+        }
+
+        const concurrentReview = (await db.query(
+          `
+            SELECT *
+            FROM product_reviews
+            WHERE product_id = ?
+              AND store_id = ?
+              AND customer_id = ?
+            LIMIT 1
+          `,
+          [req.params.id, storeId, customerId]
+        ))[0] || null;
+        if (!concurrentReview) {
+          throw error;
+        }
+
+        await db.execute(
+          `
+            UPDATE product_reviews
+            SET rating = ?,
+                title = ?,
+                body = ?,
+                order_item_id = ?,
+                verified_purchase = ?,
+                is_approved = 0
+            WHERE id = ? AND store_id = ?
+          `,
+          [
+            Number(req.body.rating),
+            title,
+            reviewBody,
+            reviewEligibility?.order_item_id || concurrentReview.order_item_id || null,
+            Number(Boolean(reviewEligibility?.verified_purchase || concurrentReview.verified_purchase)),
+            concurrentReview.id,
+            storeId
+          ]
+        );
+        reviewId = concurrentReview.id;
+        reviewAction = 'product.review_updated';
+      }
+    }
+
+    await refreshProductReviewSummary(db, req.params.id, storeId);
+    await invalidateProductCache(cache, storeId);
+    await bus.publish(EVENT_NAMES.PRODUCT_UPDATED, {
+      product_id: Number(req.params.id),
+      store_id: storeId
+    });
+    const review = (await db.query('SELECT * FROM product_reviews WHERE id = ? LIMIT 1', [reviewId]))[0] || null;
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'customer',
+      actorId: customerId,
+      action: reviewAction,
+      resourceType: 'product_review',
+      resourceId: reviewId,
+      storeId,
+      details: {
+        product_id: Number(req.params.id),
+        rating: Number(req.body.rating),
+        verified_purchase: Boolean(review?.verified_purchase),
+        approval_status: review?.is_approved ? 'approved' : 'pending'
+      },
+      req
+    });
+
+    return res.status(existingReview ? 200 : 201).json({
+      review: serializeProductReview(review)
+    });
+  }));
+
   app.get('/products/:slug', validate([
     param('slug').trim().notEmpty().customSanitizer((value) => sanitizeSlug(value)),
     ...storeIdRule()
@@ -499,6 +876,63 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     }
 
     return res.json(await loader());
+  }));
+
+  app.patch('/products/id/:id/reviews/:reviewId', requireInternal, requirePlatformOperator, validate([
+    allowBodyFields(['is_approved']),
+    commonRules.paramId('id'),
+    commonRules.paramId('reviewId'),
+    body('is_approved').isBoolean().toBoolean()
+  ]), asyncHandler(async (req, res) => {
+    const storeId = Number(req.authContext.storeId);
+    if (!storeId) {
+      throw createHttpError(400, 'Store context is required.', null, { expose: true });
+    }
+
+    const review = (await db.query(
+      `
+        SELECT *
+        FROM product_reviews
+        WHERE id = ?
+          AND product_id = ?
+          AND store_id = ?
+        LIMIT 1
+      `,
+      [req.params.reviewId, req.params.id, storeId]
+    ))[0] || null;
+    if (!review) {
+      throw createHttpError(404, 'Review not found.', null, { expose: true });
+    }
+
+    await db.execute(
+      'UPDATE product_reviews SET is_approved = ? WHERE id = ? AND store_id = ?',
+      [Number(Boolean(req.body.is_approved)), review.id, storeId]
+    );
+    await refreshProductReviewSummary(db, req.params.id, storeId);
+    await invalidateProductCache(cache, storeId);
+    await bus.publish(EVENT_NAMES.PRODUCT_UPDATED, {
+      product_id: Number(req.params.id),
+      store_id: storeId
+    });
+    const updatedReview = (await db.query('SELECT * FROM product_reviews WHERE id = ? LIMIT 1', [review.id]))[0] || null;
+    await createAuditLog(db, {
+      actorType: req.authContext.actorType || 'platform_user',
+      actorId: req.authContext.userId || null,
+      action: 'product.review_moderated',
+      resourceType: 'product_review',
+      resourceId: review.id,
+      storeId,
+      details: {
+        product_id: Number(req.params.id),
+        previous_is_approved: Boolean(review.is_approved),
+        next_is_approved: Boolean(updatedReview?.is_approved)
+      },
+      req
+    });
+
+    return res.json({
+      review: serializeProductReview(updatedReview)
+    });
   }));
 
   app.post('/products', requireInternal, requirePlatformOperator, validate([

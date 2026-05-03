@@ -17,11 +17,13 @@ const registerStorefrontRoutes = (app, deps) => {
     quoteStorefrontCheckout,
     clearStorefrontCart,
     clearWebAuthCookies,
+    createStorefrontProductReview,
     ensureStorefrontSession,
     getCustomerOrderById,
     getStoreCheckoutProviders,
     getStoreProductById,
     getStoreProductBySlug,
+    getStoreProductReviews,
     listCustomerOrders,
     previewStoreCoupon,
     listStoreProducts,
@@ -257,10 +259,15 @@ const registerStorefrontRoutes = (app, deps) => {
         return res.redirect('/products?error=Product not found');
       }
 
-      const relatedResult = await listStoreProducts(req, store, {
-        limit: 24,
-        category: product.category
-      });
+      const [relatedResult, reviewData] = await Promise.all([
+        listStoreProducts(req, store, {
+          limit: 24,
+          category: product.category
+        }),
+        getStoreProductReviews(req, store, product.id, {
+          auth: req.customerAuth
+        })
+      ]);
       const relatedProducts = decorateProducts(relatedResult.products || [])
         .filter((entry) => entry.id !== product.id)
         .slice(0, 4);
@@ -288,12 +295,60 @@ const registerStorefrontRoutes = (app, deps) => {
           res.locals.selectedCurrency || store.default_currency || 'USD'
         ),
         product,
+        productReviews: reviewData.reviews,
+        viewerReview: reviewData.viewerReview,
+        reviewEligibility: reviewData.reviewEligibility,
         relatedProducts,
         recentlyViewedProducts
       });
     } catch (error) {
       if (Number(error.status) === 404) {
         return res.redirect('/products?error=Product not found');
+      }
+
+      return next(error);
+    }
+  });
+
+  app.post('/products/:slug/reviews', validate([
+    allowBodyFields(['rating', 'title', 'body', '_csrf']),
+    param('slug').trim().notEmpty().customSanitizer((value) => sanitizeSlug(value)),
+    body('rating').isInt({ min: 1, max: 5 }).toInt(),
+    body('title').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 255 })),
+    body('body').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 2000 }))
+  ]), async (req, res, next) => {
+    try {
+      const store = resolveStore(req);
+      if (!store) {
+        return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+      }
+
+      const product = mergeProductPresentation(await getStoreProductBySlug(req, store, sanitizeSlug(req.params.slug)));
+      if (!product) {
+        return res.redirect('/products?error=Product not found');
+      }
+
+      if (!req.currentCustomer || !req.customerAuth) {
+        return res.redirect(`/login?returnTo=${encodeURIComponent(`/products/${product.slug}`)}`);
+      }
+
+      await createStorefrontProductReview(req, store, req.customerAuth, product.id, {
+        rating: req.body.rating,
+        title: req.body.title,
+        body: req.body.body
+      });
+
+      return res.redirect(`/products/${product.slug}?success=${encodeURIComponent('Thanks. Your review was submitted for moderation and will appear after approval.')}`);
+    } catch (error) {
+      const fallbackSlug = sanitizeSlug(req.params.slug);
+      const fallbackPath = fallbackSlug ? `/products/${fallbackSlug}` : '/products';
+
+      if (Number(error.status) === 404) {
+        return res.redirect('/products?error=Product not found');
+      }
+
+      if ([400, 401, 403, 409, 422].includes(Number(error.status))) {
+        return res.redirect(`${fallbackPath}?error=${encodeURIComponent(error.message || 'Unable to save your review right now.')}`);
       }
 
       return next(error);

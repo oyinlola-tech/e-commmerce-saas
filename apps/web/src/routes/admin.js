@@ -1,4 +1,4 @@
-const { param } = require('express-validator');
+const { body, param } = require('express-validator');
 
 const registerAdminRoutes = (app, deps) => {
   const { context, helpers, validations, renderers, paymentProviderService } = deps;
@@ -14,8 +14,10 @@ const registerAdminRoutes = (app, deps) => {
     listAdminStoreOrders,
     listAdminStoreCustomers,
     getAdminStoreProductById,
+    getStoreProductReviews,
     createAdminStoreProduct,
     createStoreCoupon,
+    moderateAdminProductReview,
     updateAdminStoreProduct,
     updateStoreCoupon,
     deleteAdminStoreProduct,
@@ -268,6 +270,36 @@ const registerAdminRoutes = (app, deps) => {
     }
   });
 
+  app.get('/admin/products/:id/reviews', async (req, res, next) => {
+    try {
+      if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
+        return;
+      }
+
+      const product = mergeProductPresentation(await getAdminStoreProductById(req, req.currentStore, req.platformAuth, req.params.id));
+      if (!product) {
+        return res.redirect('/admin/products?error=Product not found');
+      }
+
+      const reviewData = await getStoreProductReviews(req, req.currentStore, req.params.id, {
+        auth: req.platformAuth,
+        includePending: true
+      });
+
+      return renderStoreAdmin(req, res, 'admin/product-reviews', {
+        pageTitle: `Reviews for ${product.name}`,
+        product,
+        productReviews: reviewData.reviews
+      });
+    } catch (error) {
+      if (Number(error.status) === 404) {
+        return res.redirect('/admin/products?error=Product not found');
+      }
+
+      return next(error);
+    }
+  });
+
   app.post('/admin/products', productValidation, handleFormValidation((req, res, errors) => {
     return renderProductForm(req, res, buildProductDraft(req), errors, 422);
   }), async (req, res, next) => {
@@ -328,6 +360,38 @@ const registerAdminRoutes = (app, deps) => {
     } catch (error) {
       if ([403, 404].includes(Number(error.status))) {
         return res.redirect('/admin/products?error=Product not found');
+      }
+
+      return next(error);
+    }
+  });
+
+  app.post('/admin/products/:id/reviews/:reviewId/moderate', validate([
+    allowBodyFields(['is_approved', '_csrf']),
+    commonRules.paramId('id'),
+    commonRules.paramId('reviewId'),
+    body('is_approved').isBoolean().toBoolean()
+  ]), async (req, res, next) => {
+    try {
+      if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
+        return;
+      }
+
+      await moderateAdminProductReview(
+        req,
+        req.currentStore,
+        req.platformAuth,
+        req.params.id,
+        req.params.reviewId,
+        {
+          is_approved: req.body.is_approved
+        }
+      );
+
+      return res.redirect(`/admin/products/${encodeURIComponent(req.params.id)}/reviews?success=${encodeURIComponent('Review moderation updated.')}`);
+    } catch (error) {
+      if ([403, 404].includes(Number(error.status))) {
+        return res.redirect(`/admin/products/${encodeURIComponent(req.params.id)}/reviews?error=${encodeURIComponent(error.message || 'Review not found.')}`);
       }
 
       return next(error);

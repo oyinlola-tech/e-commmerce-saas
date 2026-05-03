@@ -199,9 +199,16 @@ const mergeProductPresentation = (product = null) => {
     return null;
   }
 
+  const productContent = getProductContent(product);
   return {
     ...product,
-    ...getProductContent(product)
+    ...productContent,
+    rating: productContent.rating === null || productContent.rating === undefined
+      ? (product.rating === undefined ? null : product.rating)
+      : productContent.rating,
+    review_count: productContent.review_count === null || productContent.review_count === undefined
+      ? Number(product.review_count || 0)
+      : Number(productContent.review_count || 0)
   };
 };
 
