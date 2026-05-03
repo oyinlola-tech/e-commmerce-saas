@@ -120,7 +120,11 @@ const startService = async ({
         service: serviceName,
         status: 'ok',
         database,
-        rabbitmq: bus.connected ? 'connected' : 'noop',
+        event_bus: {
+          transport: bus.transport || 'unknown',
+          status: bus.connected ? 'connected' : 'unavailable',
+          durable: Boolean(bus.durable)
+        },
         cache: cacheStatus
       });
     } catch (error) {
