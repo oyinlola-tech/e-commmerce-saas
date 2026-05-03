@@ -5,6 +5,11 @@
   const appliedCouponPreview = couponPreview || null;
   const discountTotal = Number(appliedCouponPreview && appliedCouponPreview.discount_total ? appliedCouponPreview.discount_total : 0);
   const discountedCartTotal = Math.max(0, Number(cartTotal || 0) - discountTotal);
+  const orderCurrency = typeof baseCurrency === 'string' && baseCurrency ? baseCurrency : (store && store.default_currency ? store.default_currency : 'USD');
+  const orderMoney = typeof formatMoneyFor === 'function'
+    ? ((value) => formatMoneyFor(value, orderCurrency))
+    : money;
+  const chargeCurrencyDiffers = typeof selectedCurrency === 'string' && selectedCurrency && selectedCurrency !== orderCurrency;
   const storeThemeData = typeof storeTheme !== 'undefined'
     ? storeTheme
     : (typeof currentStoreTheme !== 'undefined' ? currentStoreTheme : {});
@@ -24,7 +29,7 @@
 %>
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
   <div class="grid gap-8 <%= themeClasses.checkoutGrid || 'lg:grid-cols-[1.05fr_0.95fr]' %>">
-    <form action="/checkout" method="post" data-checkout-form class="order-2 space-y-6 lg:order-1">
+    <form action="/checkout" method="post" data-checkout-form data-checkout-quote-endpoint="/checkout/quote" data-checkout-order-currency="<%= orderCurrency %>" class="order-2 space-y-6 lg:order-1">
       <%- include('../partials/csrf-field') %>
       <section class="theme-hero-frame rounded-[2.35rem] p-6">
         <span class="eyebrow"><%= themeCopy.checkoutLabel || 'Checkout' %></span>
@@ -107,6 +112,12 @@
     <aside class="order-1 space-y-6 lg:order-2">
       <section class="theme-summary-card rounded-[2rem] p-6">
         <p class="text-sm font-medium text-slate-500">Order summary</p>
+        <% if (chargeCurrencyDiffers) { %>
+          <div class="mt-4 rounded-[1.5rem] border border-sky-200 bg-sky-50 px-4 py-4">
+            <p class="text-sm font-semibold text-sky-900">Final checkout is charged in <%= orderCurrency %>.</p>
+            <p class="mt-2 text-sm leading-6 text-sky-800">Store browsing can follow your local currency preference, but the hosted payment amount and stored order ledger stay aligned to the store base currency for payment accuracy.</p>
+          </div>
+        <% } %>
         <% if (appliedCouponPreview && appliedCouponPreview.coupon) { %>
           <div class="mt-4 rounded-[1.5rem] border border-emerald-200 bg-emerald-50 px-4 py-4">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -114,7 +125,7 @@
                 <p class="text-sm font-semibold text-emerald-900">Coupon <%= appliedCouponPreview.coupon.code %></p>
                 <p class="mt-1 text-sm leading-6 text-emerald-800"><%= appliedCouponPreview.coupon.description || 'Store savings applied to this checkout.' %></p>
               </div>
-              <p class="text-sm font-semibold text-emerald-700">-<%= money(discountTotal) %></p>
+              <p class="text-sm font-semibold text-emerald-700">-<%= orderMoney(discountTotal) %></p>
             </div>
             <p class="mt-3 text-xs uppercase tracking-[0.18em] text-emerald-700">Need to change it? Update your cart before placing the order.</p>
           </div>
@@ -127,29 +138,39 @@
                 <h2 class="truncate text-sm font-semibold text-slate-900"><%= item.name %></h2>
                 <p class="mt-1 text-sm text-slate-500">Qty <%= item.quantity || 1 %></p>
               </div>
-              <p class="text-sm font-semibold text-slate-900"><%= money((item.price || 0) * (item.quantity || 1)) %></p>
+              <p class="text-sm font-semibold text-slate-900"><%= orderMoney((item.price || 0) * (item.quantity || 1)) %></p>
             </article>
           <% }) %>
         </div>
         <div class="mt-6 border-t border-slate-200 pt-6 text-sm text-slate-600">
           <div class="flex items-center justify-between">
             <span>Subtotal</span>
-            <span data-cart-subtotal class="font-semibold text-slate-900"><%= money(cartTotal || 0) %></span>
+            <span data-checkout-subtotal class="font-semibold text-slate-900"><%= orderMoney(cartTotal || 0) %></span>
           </div>
           <% if (appliedCouponPreview && appliedCouponPreview.coupon) { %>
             <div class="mt-4 flex items-center justify-between">
               <span>Discount (<%= appliedCouponPreview.coupon.code %>)</span>
-              <span class="font-semibold text-emerald-700">-<%= money(discountTotal) %></span>
+              <span data-checkout-discount class="font-semibold text-emerald-700">-<%= orderMoney(discountTotal) %></span>
+            </div>
+          <% } else { %>
+            <div class="mt-4 flex items-center justify-between">
+              <span>Discount</span>
+              <span data-checkout-discount class="font-semibold text-slate-900"><%= orderMoney(0) %></span>
             </div>
           <% } %>
           <div class="mt-4 flex items-center justify-between">
             <span>Shipping</span>
-            <span>Calculated in fulfillment SLA</span>
+            <span data-checkout-shipping><%= orderMoney(0) %></span>
+          </div>
+          <div class="mt-4 flex items-center justify-between">
+            <span data-checkout-tax-label>Tax</span>
+            <span data-checkout-tax><%= orderMoney(0) %></span>
           </div>
           <div class="mt-6 flex items-center justify-between text-lg font-semibold text-slate-900">
             <span>Total</span>
-            <span data-cart-total><%= money(discountedCartTotal || 0) %></span>
+            <span data-checkout-total><%= orderMoney(discountedCartTotal || 0) %></span>
           </div>
+          <p data-checkout-quote-status class="mt-4 text-xs leading-5 text-slate-500">Enter your delivery details to preview the final shipping and tax breakdown before redirecting to payment.</p>
         </div>
       </section>
 

@@ -14,6 +14,7 @@ const registerStorefrontRoutes = (app, deps) => {
     handleFormValidation,
     addToCart,
     checkoutStorefrontCart,
+    quoteStorefrontCheckout,
     clearStorefrontCart,
     clearWebAuthCookies,
     ensureStorefrontSession,
@@ -553,7 +554,7 @@ const registerStorefrontRoutes = (app, deps) => {
         phone: req.currentCustomer.phone,
         provider: selectedProvider,
         callback_url: buildStorefrontAbsoluteUrl(store, '/checkout/callback'),
-        currency: res.locals.selectedCurrency || store.default_currency || 'USD',
+        currency: res.locals.baseCurrency || store.default_currency || 'USD',
         coupon_code: req.storeCouponPreview?.coupon?.code || getAppliedCouponCode(req, store.id) || null,
         sessionId: req.storefrontSessionId || ensureStorefrontSession(req, res)
       });
@@ -576,6 +577,51 @@ const registerStorefrontRoutes = (app, deps) => {
 
       if ([400, 403, 404, 409, 422].includes(Number(error.status))) {
         return res.redirect(`/checkout?error=${encodeURIComponent(error.message || 'Unable to place the order right now.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.post('/checkout/quote', validate([
+    allowBodyFields(['name', 'address', 'city', 'country', 'postal_code']),
+    body('name').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })),
+    body('address').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 190 })),
+    body('city').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })),
+    body('country').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })),
+    body('postal_code').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 30 }))
+  ]), async (req, res, next) => {
+    try {
+      const store = resolveStore(req);
+      if (!store) {
+        return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+      }
+
+      if (!req.currentCustomer || !req.customerAuth) {
+        return res.status(401).json({
+          error: 'Customer authentication is required for checkout.'
+        });
+      }
+
+      if (!req.currentCart?.items?.length) {
+        return res.status(400).json({
+          error: 'Your cart is empty.'
+        });
+      }
+
+      const quote = await quoteStorefrontCheckout(req, store, req.customerAuth, {
+        ...req.body,
+        currency: res.locals.baseCurrency || store.default_currency || 'USD',
+        coupon_code: req.storeCouponPreview?.coupon?.code || getAppliedCouponCode(req, store.id) || null,
+        sessionId: req.storefrontSessionId || ensureStorefrontSession(req, res)
+      });
+
+      return res.json(quote);
+    } catch (error) {
+      if ([400, 401, 403, 404, 409, 422].includes(Number(error.status))) {
+        return res.status(Number(error.status) || 400).json({
+          error: error.message || 'Unable to calculate checkout totals right now.'
+        });
       }
 
       return next(error);

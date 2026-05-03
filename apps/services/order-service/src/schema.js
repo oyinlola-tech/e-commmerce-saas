@@ -42,6 +42,34 @@ const schemaStatements = [
     `,
     ignoreErrorCodes: ['ER_DUP_FIELDNAME']
   },
+  {
+    sql: `
+      ALTER TABLE orders
+      ADD COLUMN shipping_total DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER discount_total
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE orders
+      ADD COLUMN tax_total DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER shipping_total
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE orders
+      ADD COLUMN tax_label VARCHAR(80) NULL AFTER tax_total
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE orders
+      ADD COLUMN pricing_snapshot JSON NULL AFTER customer_snapshot
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
   `
     CREATE TABLE IF NOT EXISTS order_items (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

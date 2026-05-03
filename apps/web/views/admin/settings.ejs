@@ -153,6 +153,55 @@
       <section class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Checkout totals</p>
+            <h2 class="section-title mt-2 text-2xl font-semibold text-slate-950">Shipping and tax rules</h2>
+          </div>
+          <p class="max-w-md text-sm leading-6 text-slate-500">These settings are used by the order service to calculate authoritative checkout totals before payment is created.</p>
+        </div>
+
+        <div class="mt-6 grid gap-5 sm:grid-cols-2">
+          <div>
+            <label for="shippingOriginCountry" class="mb-1 block text-sm font-medium text-slate-700">Shipping origin country</label>
+            <input id="shippingOriginCountry" name="shipping_origin_country" type="text" value="<%= store && store.shipping_origin_country ? store.shipping_origin_country : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Nigeria">
+          </div>
+          <div>
+            <label for="freeShippingThreshold" class="mb-1 block text-sm font-medium text-slate-700">Free shipping threshold</label>
+            <input id="freeShippingThreshold" name="free_shipping_threshold" type="number" min="0" step="0.01" value="<%= store && store.free_shipping_threshold !== undefined ? store.free_shipping_threshold : 0 %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="50000">
+          </div>
+          <div>
+            <label for="shippingFlatRate" class="mb-1 block text-sm font-medium text-slate-700">Flat shipping rate</label>
+            <input id="shippingFlatRate" name="shipping_flat_rate" type="number" min="0" step="0.01" value="<%= store && store.shipping_flat_rate !== undefined ? store.shipping_flat_rate : 0 %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="2500">
+            <p class="mt-2 text-sm text-slate-500">Use this for one-rate shipping. Leave it at 0 if you want to price domestic and international separately.</p>
+          </div>
+          <div>
+            <label for="domesticShippingRate" class="mb-1 block text-sm font-medium text-slate-700">Domestic shipping rate</label>
+            <input id="domesticShippingRate" name="domestic_shipping_rate" type="number" min="0" step="0.01" value="<%= store && store.domestic_shipping_rate !== undefined ? store.domestic_shipping_rate : 0 %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="1500">
+          </div>
+          <div>
+            <label for="internationalShippingRate" class="mb-1 block text-sm font-medium text-slate-700">International shipping rate</label>
+            <input id="internationalShippingRate" name="international_shipping_rate" type="number" min="0" step="0.01" value="<%= store && store.international_shipping_rate !== undefined ? store.international_shipping_rate : 0 %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="7500">
+          </div>
+          <div>
+            <label for="taxRate" class="mb-1 block text-sm font-medium text-slate-700">Tax rate (%)</label>
+            <input id="taxRate" name="tax_rate" type="number" min="0" max="100" step="0.01" value="<%= store && store.tax_rate !== undefined ? store.tax_rate : 0 %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="7.5">
+          </div>
+          <div>
+            <label for="taxLabel" class="mb-1 block text-sm font-medium text-slate-700">Tax label</label>
+            <input id="taxLabel" name="tax_label" type="text" value="<%= store && store.tax_label ? store.tax_label : '' %>" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="VAT">
+          </div>
+          <label class="sm:col-span-2 flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4">
+            <input type="checkbox" name="tax_apply_to_shipping" value="1" class="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30" <%= store && store.tax_apply_to_shipping ? 'checked' : '' %>>
+            <span>
+              <span class="block text-sm font-medium text-slate-900">Apply tax to shipping charges</span>
+              <span class="mt-1 block text-sm leading-6 text-slate-500">Enable this if shipping is part of the taxable amount in your operating jurisdiction.</span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <section class="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">SEO</p>
             <h2 class="section-title mt-2 text-2xl font-semibold text-slate-950">Store search metadata</h2>
           </div>

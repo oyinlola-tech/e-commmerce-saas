@@ -155,6 +155,14 @@ const normalizeStore = (store) => {
     font_preset: store.font_preset || 'jakarta',
     support_email: store.support_email || '',
     contact_phone: store.contact_phone || '',
+    shipping_origin_country: store.shipping_origin_country || '',
+    shipping_flat_rate: Number(store.shipping_flat_rate || 0),
+    domestic_shipping_rate: Number(store.domestic_shipping_rate || 0),
+    international_shipping_rate: Number(store.international_shipping_rate || 0),
+    free_shipping_threshold: Number(store.free_shipping_threshold || 0),
+    tax_rate: Number(store.tax_rate || 0),
+    tax_label: store.tax_label || '',
+    tax_apply_to_shipping: Boolean(store.tax_apply_to_shipping),
     is_active: Boolean(store.is_active),
     ssl_status: store.ssl_status || 'pending',
     tagline: '',
@@ -270,9 +278,13 @@ const normalizeOrder = (order) => {
     currency: order.currency || 'USD',
     subtotal: Number(order.subtotal || 0),
     discount_total: Number(order.discount_total || 0),
+    shipping_total: Number(order.shipping_total || 0),
+    tax_total: Number(order.tax_total || 0),
     total: Number(order.total || 0),
+    tax_label: order.tax_label || null,
     coupon_code: order.coupon_code || null,
     coupon: order.coupon || null,
+    pricing_snapshot: order.pricing_snapshot || null,
     shipping_address: shippingAddress,
     customer: {
       name: customerSnapshot.name || '',
@@ -1479,6 +1491,35 @@ const checkoutStorefrontCart = async (req, store, auth, payload = {}) => {
   };
 };
 
+const quoteStorefrontCheckout = async (req, store, auth, payload = {}) => {
+  const response = await requestServiceJson(req, env.serviceUrls.order, '/checkout/quote', {
+    method: 'POST',
+    auth: {
+      storeId: store.id,
+      customerId: auth.customerId,
+      actorType: 'customer'
+    },
+    body: {
+      currency: payload.currency || 'USD',
+      shipping_address: {
+        address: payload.address,
+        city: payload.city,
+        country: payload.country,
+        postal_code: payload.postal_code
+      },
+      coupon_code: payload.coupon_code || null
+    },
+    headers: {
+      'x-session-id': payload.sessionId
+    }
+  });
+
+  return {
+    coupon: response?.coupon || null,
+    quote: response?.quote || null
+  };
+};
+
 const verifyStorefrontCheckout = async (req, store, auth, reference) => {
   const response = await requestServiceJson(req, env.serviceUrls.order, '/checkout/verify', {
     method: 'POST',
@@ -1634,5 +1675,6 @@ module.exports = {
   removeCartItem,
   getStoreProductBySlug,
   checkoutStorefrontCart,
+  quoteStorefrontCheckout,
   verifyStorefrontCheckout
 };

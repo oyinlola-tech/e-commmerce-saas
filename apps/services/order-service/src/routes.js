@@ -29,6 +29,171 @@ const {
 } = require('./coupons');
 
 const MANUAL_ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'payment_failed', 'refund_pending', 'refunded'];
+const DEFAULT_TAX_LABEL = 'Tax';
+
+const normalizeCountry = (value = '') => {
+  return sanitizePlainText(value, { maxLength: 120 }).trim().toLowerCase();
+};
+
+const normalizeMoneyAmount = (value = 0) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return roundMoney(parsed);
+};
+
+const normalizePercentageRate = (value = 0) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return Math.min(100, roundMoney(parsed));
+};
+
+const sanitizeStoreCheckoutConfig = (store = {}) => {
+  return {
+    id: Number(store.id || 0) || null,
+    shipping_origin_country: sanitizePlainText(store.shipping_origin_country || '', { maxLength: 120 }) || null,
+    shipping_flat_rate: normalizeMoneyAmount(store.shipping_flat_rate || 0),
+    domestic_shipping_rate: normalizeMoneyAmount(store.domestic_shipping_rate || 0),
+    international_shipping_rate: normalizeMoneyAmount(store.international_shipping_rate || 0),
+    free_shipping_threshold: normalizeMoneyAmount(store.free_shipping_threshold || 0),
+    tax_rate: normalizePercentageRate(store.tax_rate || 0),
+    tax_label: sanitizePlainText(store.tax_label || '', { maxLength: 80 }) || DEFAULT_TAX_LABEL,
+    tax_apply_to_shipping: Boolean(store.tax_apply_to_shipping)
+  };
+};
+
+const buildSystemHeaders = ({ config, requestId, storeId }) => {
+  return buildSignedInternalHeaders({
+    requestId,
+    storeId,
+    actorType: 'platform_user',
+    actorRole: PLATFORM_ROLES.PLATFORM_OWNER,
+    secret: config.internalSharedSecret
+  });
+};
+
+const determineShippingCharge = ({ storeConfig, discountedSubtotal, shippingAddress }) => {
+  const freeShippingThreshold = normalizeMoneyAmount(storeConfig.free_shipping_threshold);
+  if (freeShippingThreshold > 0 && discountedSubtotal >= freeShippingThreshold) {
+    return {
+      amount: 0,
+      mode: 'free_threshold'
+    };
+  }
+
+  const flatRate = normalizeMoneyAmount(storeConfig.shipping_flat_rate);
+  const domesticRate = normalizeMoneyAmount(storeConfig.domestic_shipping_rate);
+  const internationalRate = normalizeMoneyAmount(storeConfig.international_shipping_rate);
+  const originCountry = normalizeCountry(storeConfig.shipping_origin_country);
+  const destinationCountry = normalizeCountry(shippingAddress?.country || '');
+
+  if (flatRate > 0) {
+    return {
+      amount: flatRate,
+      mode: 'flat'
+    };
+  }
+
+  if (!domesticRate && !internationalRate) {
+    return {
+      amount: 0,
+      mode: 'free'
+    };
+  }
+
+  if (!destinationCountry) {
+    if (domesticRate && internationalRate && domesticRate !== internationalRate) {
+      return {
+        amount: 0,
+        mode: 'destination_required'
+      };
+    }
+
+    return {
+      amount: domesticRate || internationalRate,
+      mode: 'estimated'
+    };
+  }
+
+  if (originCountry && destinationCountry === originCountry) {
+    return {
+      amount: domesticRate || internationalRate || 0,
+      mode: 'domestic'
+    };
+  }
+
+  if (originCountry && destinationCountry !== originCountry) {
+    return {
+      amount: internationalRate || domesticRate || 0,
+      mode: 'international'
+    };
+  }
+
+  return {
+    amount: domesticRate || internationalRate || 0,
+    mode: 'estimated'
+  };
+};
+
+const buildCheckoutQuote = ({
+  storeConfig,
+  subtotal,
+  discountTotal,
+  shippingAddress = {},
+  currency = 'NGN'
+}) => {
+  const safeSubtotal = roundMoney(Number(subtotal || 0));
+  const safeDiscountTotal = roundMoney(Math.min(safeSubtotal, Number(discountTotal || 0)));
+  const discountedSubtotal = roundMoney(Math.max(0, safeSubtotal - safeDiscountTotal));
+  const shipping = determineShippingCharge({
+    storeConfig,
+    discountedSubtotal,
+    shippingAddress
+  });
+  const shippingTotal = roundMoney(shipping.amount || 0);
+  const taxableAmount = roundMoney(
+    discountedSubtotal + (storeConfig.tax_apply_to_shipping ? shippingTotal : 0)
+  );
+  const taxRate = normalizePercentageRate(storeConfig.tax_rate);
+  const taxTotal = taxRate > 0
+    ? roundMoney((taxableAmount * taxRate) / 100)
+    : 0;
+  const total = roundMoney(discountedSubtotal + shippingTotal + taxTotal);
+
+  return {
+    currency: String(currency || 'NGN').trim().toUpperCase() || 'NGN',
+    subtotal: safeSubtotal,
+    discount_total: safeDiscountTotal,
+    discounted_subtotal: discountedSubtotal,
+    shipping_total: shippingTotal,
+    tax_total: taxTotal,
+    total,
+    tax_label: taxRate > 0 ? storeConfig.tax_label || DEFAULT_TAX_LABEL : null,
+    requires_shipping_destination: shipping.mode === 'destination_required',
+    pricing_snapshot: sanitizeJsonObject({
+      shipping: {
+        mode: shipping.mode,
+        origin_country: storeConfig.shipping_origin_country || null,
+        destination_country: shippingAddress?.country || null,
+        flat_rate: storeConfig.shipping_flat_rate,
+        domestic_rate: storeConfig.domestic_shipping_rate,
+        international_rate: storeConfig.international_shipping_rate,
+        free_shipping_threshold: storeConfig.free_shipping_threshold
+      },
+      tax: {
+        label: taxRate > 0 ? (storeConfig.tax_label || DEFAULT_TAX_LABEL) : null,
+        rate: taxRate,
+        apply_to_shipping: storeConfig.tax_apply_to_shipping,
+        taxable_amount: taxRate > 0 ? taxableAmount : 0
+      }
+    })
+  };
+};
 
 const hydrateOrder = async (db, orderId, storeId) => {
   const query = storeId
@@ -50,11 +215,15 @@ const hydrateOrder = async (db, orderId, storeId) => {
     ...order,
     subtotal: Number(order.subtotal),
     discount_total: Number(order.discount_total || 0),
+    shipping_total: Number(order.shipping_total || 0),
+    tax_total: Number(order.tax_total || 0),
     total: Number(order.total),
+    tax_label: order.tax_label || null,
     coupon_code: order.coupon_code || null,
     coupon: order.coupon_snapshot ? JSON.parse(order.coupon_snapshot) : null,
     shipping_address: order.shipping_address ? JSON.parse(order.shipping_address) : null,
     customer_snapshot: order.customer_snapshot ? JSON.parse(order.customer_snapshot) : null,
+    pricing_snapshot: order.pricing_snapshot ? JSON.parse(order.pricing_snapshot) : null,
     items: items.map((item) => ({
       ...item,
       price: Number(item.price),
@@ -80,6 +249,22 @@ const buildServiceHeaders = (req, config) => {
     actorType: req.authContext.actorType,
     secret: config.internalSharedSecret
   });
+};
+
+const fetchStoreCheckoutConfig = async ({ config, req, storeId }) => {
+  const response = await requestJson(
+    `${config.serviceUrls.store}/stores/${encodeURIComponent(storeId)}`,
+    {
+      headers: buildSystemHeaders({
+        config,
+        requestId: `${req.requestId || 'checkout'}:store:${storeId}`,
+        storeId
+      }),
+      timeoutMs: config.requestTimeoutMs
+    }
+  );
+
+  return sanitizeStoreCheckoutConfig(response?.store || {});
 };
 
 const requirePlatformOperator = (req) => {
@@ -282,6 +467,53 @@ const sanitizeCouponSnapshot = (coupon = null) => {
     starts_at: coupon.starts_at || null,
     ends_at: coupon.ends_at || null
   });
+};
+
+const buildCheckoutPricingContext = async ({
+  db,
+  config,
+  req,
+  subtotal,
+  couponCode,
+  shippingAddress,
+  currency
+}) => {
+  const normalizedSubtotal = roundMoney(Number(subtotal || 0));
+  const normalizedCouponCode = normalizeCouponCode(couponCode || '');
+  const couponPreview = normalizedCouponCode
+    ? await previewCouponForStore({
+      db,
+      storeId: Number(req.authContext.storeId),
+      code: normalizedCouponCode,
+      subtotal: normalizedSubtotal
+    })
+    : null;
+
+  if (normalizedCouponCode && (!couponPreview || !couponPreview.valid)) {
+    throw createHttpError(couponPreview?.status || 422, couponPreview?.reason || 'Coupon is not valid.', null, {
+      expose: true
+    });
+  }
+
+  const storeConfig = await fetchStoreCheckoutConfig({
+    config,
+    req,
+    storeId: Number(req.authContext.storeId)
+  });
+  const discountTotal = roundMoney(couponPreview?.discount_total || 0);
+  const quote = buildCheckoutQuote({
+    storeConfig,
+    subtotal: normalizedSubtotal,
+    discountTotal,
+    shippingAddress,
+    currency
+  });
+
+  return {
+    couponPreview,
+    discountTotal,
+    quote
+  };
 };
 
 const buildCouponDraft = ({ payload = {}, existingCoupon = null }) => {
@@ -576,11 +808,50 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     });
   }));
 
+  app.post('/checkout/quote', requireInternal, validate([
+    allowBodyFields(['shipping_address', 'currency', 'coupon_code']),
+    body('shipping_address').optional().isObject(),
+    body('currency').optional().isLength({ min: 3, max: 3 }).customSanitizer((value) => String(value).trim().toUpperCase()),
+    body('coupon_code').optional().trim().isLength({ max: 80 })
+  ]), asyncHandler(async (req, res) => {
+    if (!req.authContext.customerId) {
+      throw createHttpError(401, 'Customer authentication is required for checkout.', null, { expose: true });
+    }
+
+    const headers = buildServiceHeaders(req, config);
+    const cartResponse = await requestJson(`${config.serviceUrls.cart}/cart`, {
+      headers,
+      timeoutMs: config.requestTimeoutMs
+    });
+    const cart = cartResponse.cart;
+    if (!cart || !Array.isArray(cart.items) || !cart.items.length) {
+      throw createHttpError(400, 'Cart is empty.', null, { expose: true });
+    }
+
+    const shippingAddress = sanitizeJsonObject(req.body.shipping_address || {});
+    const pricingContext = await buildCheckoutPricingContext({
+      db,
+      config,
+      req,
+      subtotal: roundMoney(cart.total || 0),
+      couponCode: req.body.coupon_code || '',
+      shippingAddress,
+      currency: req.body.currency || 'NGN'
+    });
+
+    return res.json({
+      coupon: pricingContext.couponPreview?.coupon
+        ? sanitizeCouponSnapshot(pricingContext.couponPreview.coupon)
+        : null,
+      quote: pricingContext.quote
+    });
+  }));
+
   app.post('/checkout', requireInternal, validate([
     allowBodyFields(['shipping_address', 'customer', 'currency', 'email', 'coupon_code', 'provider', 'callback_url']),
     body('shipping_address').optional().isObject(),
     body('customer').optional().isObject(),
-    body('currency').optional().isLength({ min: 3, max: 3 }),
+    body('currency').optional().isLength({ min: 3, max: 3 }).customSanitizer((value) => String(value).trim().toUpperCase()),
     body('email').optional().isEmail().customSanitizer((value) => sanitizeEmail(value)),
     body('coupon_code').optional().trim().isLength({ max: 80 }),
     body('provider').optional().isIn(PAYMENT_PROVIDERS),
@@ -601,22 +872,23 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     }
 
     const subtotal = roundMoney(cart.total || 0);
-    const couponCode = normalizeCouponCode(req.body.coupon_code || '');
-    const couponPreview = couponCode
-      ? await previewCouponForStore({
-        db,
-        storeId: Number(req.authContext.storeId),
-        code: couponCode,
-        subtotal
-      })
-      : null;
-    if (couponCode && (!couponPreview || !couponPreview.valid)) {
-      throw createHttpError(couponPreview?.status || 422, couponPreview?.reason || 'Coupon is not valid.', null, {
-        expose: true
-      });
-    }
-    const discountTotal = roundMoney(couponPreview?.discount_total || 0);
-    const orderTotal = roundMoney(couponPreview?.total || subtotal);
+    const shippingAddress = sanitizeJsonObject(req.body.shipping_address || {});
+    const customerSnapshot = sanitizeJsonObject(req.body.customer || {});
+    const pricingContext = await buildCheckoutPricingContext({
+      db,
+      config,
+      req,
+      subtotal,
+      couponCode: req.body.coupon_code || '',
+      shippingAddress,
+      currency: req.body.currency || 'NGN'
+    });
+    const couponPreview = pricingContext.couponPreview;
+    const quote = pricingContext.quote;
+    const discountTotal = quote.discount_total;
+    const shippingTotal = quote.shipping_total;
+    const taxTotal = quote.tax_total;
+    const orderTotal = quote.total;
 
     const reservation = await requestJson(`${config.serviceUrls.product}/inventory/reservations`, {
       method: 'POST',
@@ -632,17 +904,16 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     });
     const reservationId = reservation.reservation_id;
 
-    const shippingAddress = sanitizeJsonObject(req.body.shipping_address || {});
-    const customerSnapshot = sanitizeJsonObject(req.body.customer || {});
     let orderId = null;
     try {
       orderId = await db.withTransaction(async (connection) => {
         const [orderResult] = await connection.execute(
           `
             INSERT INTO orders (
-              store_id, customer_id, status, payment_status, reservation_id, subtotal, discount_total, total,
-              currency, coupon_code, coupon_snapshot, shipping_address, customer_snapshot
-            ) VALUES (?, ?, 'pending', 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              store_id, customer_id, status, payment_status, reservation_id, subtotal, discount_total, shipping_total,
+              tax_total, total, currency, tax_label, coupon_code, coupon_snapshot, shipping_address, customer_snapshot,
+              pricing_snapshot
+            ) VALUES (?, ?, 'pending', 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `,
           [
             Number(req.authContext.storeId),
@@ -650,12 +921,16 @@ const registerRoutes = async ({ app, db, bus, config }) => {
             reservationId,
             subtotal,
             discountTotal,
+            shippingTotal,
+            taxTotal,
             orderTotal,
-            req.body.currency || 'NGN',
+            quote.currency,
+            quote.tax_label,
             couponPreview?.coupon?.code || null,
             couponPreview?.coupon ? JSON.stringify(sanitizeCouponSnapshot(couponPreview.coupon)) : null,
             JSON.stringify(shippingAddress),
-            JSON.stringify(customerSnapshot)
+            JSON.stringify(customerSnapshot),
+            JSON.stringify(quote.pricing_snapshot || {})
           ]
         );
 
@@ -722,7 +997,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
           store_id: Number(req.authContext.storeId),
           customer_id: Number(req.authContext.customerId),
           amount: orderTotal,
-          currency: req.body.currency || 'NGN',
+          currency: quote.currency,
           email: req.body.email || customerSnapshot.email || null,
           provider: req.body.provider || 'paystack',
           callback_url: req.body.callback_url || null,
@@ -802,7 +1077,12 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       order_id: order.id,
       store_id: order.store_id,
       customer_id: order.customer_id,
-      total: order.total
+      subtotal: order.subtotal,
+      discount_total: order.discount_total,
+      shipping_total: order.shipping_total,
+      tax_total: order.tax_total,
+      total: order.total,
+      currency: order.currency
     });
     await createAuditLog(db, {
       actorType: req.authContext.actorType || 'customer',
@@ -814,6 +1094,10 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       details: {
         status: order.status,
         payment_status: order.payment_status,
+        subtotal: Number(order.subtotal),
+        discount_total: Number(order.discount_total),
+        shipping_total: Number(order.shipping_total || 0),
+        tax_total: Number(order.tax_total || 0),
         total: Number(order.total),
         currency: order.currency,
         item_count: Array.isArray(order.items) ? order.items.length : 0,

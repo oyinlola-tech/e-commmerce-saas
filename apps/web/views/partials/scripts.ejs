@@ -337,6 +337,82 @@
       return data;
     };
 
+    const formatExactCurrency = (value, currency) => {
+      const activeContext = window.currencyContext || initialCurrencyContext;
+      return new Intl.NumberFormat(activeContext.locale || 'en-US', {
+        style: 'currency',
+        currency: String(currency || activeContext.baseCurrency || 'USD').trim().toUpperCase() || 'USD'
+      }).format(Number(value || 0));
+    };
+
+    const requestCheckoutQuote = async (url, payload = {}) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRF-Token': getCsrfToken()
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || data.message || 'Unable to calculate checkout totals right now.');
+      }
+
+      return data;
+    };
+
+    const updateCheckoutQuoteView = (quote = null, options = {}) => {
+      const activeQuote = quote && typeof quote === 'object' ? quote : null;
+      const currency = activeQuote?.currency || options.currency || 'USD';
+      const setText = (selector, value) => {
+        const node = document.querySelector(selector);
+        if (node) {
+          node.textContent = value;
+        }
+      };
+
+      if (activeQuote) {
+        setText('[data-checkout-subtotal]', formatExactCurrency(activeQuote.subtotal || 0, currency));
+        const discountValue = Number(activeQuote.discount_total || 0);
+        setText(
+          '[data-checkout-discount]',
+          discountValue > 0 ? `-${formatExactCurrency(discountValue, currency)}` : formatExactCurrency(0, currency)
+        );
+        setText('[data-checkout-shipping]', formatExactCurrency(activeQuote.shipping_total || 0, currency));
+        setText('[data-checkout-tax-label]', activeQuote.tax_label || 'Tax');
+        setText('[data-checkout-tax]', formatExactCurrency(activeQuote.tax_total || 0, currency));
+        setText('[data-checkout-total]', formatExactCurrency(activeQuote.total || 0, currency));
+      }
+
+      const statusNode = document.querySelector('[data-checkout-quote-status]');
+      if (!statusNode) {
+        return;
+      }
+
+      if (options.error) {
+        statusNode.textContent = options.error;
+        statusNode.classList.remove('text-slate-500');
+        statusNode.classList.add('text-rose-600');
+        return;
+      }
+
+      statusNode.classList.remove('text-rose-600');
+      statusNode.classList.add('text-slate-500');
+      if (!activeQuote) {
+        statusNode.textContent = 'Enter your delivery details to preview the final shipping and tax breakdown before redirecting to payment.';
+        return;
+      }
+
+      statusNode.textContent = activeQuote.requires_shipping_destination
+        ? 'Add a destination country to finalise shipping. A flat or free-shipping rule may still apply after address validation.'
+        : 'Checkout totals are now aligned to the amount that will be created on the payment provider.';
+    };
+
     window.openCart = () => {
       const drawer = getCartDrawer();
       const overlay = getCartOverlay();
@@ -567,6 +643,73 @@
 
       const checkoutForm = document.querySelector('[data-checkout-form]');
       if (checkoutForm) {
+        const quoteEndpoint = checkoutForm.dataset.checkoutQuoteEndpoint || '';
+        const orderCurrency = checkoutForm.dataset.checkoutOrderCurrency || 'USD';
+        let quoteRefreshTimer = null;
+        let quoteRequestSequence = 0;
+
+        const readCheckoutQuotePayload = () => ({
+          name: checkoutForm.querySelector('[name="name"]')?.value || '',
+          address: checkoutForm.querySelector('[name="address"]')?.value || '',
+          city: checkoutForm.querySelector('[name="city"]')?.value || '',
+          country: checkoutForm.querySelector('[name="country"]')?.value || '',
+          postal_code: checkoutForm.querySelector('[name="postal_code"]')?.value || ''
+        });
+
+        const refreshCheckoutQuote = async () => {
+          if (!quoteEndpoint) {
+            return;
+          }
+
+          const requestId = ++quoteRequestSequence;
+          try {
+            const response = await requestCheckoutQuote(quoteEndpoint, readCheckoutQuotePayload());
+            if (requestId !== quoteRequestSequence) {
+              return;
+            }
+
+            updateCheckoutQuoteView(response.quote || null, {
+              currency: orderCurrency
+            });
+          } catch (error) {
+            if (requestId !== quoteRequestSequence) {
+              return;
+            }
+
+            updateCheckoutQuoteView(null, {
+              currency: orderCurrency,
+              error: error.message || 'Unable to calculate checkout totals right now.'
+            });
+          }
+        };
+
+        const queueCheckoutQuoteRefresh = () => {
+          window.clearTimeout(quoteRefreshTimer);
+          quoteRefreshTimer = window.setTimeout(() => {
+            refreshCheckoutQuote().catch(() => {});
+          }, 250);
+        };
+
+        updateCheckoutQuoteView(null, {
+          currency: orderCurrency
+        });
+        queueCheckoutQuoteRefresh();
+
+        ['input', 'change'].forEach((eventName) => {
+          checkoutForm.addEventListener(eventName, (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+              return;
+            }
+
+            if (!target.closest('[name="name"], [name="address"], [name="city"], [name="country"], [name="postal_code"]')) {
+              return;
+            }
+
+            queueCheckoutQuoteRefresh();
+          });
+        });
+
         checkoutForm.addEventListener('submit', () => {
           const submitButton = checkoutForm.querySelector('[data-checkout-submit]');
           if (!submitButton) {

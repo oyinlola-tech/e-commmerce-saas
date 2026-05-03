@@ -646,6 +646,14 @@ const createAppHelpers = (context) => {
       font_preset: sanitizePlainText(req.body.font_preset || 'jakarta', { maxLength: 50 }) || 'jakarta',
       support_email: sanitizeEmail(req.body.support_email || ''),
       contact_phone: sanitizePlainText(req.body.contact_phone || '', { maxLength: 50 }),
+      shipping_origin_country: sanitizePlainText(req.body.shipping_origin_country || '', { maxLength: 120 }) || null,
+      shipping_flat_rate: Math.max(0, Number(req.body.shipping_flat_rate || 0)),
+      domestic_shipping_rate: Math.max(0, Number(req.body.domestic_shipping_rate || 0)),
+      international_shipping_rate: Math.max(0, Number(req.body.international_shipping_rate || 0)),
+      free_shipping_threshold: Math.max(0, Number(req.body.free_shipping_threshold || 0)),
+      tax_rate: Math.max(0, Math.min(100, Number(req.body.tax_rate || 0))),
+      tax_label: sanitizePlainText(req.body.tax_label || '', { maxLength: 80 }) || null,
+      tax_apply_to_shipping: parseCheckbox(req.body.tax_apply_to_shipping),
       ssl_status: options.ssl_status || 'pending',
       is_active: options.is_active === undefined ? true : Boolean(options.is_active)
     };

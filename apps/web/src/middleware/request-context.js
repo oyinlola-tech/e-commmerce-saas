@@ -141,6 +141,13 @@ const applyRequestContextMiddleware = (app, context, helpers) => {
       res.locals.baseCurrency = currencyContext.baseCurrency;
       res.locals.formatMoney = (amount) => currencyContext.formatAmount(amount);
       res.locals.convertMoney = (amount) => currencyContext.convertAmount(amount);
+      res.locals.formatMoneyFor = (amount, currency) => {
+        const targetCurrency = String(currency || currencyContext.baseCurrency || 'USD').trim().toUpperCase() || 'USD';
+        return new Intl.NumberFormat(currencyContext.locale || 'en-US', {
+          style: 'currency',
+          currency: targetCurrency
+        }).format(Number(amount || 0));
+      };
       res.locals.storefrontUrl = buildStorefrontUrl(activeStore);
       res.locals.storeAdminUrl = buildStoreAdminUrl(activeStore);
       res.locals.csrfToken = generateCsrfToken(req, res);

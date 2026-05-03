@@ -1,8 +1,13 @@
 <%
   const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
+  const orderMoney = typeof formatMoneyFor === 'function'
+    ? ((value) => formatMoneyFor(value, (order && order.currency) ? order.currency : 'USD'))
+    : money;
   const orderData = order || {};
   const orderItems = Array.isArray(orderData.items) ? orderData.items : [];
   const discountTotal = Number(orderData.discount_total || 0);
+  const shippingTotal = Number(orderData.shipping_total || 0);
+  const taxTotal = Number(orderData.tax_total || 0);
   const manualStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'payment_failed', 'refund_pending', 'refunded'];
   const normalizedOrderStatus = String(orderData.status || 'pending').toLowerCase();
   const normalizedPaymentStatus = String(orderData.payment_status || 'pending').toLowerCase();
@@ -147,12 +152,12 @@
             <article class="flex flex-col gap-4 rounded-3xl border border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div class="flex items-center gap-4">
                 <img src="<%= item.image || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=300&q=80' %>" alt="<%= item.name %>" loading="lazy" class="h-16 w-16 rounded-2xl object-cover">
-                <div>
-                  <h3 class="text-sm font-semibold text-gray-900"><%= item.name %></h3>
-                  <p class="mt-1 text-sm text-gray-500">Qty <%= item.quantity || 1 %></p>
-                </div>
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900"><%= item.name %></h3>
+                <p class="mt-1 text-sm text-gray-500">Qty <%= item.quantity || 1 %></p>
               </div>
-              <p class="text-base font-semibold text-gray-900"><%= money((item.price || 0) * (item.quantity || 1)) %></p>
+            </div>
+              <p class="text-base font-semibold text-gray-900"><%= orderMoney((item.price || 0) * (item.quantity || 1)) %></p>
             </article>
           <% }) %>
         </div>
@@ -170,15 +175,27 @@
         </div>
         <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
           <span>Subtotal</span>
-          <span><%= money(orderData.subtotal || 0) %></span>
+          <span><%= orderMoney(orderData.subtotal || 0) %></span>
         </div>
         <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
           <span>Discount</span>
-          <span class="<%= discountTotal > 0 ? 'font-semibold text-emerald-700' : '' %>"><%= discountTotal > 0 ? `-${money(discountTotal)}` : money(0) %></span>
+          <span class="<%= discountTotal > 0 ? 'font-semibold text-emerald-700' : '' %>"><%= discountTotal > 0 ? `-${orderMoney(discountTotal)}` : orderMoney(0) %></span>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
+          <span>Shipping</span>
+          <span><%= orderMoney(shippingTotal) %></span>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
+          <span><%= orderData.tax_label || 'Tax' %></span>
+          <span><%= orderMoney(taxTotal) %></span>
         </div>
         <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
           <span>Payment status</span>
           <span><%= orderData.payment_status || 'pending' %></span>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
+          <span>Currency</span>
+          <span><%= orderData.currency || 'USD' %></span>
         </div>
         <div class="mt-4 flex items-center justify-between text-sm text-gray-600">
           <span>Payment reference</span>
@@ -186,7 +203,7 @@
         </div>
         <div class="mt-4 flex items-center justify-between text-lg font-semibold text-gray-900">
           <span>Total</span>
-          <span><%= money(orderData.total || 0) %></span>
+          <span><%= orderMoney(orderData.total || 0) %></span>
         </div>
       </div>
     </section>

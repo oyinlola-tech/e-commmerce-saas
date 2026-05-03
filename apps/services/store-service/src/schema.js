@@ -23,7 +23,63 @@ const schemaStatements = [
       KEY idx_stores_custom_domain_lookup (custom_domain),
       KEY idx_stores_subdomain_lookup (subdomain)
     )
-  `
+  `,
+  {
+    sql: `
+      ALTER TABLE stores
+      ADD COLUMN shipping_origin_country VARCHAR(120) NULL AFTER contact_phone
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE stores
+      ADD COLUMN shipping_flat_rate DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER shipping_origin_country
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE stores
+      ADD COLUMN domestic_shipping_rate DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER shipping_flat_rate
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE stores
+      ADD COLUMN international_shipping_rate DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER domestic_shipping_rate
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE stores
+      ADD COLUMN free_shipping_threshold DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER international_shipping_rate
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE stores
+      ADD COLUMN tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0 AFTER free_shipping_threshold
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE stores
+      ADD COLUMN tax_label VARCHAR(80) NULL AFTER tax_rate
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  },
+  {
+    sql: `
+      ALTER TABLE stores
+      ADD COLUMN tax_apply_to_shipping TINYINT(1) NOT NULL DEFAULT 0 AFTER tax_label
+    `,
+    ignoreErrorCodes: ['ER_DUP_FIELDNAME']
+  }
 ];
 
 module.exports = {

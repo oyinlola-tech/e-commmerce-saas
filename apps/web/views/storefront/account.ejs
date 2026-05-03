@@ -1,5 +1,12 @@
 <%
   const money = typeof formatMoney === 'function' ? formatMoney : ((value) => value);
+  const orderMoney = (order, value) => {
+    if (typeof formatMoneyFor === 'function') {
+      return formatMoneyFor(value, (order && order.currency) ? order.currency : 'USD');
+    }
+
+    return money(value);
+  };
   const orders = Array.isArray(customerOrders) ? customerOrders : [];
   const customerData = customer || {};
   const wishlistItems = Array.isArray(wishlistProducts) ? wishlistProducts : [];
@@ -56,17 +63,17 @@
                 </div>
                 <div class="text-right">
                   <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700"><%= order.status %></span>
-                  <p class="mt-3 text-lg font-semibold text-slate-950"><%= money(order.total || 0) %></p>
+                  <p class="mt-3 text-lg font-semibold text-slate-950"><%= orderMoney(order, order.total || 0) %></p>
                 </div>
               </div>
               <div class="mt-4 grid gap-3 sm:grid-cols-3">
                 <div class="rounded-2xl bg-slate-50 p-4">
                   <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Subtotal</p>
-                  <p class="mt-2 text-sm font-semibold text-slate-900"><%= money(order.subtotal || 0) %></p>
+                  <p class="mt-2 text-sm font-semibold text-slate-900"><%= orderMoney(order, order.subtotal || 0) %></p>
                 </div>
                 <div class="rounded-2xl bg-slate-50 p-4">
                   <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Discount</p>
-                  <p class="mt-2 text-sm font-semibold text-emerald-700"><%= orderDiscount > 0 ? `-${money(orderDiscount)}` : money(0) %></p>
+                  <p class="mt-2 text-sm font-semibold text-emerald-700"><%= orderDiscount > 0 ? `-${orderMoney(order, orderDiscount)}` : orderMoney(order, 0) %></p>
                 </div>
                 <div class="rounded-2xl bg-slate-50 p-4">
                   <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Coupon</p>

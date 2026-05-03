@@ -56,6 +56,14 @@ const sanitizeStore = (store) => {
     font_preset: store.font_preset,
     support_email: store.support_email,
     contact_phone: store.contact_phone,
+    shipping_origin_country: store.shipping_origin_country || null,
+    shipping_flat_rate: Number(store.shipping_flat_rate || 0),
+    domestic_shipping_rate: Number(store.domestic_shipping_rate || 0),
+    international_shipping_rate: Number(store.international_shipping_rate || 0),
+    free_shipping_threshold: Number(store.free_shipping_threshold || 0),
+    tax_rate: Number(store.tax_rate || 0),
+    tax_label: store.tax_label || null,
+    tax_apply_to_shipping: Boolean(store.tax_apply_to_shipping),
     is_active: Boolean(store.is_active),
     ssl_status: store.ssl_status,
     created_at: store.created_at,
@@ -196,6 +204,28 @@ const normalizeSubdomain = (value = '') => {
   return sanitizeSlug(value).slice(0, 120);
 };
 
+const roundMoney = (value = 0) => {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+};
+
+const normalizeMoneyAmount = (value = 0) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return roundMoney(parsed);
+};
+
+const normalizeTaxRate = (value = 0) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return Math.min(100, roundMoney(parsed));
+};
+
 const getLogoUploadDirectory = (config) => {
   return process.env.STORE_LOGO_UPLOAD_DIR
     ? path.resolve(process.env.STORE_LOGO_UPLOAD_DIR)
@@ -248,6 +278,14 @@ const buildStoreAuditDetails = ({ existingStore = null, nextStore = null, payloa
           font_preset: existingStore.font_preset,
           support_email: existingStore.support_email,
           contact_phone: existingStore.contact_phone,
+          shipping_origin_country: existingStore.shipping_origin_country,
+          shipping_flat_rate: Number(existingStore.shipping_flat_rate || 0),
+          domestic_shipping_rate: Number(existingStore.domestic_shipping_rate || 0),
+          international_shipping_rate: Number(existingStore.international_shipping_rate || 0),
+          free_shipping_threshold: Number(existingStore.free_shipping_threshold || 0),
+          tax_rate: Number(existingStore.tax_rate || 0),
+          tax_label: existingStore.tax_label,
+          tax_apply_to_shipping: Boolean(existingStore.tax_apply_to_shipping),
           is_active: Boolean(existingStore.is_active),
           ssl_status: existingStore.ssl_status
         }
@@ -263,6 +301,14 @@ const buildStoreAuditDetails = ({ existingStore = null, nextStore = null, payloa
           font_preset: nextStore.font_preset,
           support_email: nextStore.support_email,
           contact_phone: nextStore.contact_phone,
+          shipping_origin_country: nextStore.shipping_origin_country,
+          shipping_flat_rate: Number(nextStore.shipping_flat_rate || 0),
+          domestic_shipping_rate: Number(nextStore.domestic_shipping_rate || 0),
+          international_shipping_rate: Number(nextStore.international_shipping_rate || 0),
+          free_shipping_threshold: Number(nextStore.free_shipping_threshold || 0),
+          tax_rate: Number(nextStore.tax_rate || 0),
+          tax_label: nextStore.tax_label,
+          tax_apply_to_shipping: Boolean(nextStore.tax_apply_to_shipping),
           is_active: Boolean(nextStore.is_active),
           ssl_status: nextStore.ssl_status
         }
@@ -282,7 +328,9 @@ const updateStoreRecord = async ({ db, cache, bus, storeId, existingStore, paylo
     `
       UPDATE stores
       SET name = ?, custom_domain = ?, logo_url = ?, theme_color = ?, store_type = ?, template_key = ?,
-          font_preset = ?, support_email = ?, contact_phone = ?, is_active = ?, ssl_status = ?
+          font_preset = ?, support_email = ?, contact_phone = ?, shipping_origin_country = ?, shipping_flat_rate = ?,
+          domestic_shipping_rate = ?, international_shipping_rate = ?, free_shipping_threshold = ?, tax_rate = ?,
+          tax_label = ?, tax_apply_to_shipping = ?, is_active = ?, ssl_status = ?
       WHERE id = ?
     `,
     [
@@ -295,6 +343,16 @@ const updateStoreRecord = async ({ db, cache, bus, storeId, existingStore, paylo
       theme.font_preset,
       payload.support_email === undefined ? existingStore.support_email : payload.support_email,
       payload.contact_phone === undefined ? existingStore.contact_phone : payload.contact_phone,
+      payload.shipping_origin_country === undefined ? existingStore.shipping_origin_country : payload.shipping_origin_country,
+      payload.shipping_flat_rate === undefined ? Number(existingStore.shipping_flat_rate || 0) : payload.shipping_flat_rate,
+      payload.domestic_shipping_rate === undefined ? Number(existingStore.domestic_shipping_rate || 0) : payload.domestic_shipping_rate,
+      payload.international_shipping_rate === undefined ? Number(existingStore.international_shipping_rate || 0) : payload.international_shipping_rate,
+      payload.free_shipping_threshold === undefined ? Number(existingStore.free_shipping_threshold || 0) : payload.free_shipping_threshold,
+      payload.tax_rate === undefined ? Number(existingStore.tax_rate || 0) : payload.tax_rate,
+      payload.tax_label === undefined ? existingStore.tax_label : payload.tax_label,
+      typeof payload.tax_apply_to_shipping === 'undefined'
+        ? Number(Boolean(existingStore.tax_apply_to_shipping))
+        : Number(Boolean(payload.tax_apply_to_shipping)),
       typeof payload.is_active === 'undefined' ? existingStore.is_active : Number(Boolean(payload.is_active)),
       payload.ssl_status || existingStore.ssl_status,
       storeId
@@ -381,6 +439,14 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       'font_preset',
       'support_email',
       'contact_phone',
+      'shipping_origin_country',
+      'shipping_flat_rate',
+      'domestic_shipping_rate',
+      'international_shipping_rate',
+      'free_shipping_threshold',
+      'tax_rate',
+      'tax_label',
+      'tax_apply_to_shipping',
       'is_active',
       'ssl_status',
       'owner_id'
@@ -392,6 +458,14 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     commonRules.optionalPlainText('theme_color', 20),
     commonRules.optionalPlainText('support_email', 190),
     commonRules.phone('contact_phone'),
+    commonRules.optionalPlainText('shipping_origin_country', 120),
+    body('shipping_flat_rate').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('domestic_shipping_rate').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('international_shipping_rate').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('free_shipping_threshold').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('tax_rate').optional({ values: 'falsy' }).isFloat({ min: 0, max: 100 }).toFloat(),
+    commonRules.optionalPlainText('tax_label', 80),
+    body('tax_apply_to_shipping').optional().isBoolean().toBoolean(),
     body('is_active').optional().isBoolean().toBoolean(),
     commonRules.optionalPlainText('ssl_status', 40)
   ]), asyncHandler(async (req, res) => {
@@ -434,8 +508,10 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       `
         INSERT INTO stores (
           owner_id, name, subdomain, custom_domain, logo_url, theme_color, store_type,
-          template_key, font_preset, support_email, contact_phone, is_active, ssl_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          template_key, font_preset, support_email, contact_phone, shipping_origin_country, shipping_flat_rate,
+          domestic_shipping_rate, international_shipping_rate, free_shipping_threshold, tax_rate, tax_label,
+          tax_apply_to_shipping, is_active, ssl_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         ownerId,
@@ -449,6 +525,14 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
         theme.font_preset,
         req.body.support_email || null,
         req.body.contact_phone || null,
+        sanitizePlainText(req.body.shipping_origin_country || '', { maxLength: 120 }) || null,
+        normalizeMoneyAmount(req.body.shipping_flat_rate || 0),
+        normalizeMoneyAmount(req.body.domestic_shipping_rate || 0),
+        normalizeMoneyAmount(req.body.international_shipping_rate || 0),
+        normalizeMoneyAmount(req.body.free_shipping_threshold || 0),
+        normalizeTaxRate(req.body.tax_rate || 0),
+        sanitizePlainText(req.body.tax_label || '', { maxLength: 80 }) || null,
+        req.body.tax_apply_to_shipping ? 1 : 0,
         req.body.is_active === false ? 0 : 1,
         req.body.ssl_status || 'pending'
       ]
@@ -531,6 +615,14 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       'font_preset',
       'support_email',
       'contact_phone',
+      'shipping_origin_country',
+      'shipping_flat_rate',
+      'domestic_shipping_rate',
+      'international_shipping_rate',
+      'free_shipping_threshold',
+      'tax_rate',
+      'tax_label',
+      'tax_apply_to_shipping',
       'is_active',
       'ssl_status'
     ]),
@@ -541,6 +633,14 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     commonRules.optionalPlainText('theme_color', 20),
     commonRules.optionalPlainText('support_email', 190),
     commonRules.phone('contact_phone'),
+    commonRules.optionalPlainText('shipping_origin_country', 120),
+    body('shipping_flat_rate').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('domestic_shipping_rate').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('international_shipping_rate').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('free_shipping_threshold').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('tax_rate').optional({ values: 'falsy' }).isFloat({ min: 0, max: 100 }).toFloat(),
+    commonRules.optionalPlainText('tax_label', 80),
+    body('tax_apply_to_shipping').optional().isBoolean().toBoolean(),
     body('is_active').optional().isBoolean().toBoolean(),
     commonRules.optionalPlainText('ssl_status', 40)
   ]), asyncHandler(async (req, res) => {
@@ -616,6 +716,14 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
       'font_preset',
       'support_email',
       'contact_phone',
+      'shipping_origin_country',
+      'shipping_flat_rate',
+      'domestic_shipping_rate',
+      'international_shipping_rate',
+      'free_shipping_threshold',
+      'tax_rate',
+      'tax_label',
+      'tax_apply_to_shipping',
       'is_active',
       'ssl_status'
     ]),
@@ -625,6 +733,14 @@ const registerRoutes = async ({ app, db, bus, config, cache }) => {
     commonRules.optionalPlainText('theme_color', 20),
     commonRules.optionalPlainText('support_email', 190),
     commonRules.phone('contact_phone'),
+    commonRules.optionalPlainText('shipping_origin_country', 120),
+    body('shipping_flat_rate').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('domestic_shipping_rate').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('international_shipping_rate').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('free_shipping_threshold').optional({ values: 'falsy' }).isFloat({ min: 0 }).toFloat(),
+    body('tax_rate').optional({ values: 'falsy' }).isFloat({ min: 0, max: 100 }).toFloat(),
+    commonRules.optionalPlainText('tax_label', 80),
+    body('tax_apply_to_shipping').optional().isBoolean().toBoolean(),
     body('is_active').optional().isBoolean().toBoolean(),
     commonRules.optionalPlainText('ssl_status', 40)
   ]), asyncHandler(async (req, res) => {
