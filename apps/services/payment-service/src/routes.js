@@ -1,5 +1,5 @@
 const { body, param } = require('express-validator');
-const { randomUUID } = require('crypto');
+const { randomUUID, createHash } = require('crypto');
 const {
   requireInternalRequest,
   encryptText,
@@ -28,6 +28,13 @@ const SUCCESS_STATUSES = new Set(['success', 'successful', 'paid', 'succeeded'])
 const FAILURE_STATUSES = new Set(['failed', 'abandoned', 'cancelled', 'error']);
 const REFUND_STATUSES = new Set(['reversed', 'refunded']);
 const COMPLETED_REFUND_STATUSES = new Set(['processed', 'successful', 'completed', 'refunded']);
+const PAYMENT_WEBHOOK_RETRY_LIMIT = Math.max(1, Number(process.env.PAYMENT_WEBHOOK_RETRY_LIMIT || 6));
+const PAYMENT_WEBHOOK_RETRY_DELAY_MS = Math.max(1000, Number(process.env.PAYMENT_WEBHOOK_RETRY_DELAY_MS || 30 * 1000));
+const PAYMENT_WEBHOOK_RETRY_MAX_DELAY_MS = Math.max(
+  PAYMENT_WEBHOOK_RETRY_DELAY_MS,
+  Number(process.env.PAYMENT_WEBHOOK_RETRY_MAX_DELAY_MS || 15 * 60 * 1000)
+);
+const PAYMENT_RECONCILIATION_DELAY_MS = Math.max(60 * 1000, Number(process.env.PAYMENT_RECONCILIATION_DELAY_MS || 5 * 60 * 1000));
 
 const buildRequireInternal = (config) => {
   return requireInternalRequest(config.internalSharedSecret, {
@@ -131,6 +138,52 @@ const parsePaymentMetadata = (value) => {
   } catch {
     return {};
   }
+};
+
+const parseWebhookPayload = (value) => {
+  if (!value) {
+    return {};
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const sanitizeErrorMessage = (error, fallback = 'Unknown payment processing error.') => {
+  return sanitizePlainText(error?.message || fallback, { maxLength: 500 }) || fallback;
+};
+
+const calculateRetryDelayMs = (attempt) => {
+  const safeAttempt = Math.max(1, Number(attempt || 1));
+  return Math.min(PAYMENT_WEBHOOK_RETRY_MAX_DELAY_MS, PAYMENT_WEBHOOK_RETRY_DELAY_MS * Math.pow(2, safeAttempt - 1));
+};
+
+const buildNextReconciliationAt = (status, baseDate = new Date()) => {
+  return normalizePaymentStatus(status) === 'pending'
+    ? new Date(baseDate.getTime() + PAYMENT_RECONCILIATION_DELAY_MS)
+    : null;
+};
+
+const buildNextWebhookRetryAt = (attempts, baseDate = new Date()) => {
+  return new Date(baseDate.getTime() + calculateRetryDelayMs(attempts));
+};
+
+const isRetriablePaymentError = (error) => {
+  const status = Number(error?.status || error?.statusCode || 0);
+  if (!status || status >= 500 || status === 429) {
+    return true;
+  }
+
+  const code = String(error?.code || '').trim().toUpperCase();
+  return ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENOTFOUND'].includes(code);
 };
 
 const resolvePaystackSecretKey = ({ paymentScope, storeConfig, config }) => {
@@ -255,6 +308,10 @@ const getPaymentByReference = async (db, reference) => {
   return (await db.query('SELECT * FROM payments WHERE reference = ?', [reference]))[0] || null;
 };
 
+const getPaymentById = async (db, paymentId) => {
+  return (await db.query('SELECT * FROM payments WHERE id = ?', [paymentId]))[0] || null;
+};
+
 const getStoreProviderConfig = async (db, storeId, provider) => {
   if (!storeId) {
     return null;
@@ -264,6 +321,10 @@ const getStoreProviderConfig = async (db, storeId, provider) => {
     'SELECT * FROM payment_provider_configs WHERE store_id = ? AND provider = ?',
     [storeId, provider]
   ))[0] || null;
+};
+
+const getPaymentWebhookById = async (db, webhookId) => {
+  return (await db.query('SELECT * FROM payment_webhooks WHERE id = ?', [webhookId]))[0] || null;
 };
 
 const getProviderPublicKey = ({ provider, paymentScope, storeConfig }) => {
@@ -606,12 +667,25 @@ const persistPaymentOutcome = async ({
     nextMetadata.refund = sanitizeJsonObject(refund);
   }
 
+  const nextReconciliationAt = buildNextReconciliationAt(normalizedStatus);
+
   await db.execute(
-    'UPDATE payments SET status = ?, provider_session_id = ?, metadata = ? WHERE id = ?',
+    `
+      UPDATE payments
+      SET status = ?,
+          provider_session_id = ?,
+          metadata = ?,
+          verified_at = CURRENT_TIMESTAMP,
+          verification_attempts = verification_attempts + 1,
+          next_reconciliation_at = ?,
+          last_reconciliation_error = NULL
+      WHERE id = ?
+    `,
     [
       normalizedStatus,
       providerSessionId || payment.provider_session_id || providerReference || null,
       JSON.stringify(nextMetadata),
+      nextReconciliationAt,
       payment.id
     ]
   );
@@ -644,6 +718,37 @@ const persistPaymentOutcome = async ({
   return freshPayment;
 };
 
+const recordPaymentVerificationFailure = async (db, payment, error, options = {}) => {
+  if (!payment?.id) {
+    return null;
+  }
+
+  const retryable = options.retryable === undefined
+    ? isRetriablePaymentError(error)
+    : Boolean(options.retryable);
+  const nextReconciliationAt = retryable
+    ? buildNextReconciliationAt('pending')
+    : null;
+
+  await db.execute(
+    `
+      UPDATE payments
+      SET verification_attempts = verification_attempts + 1,
+          last_reconciliation_error = ?,
+          next_reconciliation_at = ?,
+          verified_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [
+      sanitizeErrorMessage(error),
+      nextReconciliationAt,
+      payment.id
+    ]
+  );
+
+  return getPaymentById(db, payment.id);
+};
+
 const verifyAndRecordPayment = async ({ db, bus, config, payment, webhookEvent = '' }) => {
   if (!payment) {
     throw createHttpError(404, 'Payment not found.', null, { expose: true });
@@ -659,7 +764,22 @@ const verifyAndRecordPayment = async ({ db, bus, config, payment, webhookEvent =
   });
 
   if (!providerPayload) {
-    return payment;
+    await db.execute(
+      `
+        UPDATE payments
+        SET verified_at = CURRENT_TIMESTAMP,
+            verification_attempts = verification_attempts + 1,
+            next_reconciliation_at = ?,
+            last_reconciliation_error = NULL
+        WHERE id = ?
+      `,
+      [
+        buildNextReconciliationAt('pending'),
+        payment.id
+      ]
+    );
+
+    return getPaymentById(db, payment.id) || payment;
   }
 
   assertVerifiedPaymentMatches({
@@ -724,6 +844,114 @@ const extractWebhookStatus = (provider, payload = {}) => {
   return normalizePaymentStatus(payload.status || payload.data?.status || payload.event || 'received');
 };
 
+const extractWebhookEventType = (provider, payload = {}) => {
+  const rawValue = provider === 'flutterwave'
+    ? payload.type || payload.event || payload.data?.type || payload.data?.event || ''
+    : payload.event || payload.type || payload.data?.event || payload.data?.type || '';
+  return sanitizePlainText(String(rawValue || '').trim().toLowerCase(), { maxLength: 120 });
+};
+
+const extractWebhookEventId = (provider, payload = {}) => {
+  if (provider === 'flutterwave') {
+    return sanitizePlainText(
+      payload.id
+      || payload.data?.id
+      || payload.data?.flw_ref
+      || payload.data?.tx_ref
+      || payload.data?.reference
+      || '',
+      { maxLength: 191 }
+    );
+  }
+
+  return sanitizePlainText(
+    payload.id
+    || payload.data?.id
+    || payload.data?.reference
+    || payload.data?.transaction_reference
+    || '',
+    { maxLength: 191 }
+  );
+};
+
+const buildWebhookIdempotencyKey = ({ provider, reference, eventType, payload = {} }) => {
+  const fingerprint = JSON.stringify({
+    provider,
+    reference: reference || '',
+    event_type: eventType || '',
+    event_id: extractWebhookEventId(provider, payload) || '',
+    status: extractWebhookStatus(provider, payload)
+  });
+
+  return createHash('sha256').update(fingerprint).digest('hex');
+};
+
+const upsertPaymentWebhook = async ({
+  db,
+  provider,
+  paymentId = null,
+  reference = null,
+  eventType = '',
+  idempotencyKey,
+  payload,
+  status = 'received'
+}) => {
+  const result = await db.execute(
+    `
+      INSERT INTO payment_webhooks (
+        provider, payment_id, reference, event_type, idempotency_key, payload, status,
+        attempts, last_error, next_retry_at, processed_at, dead_lettered_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, NULL)
+      ON DUPLICATE KEY UPDATE
+        id = LAST_INSERT_ID(id),
+        payment_id = COALESCE(VALUES(payment_id), payment_id),
+        reference = VALUES(reference),
+        event_type = VALUES(event_type),
+        payload = VALUES(payload)
+    `,
+    [
+      provider,
+      paymentId,
+      reference,
+      eventType || null,
+      idempotencyKey,
+      JSON.stringify(sanitizeJsonObject(payload || {})),
+      status
+    ]
+  );
+
+  return getPaymentWebhookById(db, result.insertId);
+};
+
+const updatePaymentWebhookState = async (db, webhookId, state = {}) => {
+  await db.execute(
+    `
+      UPDATE payment_webhooks
+      SET payment_id = COALESCE(?, payment_id),
+          status = ?,
+          attempts = ?,
+          last_error = ?,
+          next_retry_at = ?,
+          processed_at = ?,
+          dead_lettered_at = ?
+      WHERE id = ?
+    `,
+    [
+      state.paymentId ?? null,
+      state.status || 'received',
+      Number(state.attempts || 0),
+      state.lastError || null,
+      state.nextRetryAt || null,
+      state.processedAt || null,
+      state.deadLetteredAt || null,
+      webhookId
+    ]
+  );
+
+  return getPaymentWebhookById(db, webhookId);
+};
+
 const requireStoreOperator = (req) => {
   if (req.authContext.actorType !== 'platform_user') {
     throw createHttpError(403, 'Only store operators can perform this action.', null, { expose: true });
@@ -734,17 +962,109 @@ const requireStoreOperator = (req) => {
   }
 };
 
+const processStoredWebhookRecord = async ({
+  db,
+  bus,
+  config,
+  webhookRecord
+}) => {
+  const payload = parseWebhookPayload(webhookRecord?.payload);
+  const payment = webhookRecord?.payment_id
+    ? await getPaymentById(db, webhookRecord.payment_id)
+    : await getPaymentByReference(db, webhookRecord.reference);
+  const attempts = Number(webhookRecord?.attempts || 0) + 1;
+
+  if (!payment) {
+    const shouldRetry = attempts <= PAYMENT_WEBHOOK_RETRY_LIMIT;
+    return updatePaymentWebhookState(db, webhookRecord.id, {
+      paymentId: null,
+      status: shouldRetry ? 'payment_not_found' : 'dead_lettered',
+      attempts,
+      lastError: 'Payment could not be matched for webhook processing.',
+      nextRetryAt: shouldRetry ? buildNextWebhookRetryAt(attempts) : null,
+      processedAt: null,
+      deadLetteredAt: shouldRetry ? null : new Date()
+    });
+  }
+
+  try {
+    await verifyAndRecordPayment({
+      db,
+      bus,
+      config,
+      payment,
+      webhookEvent: webhookRecord.event_type || extractWebhookEventType(webhookRecord.provider, payload)
+    });
+
+    return updatePaymentWebhookState(db, webhookRecord.id, {
+      paymentId: payment.id,
+      status: 'processed',
+      attempts,
+      lastError: null,
+      nextRetryAt: null,
+      processedAt: new Date(),
+      deadLetteredAt: null
+    });
+  } catch (error) {
+    const shouldRetry = isRetriablePaymentError(error) && attempts <= PAYMENT_WEBHOOK_RETRY_LIMIT;
+    await recordPaymentVerificationFailure(db, payment, error, {
+      retryable: shouldRetry
+    });
+
+    return updatePaymentWebhookState(db, webhookRecord.id, {
+      paymentId: payment.id,
+      status: shouldRetry ? 'pending_retry' : 'dead_lettered',
+      attempts,
+      lastError: sanitizeErrorMessage(error),
+      nextRetryAt: shouldRetry ? buildNextWebhookRetryAt(attempts) : null,
+      processedAt: null,
+      deadLetteredAt: shouldRetry ? null : new Date()
+    });
+  }
+};
+
 const processWebhook = async ({ req, res, db, bus, config }) => {
   const provider = normalizeProvider(req.params.provider);
+  const eventType = extractWebhookEventType(provider, req.body || {});
   const reference = extractWebhookReference(provider, req.body || {});
   const incomingStatus = extractWebhookStatus(provider, req.body || {});
+  const idempotencyKey = buildWebhookIdempotencyKey({
+    provider,
+    reference,
+    eventType,
+    payload: req.body || {}
+  });
+  let payment = reference
+    ? await getPaymentByReference(db, reference)
+    : null;
+  const webhookRecord = await upsertPaymentWebhook({
+    db,
+    provider,
+    paymentId: payment?.id || null,
+    reference: reference || null,
+    eventType,
+    idempotencyKey,
+    payload: req.body || {},
+    status: payment ? 'received' : 'payment_not_found'
+  });
 
-  await db.execute(
-    'INSERT INTO payment_webhooks (provider, reference, payload, status) VALUES (?, ?, ?, ?)',
-    [provider, reference || null, JSON.stringify(req.body || {}), incomingStatus]
-  );
+  if (webhookRecord.processed_at) {
+    return res.json({
+      received: true,
+      duplicate: true
+    });
+  }
 
   if (!reference) {
+    await updatePaymentWebhookState(db, webhookRecord.id, {
+      paymentId: null,
+      status: 'dead_lettered',
+      attempts: Number(webhookRecord.attempts || 0) + 1,
+      lastError: 'Webhook arrived without a payment reference.',
+      nextRetryAt: null,
+      processedAt: null,
+      deadLetteredAt: new Date()
+    });
     await createAuditLog(db, {
       actorType: 'system',
       action: 'payment.webhook_received_without_reference',
@@ -760,8 +1080,16 @@ const processWebhook = async ({ req, res, db, bus, config }) => {
     return res.json({ received: true });
   }
 
-  const payment = await getPaymentByReference(db, reference);
   if (!payment) {
+    const scheduledWebhook = await updatePaymentWebhookState(db, webhookRecord.id, {
+      paymentId: null,
+      status: 'payment_not_found',
+      attempts: Math.max(1, Number(webhookRecord.attempts || 0)),
+      lastError: 'Payment is not available yet for this webhook reference.',
+      nextRetryAt: buildNextWebhookRetryAt(Math.max(1, Number(webhookRecord.attempts || 0))),
+      processedAt: null,
+      deadLetteredAt: null
+    });
     await createAuditLog(db, {
       actorType: 'system',
       action: 'payment.webhook_payment_not_found',
@@ -775,7 +1103,11 @@ const processWebhook = async ({ req, res, db, bus, config }) => {
       req,
       status: 'failure'
     });
-    return res.json({ received: true });
+    return res.status(202).json({
+      received: true,
+      queued: true,
+      webhook_id: scheduledWebhook.id
+    });
   }
 
   const storeConfig = await getStoreProviderConfig(db, payment.store_id, provider);
@@ -814,15 +1146,27 @@ const processWebhook = async ({ req, res, db, bus, config }) => {
       req,
       status: 'failure'
     });
+    await updatePaymentWebhookState(db, webhookRecord.id, {
+      paymentId: payment.id,
+      status: 'rejected',
+      attempts: Number(webhookRecord.attempts || 0) + 1,
+      lastError: `Invalid ${provider} webhook signature.`,
+      nextRetryAt: null,
+      processedAt: null,
+      deadLetteredAt: new Date()
+    });
     throw createHttpError(401, `Invalid ${provider} webhook signature.`, null, { expose: true });
   }
 
-  await verifyAndRecordPayment({
+  const processedWebhook = await processStoredWebhookRecord({
     db,
     bus,
     config,
-    payment,
-    webhookEvent: String(req.body.event || req.body.type || '').trim().toLowerCase()
+    webhookRecord: {
+      ...webhookRecord,
+      payment_id: payment.id,
+      event_type: eventType || webhookRecord.event_type
+    }
   });
   await createAuditLog(db, {
     actorType: 'system',
@@ -838,7 +1182,16 @@ const processWebhook = async ({ req, res, db, bus, config }) => {
     req
   });
 
-  return res.json({ received: true });
+  if (processedWebhook.status === 'processed') {
+    return res.json({ received: true });
+  }
+
+  return res.status(202).json({
+    received: true,
+    queued: true,
+    webhook_id: processedWebhook.id,
+    status: processedWebhook.status
+  });
 };
 
 const registerRoutes = async ({ app, db, bus, config }) => {
@@ -923,9 +1276,9 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       `
         INSERT INTO payments (
           order_id, store_id, owner_id, customer_id, payment_scope, entity_type, entity_id,
-          amount, currency, provider, reference, provider_session_id, status, metadata
+          amount, currency, provider, reference, provider_session_id, status, metadata, next_reconciliation_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
       `,
       [
         req.body.order_id || null,
@@ -946,7 +1299,8 @@ const registerRoutes = async ({ app, db, bus, config }) => {
           customer_name: req.body.customer_name || null,
           customer_phone: req.body.customer_phone || null,
           ...sanitizedMetadata
-        })
+        }),
+        buildNextReconciliationAt('pending')
       ]
     );
     const payment = (await db.query('SELECT * FROM payments WHERE id = ?', [result.insertId]))[0];
@@ -954,6 +1308,10 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       ...sanitizedMetadata,
       payment_id: payment.id,
       payment_scope: paymentScope,
+      store_id: storeId,
+      owner_id: ownerId,
+      customer_id: customerId,
+      order_id: req.body.order_id || null,
       entity_type: req.body.entity_type || null,
       entity_id: req.body.entity_id || null
     };
@@ -991,7 +1349,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       }
     } catch (error) {
       await db.execute(
-        'UPDATE payments SET status = ?, metadata = ? WHERE id = ?',
+        'UPDATE payments SET status = ?, metadata = ?, next_reconciliation_at = NULL, last_reconciliation_error = ? WHERE id = ?',
         [
           'failed',
           JSON.stringify({
@@ -1001,6 +1359,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
               maxLength: 255
             })
           }),
+          sanitizeErrorMessage(error, 'Unable to initialize checkout.'),
           payment.id
         ]
       );
@@ -1008,7 +1367,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
     }
 
     await db.execute(
-      'UPDATE payments SET provider_session_id = ?, metadata = ? WHERE id = ?',
+      'UPDATE payments SET provider_session_id = ?, metadata = ?, last_reconciliation_error = NULL WHERE id = ?',
       [
         checkoutSession.providerSessionId,
         JSON.stringify({
@@ -1063,9 +1422,9 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       `
         INSERT INTO payments (
           order_id, store_id, owner_id, customer_id, payment_scope, entity_type, entity_id,
-          amount, currency, provider, reference, provider_session_id, status, metadata
+          amount, currency, provider, reference, provider_session_id, status, metadata, next_reconciliation_at
         )
-        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending', ?)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending', ?, ?)
       `,
       [
         storeId,
@@ -1081,7 +1440,8 @@ const registerRoutes = async ({ app, db, bus, config }) => {
         JSON.stringify({
           email: req.body.email,
           ...metadata
-        })
+        }),
+        buildNextReconciliationAt('pending')
       ]
     );
     const payment = (await db.query('SELECT * FROM payments WHERE id = ?', [result.insertId]))[0];
@@ -1102,7 +1462,15 @@ const registerRoutes = async ({ app, db, bus, config }) => {
         reference,
         queue: true,
         channels: ['card'],
-        metadata
+        metadata: {
+          ...metadata,
+          store_id: storeId,
+          owner_id: ownerId,
+          customer_id: customerId,
+          payment_scope: paymentScope,
+          entity_type: req.body.entity_type || null,
+          entity_id: req.body.entity_id || null
+        }
       }
     });
     const providerData = chargeResponse?.data || {};
@@ -1342,5 +1710,9 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 };
 
 module.exports = {
-  registerRoutes
+  registerRoutes,
+  getPaymentByReference,
+  verifyAndRecordPayment,
+  recordPaymentVerificationFailure,
+  processStoredWebhookRecord
 };
