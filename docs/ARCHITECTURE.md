@@ -73,4 +73,4 @@ Aisle Commerce SaaS is organized as a monorepo with an SSR web experience, an HT
 
 ## Current State
 
-The repository contains the core commerce flows, durable event/email infrastructure, shipping/tax-aware checkout, plan enforcement, and guided store-launch onboarding. Platform support/chat operations, deeper compliance integrations, and fuller test coverage still remain before a production rollout. See [KNOWN-GAPS.md](KNOWN-GAPS.md) and [PRODUCTION-AUDIT-2026-05-03.md](PRODUCTION-AUDIT-2026-05-03.md) before launch.
+The repository contains the core commerce flows, durable event/email infrastructure, shipping/tax-aware checkout, plan enforcement, guided store-launch onboarding, verified product reviews, and a platform-admin async operations incident center for dead-letter/email replay. Platform support/chat operations, deeper compliance integrations, and fuller test coverage still remain before a production rollout. See [KNOWN-GAPS.md](KNOWN-GAPS.md) and [PRODUCTION-AUDIT-2026-05-03.md](PRODUCTION-AUDIT-2026-05-03.md) before launch.

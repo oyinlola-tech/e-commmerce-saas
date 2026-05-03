@@ -14,6 +14,7 @@ This audit reflects the repository state after the production-hardening work in 
 - `6cd3ffb` `feat: enforce marketing plan capabilities`
 - `ccc2c4b` `feat: add guided store launch onboarding`
 - `da21b9e` `feat: add verified product reviews and moderation`
+- `c4782d2` `feat: add async operations incident center`
 
 ## Flow Validation
 
@@ -31,9 +32,9 @@ This audit reflects the repository state after the production-hardening work in 
 
 ### Admin flow
 
-- `PARTIAL`: store-level admin operations are real, but platform-wide support and incident operations remain intentionally incomplete.
-- `Validated`: platform owner login, billing plan management, compliance review, store management, launch tracking, product-review moderation, and refund initiation.
-- `Blocked/incomplete`: support queue, incident management, live chat, and the related services remain placeholders or preview surfaces.
+- `PARTIAL`: store-level admin operations are real, and async failure response now has a real operator console, but broader platform support and chat operations remain intentionally incomplete.
+- `Validated`: platform owner login, billing plan management, compliance review, store management, launch tracking, product-review moderation, refund initiation, and async dead-letter/email replay from the incident center.
+- `Blocked/incomplete`: human support queue, live chat, and broader incident workflows beyond async queue recovery remain placeholders or preview surfaces.
 
 ## What Was Fixed In This Pass
 
@@ -46,6 +47,7 @@ This audit reflects the repository state after the production-hardening work in 
 - Production startup now rejects placeholder platform-admin bootstrap credentials instead of silently creating a weak default admin.
 - Store owners now have a guided launch workflow backed by persisted onboarding state in `store-service` instead of a dashboard-only checklist.
 - Product trust is now materially stronger. Verified reviews are gated by paid or fulfilled orders, routed through moderation, aggregated back into product ratings, and visible in both storefront and store-admin workflows.
+- Platform operations now have a real async incident console. Platform admins can inspect RabbitMQ and Redis dead letters, replay eligible events, review retrying or dead-lettered transactional emails, and requeue failed mail from a real SSR surface instead of a placeholder.
 
 ## Remaining Gaps
 
@@ -70,9 +72,6 @@ This audit reflects the repository state after the production-hardening work in 
 
 - `Billing / entitlements`: stores, products, and marketing are now enforced, but storage quotas, API quotas, analytics access, and over-limit downgrade handling for historical data remain incomplete.
   File areas: `apps/services/billing-service/src/plans.js`, `apps/services/billing-service/src/routes.js`
-
-- `Supportability`: event and email dead-letter handling now exists, but there is still no operator-facing admin tooling to inspect, replay, or clear dead-lettered work safely.
-  File areas: `packages/shared/src/events.js`, `apps/services/notification-service/src/outbound-email.js`
 
 ### MEDIUM
 
