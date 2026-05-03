@@ -33,12 +33,17 @@ const schemaStatements = [
       provider VARCHAR(40) NOT NULL,
       public_key VARCHAR(255) NULL,
       secret_key_encrypted TEXT NULL,
+      webhook_secret_hash_encrypted TEXT NULL,
       status VARCHAR(40) NOT NULL DEFAULT 'inactive',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_payment_provider_configs_store_provider (store_id, provider),
       KEY idx_payment_provider_configs_store_id (store_id)
     )
+  `,
+  `
+    ALTER TABLE payment_provider_configs
+    ADD COLUMN IF NOT EXISTS webhook_secret_hash_encrypted TEXT NULL
   `,
   `
     CREATE TABLE IF NOT EXISTS payment_webhooks (

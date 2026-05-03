@@ -15,6 +15,7 @@ module.exports = {
   ...require('./src/cache'),
   ...require('./src/rate-limit'),
   ...require('./src/auth-cookies'),
+  ...require('./src/audit'),
   ...require('./src/sanitization'),
   ...require('./src/validation'),
   ...require('./src/express'),

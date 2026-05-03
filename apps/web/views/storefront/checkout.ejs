@@ -11,6 +11,11 @@
   const themeClasses = storeThemeData.classes || {};
   const themeCopy = storeThemeData.copy || {};
   const themeTrustPoints = Array.isArray(storeThemeData.trustPoints) ? storeThemeData.trustPoints : [];
+  const checkoutProviderList = Array.isArray(checkoutProviders) ? checkoutProviders : [];
+  const requestedProvider = typeof selectedCheckoutProvider === 'string' ? selectedCheckoutProvider : '';
+  const selectedProvider = checkoutProviderList.some((provider) => provider.provider === requestedProvider)
+    ? requestedProvider
+    : (checkoutProviderList[0] ? checkoutProviderList[0].provider : 'paystack');
   const checkoutHighlights = [
     store && store.fulfillment_sla ? `Dispatch promise: ${store.fulfillment_sla}` : 'Dispatch promise: Orders move into fulfillment quickly after payment confirmation.',
     store && store.return_window_days ? `${store.return_window_days}-day returns on eligible orders.` : 'Flexible returns on eligible orders.',
@@ -56,40 +61,45 @@
       </section>
 
       <section class="theme-summary-card rounded-[2rem] p-6">
-        <p class="text-sm font-medium text-slate-500">Payment method</p>
-        <div class="mt-5 grid gap-4 sm:grid-cols-3">
-          <label class="rounded-3xl border border-slate-200 bg-white p-4 transition hover:border-primary">
-            <input type="radio" name="payment_method" value="card" class="sr-only" checked>
-            <p class="text-sm font-semibold text-slate-900">Card</p>
-            <p class="mt-2 text-sm text-slate-500">Visa, Mastercard, Amex</p>
-          </label>
-          <label class="rounded-3xl border border-slate-200 bg-white p-4 transition hover:border-primary">
-            <input type="radio" name="payment_method" value="apple pay" class="sr-only">
-            <p class="text-sm font-semibold text-slate-900">Wallet</p>
-            <p class="mt-2 text-sm text-slate-500">Apple Pay or Google Pay</p>
-          </label>
-          <label class="rounded-3xl border border-slate-200 bg-white p-4 transition hover:border-primary">
-            <input type="radio" name="payment_method" value="bank transfer" class="sr-only">
-            <p class="text-sm font-semibold text-slate-900">Transfer</p>
-            <p class="mt-2 text-sm text-slate-500">Manual confirmation flow</p>
-          </label>
-        </div>
-        <div class="mt-5 rounded-[1.75rem] border border-slate-200 bg-white/80 p-5">
-          <div class="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label for="cardholder" class="mb-1 block text-sm font-medium text-slate-700">Cardholder</label>
-              <input id="cardholder" name="cardholder" type="text" value="<%= customer && customer.name ? customer.name : '' %>" class="theme-input w-full rounded-2xl border px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Name on card">
-            </div>
-            <div>
-              <label for="reference" class="mb-1 block text-sm font-medium text-slate-700">Reference note</label>
-              <input id="reference" name="reference" type="text" class="theme-input w-full rounded-2xl border px-4 py-3 text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Optional PO or delivery note">
+        <p class="text-sm font-medium text-slate-500">Payment provider</p>
+        <% if (checkoutProviderList.length) { %>
+          <div class="mt-5 grid gap-4 sm:grid-cols-2">
+            <% checkoutProviderList.forEach((provider) => { %>
+              <% const isSelected = provider.provider === selectedProvider; %>
+              <label class="rounded-3xl border border-slate-200 bg-white p-4 transition hover:border-primary">
+                <input type="radio" name="provider" value="<%= provider.provider %>" class="sr-only" <%= isSelected ? 'checked' : '' %>>
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <p class="text-sm font-semibold text-slate-900"><%= provider.provider === 'paystack' ? 'Paystack' : 'Flutterwave' %></p>
+                    <p class="mt-2 text-sm text-slate-500">
+                      <%= provider.provider === 'paystack'
+                        ? 'Cards, transfers, USSD, and local channels through Paystack hosted checkout.'
+                        : 'Cards, bank transfer, and USSD through Flutterwave hosted checkout.' %>
+                    </p>
+                  </div>
+                  <span class="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Live</span>
+                </div>
+              </label>
+            <% }) %>
+          </div>
+          <div class="mt-5 rounded-[1.75rem] border border-slate-200 bg-white/80 p-5">
+            <p class="text-sm font-semibold text-slate-900">How payment works</p>
+            <p class="mt-3 text-sm leading-6 text-slate-500">After you confirm this order, we&apos;ll redirect you to the selected payment provider to complete the payment securely. Your order only moves forward after the transaction is verified on the server.</p>
+            <div class="mt-4 grid gap-3 sm:grid-cols-3">
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">Server-side verification before fulfillment</div>
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">Provider-hosted checkout keeps card entry off your store pages</div>
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">Orders stay traceable by reference after payment</div>
             </div>
           </div>
-          <p class="mt-4 text-sm leading-6 text-slate-500">This preview captures payment intent and shipping details. Live charge capture can be connected to your preferred gateway in production.</p>
-        </div>
+        <% } else { %>
+          <div class="mt-5 rounded-[1.75rem] border border-amber-200 bg-amber-50 px-5 py-5">
+            <p class="text-sm font-semibold text-amber-900">No payment provider is active for this store yet.</p>
+            <p class="mt-2 text-sm leading-6 text-amber-800">The store owner needs to activate Paystack or Flutterwave before checkout can continue.</p>
+          </div>
+        <% } %>
       </section>
 
-      <button type="submit" data-checkout-submit class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-5 py-3.5 text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark">
+      <button type="submit" data-checkout-submit class="inline-flex w-full items-center justify-center rounded-2xl bg-primary px-5 py-3.5 text-base font-semibold text-white shadow-soft transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50" <%= checkoutProviderList.length ? '' : 'disabled' %>>
         Place order
       </button>
     </form>

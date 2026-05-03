@@ -1,16 +1,15 @@
 const {
-  EVENT_NAMES,
-  buildSignedInternalHeaders,
-  requestJson
+  EVENT_NAMES
 } = require('../../../../packages/shared');
 const {
-  hydrateOrder
+  hydrateOrder,
+  applyPaymentOutcomeToOrder
 } = require('./routes');
 
 const registerConsumers = async ({ bus, db, config, logger }) => {
   await bus.subscribe({
     queueName: 'order-service.payments',
-    events: [EVENT_NAMES.PAYMENT_SUCCEEDED, EVENT_NAMES.PAYMENT_FAILED],
+    events: [EVENT_NAMES.PAYMENT_SUCCEEDED, EVENT_NAMES.PAYMENT_FAILED, EVENT_NAMES.PAYMENT_REFUNDED],
     onMessage: async (payload) => {
       const data = payload.data || {};
       const orderId = Number(data.order_id);
@@ -23,58 +22,22 @@ const registerConsumers = async ({ bus, db, config, logger }) => {
         return;
       }
 
-      const headers = buildSignedInternalHeaders({
-        requestId: `event-${orderId}`,
-        storeId: order.store_id,
-        actorType: 'platform_user',
-        actorRole: 'platform_owner',
-        secret: config.internalSharedSecret
+      const payment = {
+        status: payload.event === EVENT_NAMES.PAYMENT_SUCCEEDED
+          ? 'success'
+          : payload.event === EVENT_NAMES.PAYMENT_REFUNDED
+            ? 'refunded'
+            : 'failed'
+      };
+
+      await applyPaymentOutcomeToOrder({
+        db,
+        bus,
+        config,
+        order,
+        payment
       });
 
-      if (payload.event === EVENT_NAMES.PAYMENT_SUCCEEDED) {
-        await db.execute(
-          'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
-          ['paid', 'confirmed', orderId]
-        );
-        await db.execute(
-          'UPDATE coupon_redemptions SET status = ? WHERE order_id = ?',
-          ['confirmed', orderId]
-        );
-        if (order.reservation_id) {
-          await requestJson(`${config.serviceUrls.product}/inventory/reservations/${order.reservation_id}/commit`, {
-            method: 'POST',
-            headers,
-            timeoutMs: config.requestTimeoutMs
-          });
-        }
-        await bus.publish(EVENT_NAMES.ORDER_STATUS_CHANGED, {
-          order_id: orderId,
-          store_id: order.store_id,
-          status: 'confirmed'
-        });
-        return;
-      }
-
-      await db.execute(
-        'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
-        ['failed', 'payment_failed', orderId]
-      );
-      await db.execute(
-        'UPDATE coupon_redemptions SET status = ? WHERE order_id = ?',
-        ['voided', orderId]
-      );
-      if (order.reservation_id) {
-        await requestJson(`${config.serviceUrls.product}/inventory/reservations/${order.reservation_id}/release`, {
-          method: 'POST',
-          headers,
-          timeoutMs: config.requestTimeoutMs
-        });
-      }
-      await bus.publish(EVENT_NAMES.ORDER_STATUS_CHANGED, {
-        order_id: orderId,
-        store_id: order.store_id,
-        status: 'payment_failed'
-      });
       logger.info('Processed payment outcome for order', {
         orderId,
         event: payload.event

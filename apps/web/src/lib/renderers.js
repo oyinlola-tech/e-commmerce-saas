@@ -248,7 +248,9 @@ const createRenderers = (context, helpers, paymentProviderService) => {
     return renderStorefront(req, res, 'storefront/checkout', {
       pageTitle: 'Checkout',
       errors,
-      couponPreview: req.storeCouponPreview || null
+      couponPreview: req.storeCouponPreview || null,
+      checkoutProviders: req.storeCheckoutProviders || [],
+      selectedCheckoutProvider: String(req.body?.provider || '').trim().toLowerCase()
     });
   };
 

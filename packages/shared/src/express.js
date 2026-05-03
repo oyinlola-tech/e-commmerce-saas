@@ -14,6 +14,11 @@ const createBaseApp = ({
   cookieSecret = undefined
 }) => {
   const app = express();
+  const captureRawBody = (req, res, buffer, encoding) => {
+    req.rawBody = buffer?.length
+      ? buffer.toString(encoding || 'utf8')
+      : '';
+  };
 
   app.set('trust proxy', trustProxy);
   app.disable('x-powered-by');
@@ -22,8 +27,8 @@ const createBaseApp = ({
     const compression = require('compression');
     app.use(compression());
   }
-  app.use(express.json({ limit: bodyLimit }));
-  app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
+  app.use(express.json({ limit: bodyLimit, verify: captureRawBody }));
+  app.use(express.urlencoded({ extended: true, limit: bodyLimit, verify: captureRawBody }));
   app.use(cookieParser(cookieSecret));
   app.use((req, res, next) => {
     const requestId = req.headers['x-request-id'] || uuidv4();

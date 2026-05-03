@@ -1,93 +1,75 @@
 const crypto = require('crypto');
 const { createHttpError } = require('../../../../packages/shared');
 
-/**
- * Webhook Signature Verification
- * Supports: Paystack, Flutterwave, Stripe
- * Usage: Verify incoming payment provider webhooks before processing
- */
+const safeCompare = (expected, actual, encoding = 'utf8') => {
+  const left = Buffer.from(String(expected || ''), encoding);
+  const right = Buffer.from(String(actual || ''), encoding);
+
+  if (!left.length || left.length !== right.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(left, right);
+};
+
+const getRawBody = (req) => {
+  if (typeof req.rawBody === 'string' && req.rawBody.length) {
+    return req.rawBody;
+  }
+
+  return JSON.stringify(req.body || {});
+};
 
 const verifyPaystackSignature = (req, secretKey) => {
   if (!secretKey) {
     throw createHttpError(401, 'Paystack secret key not configured.');
   }
 
-  const signature = req.headers['x-paystack-signature'];
+  const signature = String(req.headers['x-paystack-signature'] || '').trim();
   if (!signature) {
     return false;
   }
 
-  try {
-    const hash = crypto
-      .createHmac('sha512', secretKey)
-      .update(JSON.stringify(req.body))
-      .digest('hex');
+  const hash = crypto
+    .createHmac('sha512', secretKey)
+    .update(getRawBody(req))
+    .digest('hex');
 
-    return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature));
-  } catch (error) {
-    return false;
-  }
+  return safeCompare(hash, signature, 'hex');
 };
 
-const verifyFlutterwaveSignature = (req, secretKey) => {
-  if (!secretKey) {
-    throw createHttpError(401, 'Flutterwave secret key not configured.');
+const verifyFlutterwaveSignature = (req, secretHash) => {
+  if (!secretHash) {
+    throw createHttpError(401, 'Flutterwave webhook secret hash not configured.');
   }
 
-  const signature = req.headers['verif-hash'];
-  if (!signature) {
-    return false;
-  }
-
-  try {
+  const hmacSignature = String(req.headers['flutterwave-signature'] || '').trim();
+  if (hmacSignature) {
     const hash = crypto
-      .createHmac('sha256', secretKey)
-      .update(JSON.stringify(req.body))
-      .digest('hex');
+      .createHmac('sha256', secretHash)
+      .update(getRawBody(req))
+      .digest('base64');
 
-    return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature));
-  } catch (error) {
-    return false;
+    return safeCompare(hash, hmacSignature);
   }
+
+  const legacySignature = String(req.headers['verif-hash'] || '').trim();
+  if (legacySignature) {
+    return safeCompare(secretHash, legacySignature);
+  }
+
+  return false;
 };
 
-const verifyStripeSignature = (req, secretKey, rawBody) => {
-  if (!secretKey) {
-    throw createHttpError(401, 'Stripe secret key not configured.');
-  }
-
-  const signature = req.headers['stripe-signature'];
-  if (!signature) {
-    return false;
-  }
-
-  try {
-    // Stripe expects raw body, not JSON
-    const hash = crypto
-      .createHmac('sha256', secretKey)
-      .update(rawBody)
-      .digest('hex');
-
-    const [timestamp, computedSig] = signature.split(',')[0].split('=')[1];
-    return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(computedSig));
-  } catch (error) {
-    return false;
-  }
-};
-
-const verifyWebhookSignature = ({ provider, req, secretKey, rawBody }) => {
-  const normalizedProvider = String(provider || '').toLowerCase();
+const verifyWebhookSignature = ({ provider, req, secretKey, secretHash }) => {
+  const normalizedProvider = String(provider || '').trim().toLowerCase();
 
   if (normalizedProvider === 'paystack') {
     return verifyPaystackSignature(req, secretKey);
   }
 
   if (normalizedProvider === 'flutterwave') {
-    return verifyFlutterwaveSignature(req, secretKey);
-  }
-
-  if (normalizedProvider === 'stripe') {
-    return verifyStripeSignature(req, secretKey, rawBody);
+    return verifyFlutterwaveSignature(req, secretHash);
   }
 
   throw createHttpError(400, `Unsupported provider: ${provider}`);
@@ -96,6 +78,5 @@ const verifyWebhookSignature = ({ provider, req, secretKey, rawBody }) => {
 module.exports = {
   verifyPaystackSignature,
   verifyFlutterwaveSignature,
-  verifyStripeSignature,
   verifyWebhookSignature
 };

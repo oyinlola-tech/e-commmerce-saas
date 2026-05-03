@@ -16,6 +16,7 @@ const createValidations = (context, helpers) => {
     catalogSortOptions,
     safeDecodeURIComponent
   } = helpers;
+  const allowedManualOrderStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'payment_failed', 'refund_pending', 'refunded'];
 
   const currencyValidation = [
     allowBodyFields(['code', 'returnTo', 'scope', '_csrf']),
@@ -162,6 +163,7 @@ const createValidations = (context, helpers) => {
       'paystack_status',
       'flutterwave_public_key',
       'flutterwave_secret_key',
+      'flutterwave_webhook_secret_hash',
       'flutterwave_status',
       '_csrf'
     ]),
@@ -194,6 +196,7 @@ const createValidations = (context, helpers) => {
     body('paystack_status').optional().isString(),
     body('flutterwave_public_key').optional().isString(),
     body('flutterwave_secret_key').optional().isString(),
+    body('flutterwave_webhook_secret_hash').optional().isString(),
     body('flutterwave_status').optional().isString()
   ];
 
@@ -283,7 +286,7 @@ const createValidations = (context, helpers) => {
 
   const orderStatusValidation = [
     allowBodyFields(['status', '_csrf']),
-    body('status').trim().notEmpty().isLength({ max: 40 }).withMessage('Choose a valid order status.')
+    body('status').trim().isIn(allowedManualOrderStatuses).withMessage('Choose a valid order status.')
   ];
 
   const checkoutValidation = [
@@ -293,9 +296,7 @@ const createValidations = (context, helpers) => {
       'city',
       'country',
       'postal_code',
-      'payment_method',
-      'cardholder',
-      'reference',
+      'provider',
       '_csrf'
     ]),
     commonRules.name('name', 120),
@@ -303,9 +304,7 @@ const createValidations = (context, helpers) => {
     body('city').customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })).notEmpty().withMessage('City is required.'),
     body('country').customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })).notEmpty().withMessage('Country is required.'),
     body('postal_code').customSanitizer((value) => sanitizePlainText(value, { maxLength: 30 })).notEmpty().withMessage('Postal code is required.'),
-    body('payment_method').trim().notEmpty().isLength({ max: 40 }).withMessage('Choose a payment method.'),
-    body('cardholder').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })),
-    body('reference').optional().customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 }))
+    body('provider').trim().isIn(['paystack', 'flutterwave']).withMessage('Choose Paystack or Flutterwave.')
   ];
 
   const cartMutationValidation = (requiresQuantity = false) => validate([

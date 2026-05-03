@@ -39,7 +39,7 @@ const saveLogoFile = async (file, storeId = 'store') => {
   }
 
   const detected = await fileTypeFromBuffer(file.buffer);
-  const mimeType = detected?.mime || file.mimetype;
+  const mimeType = detected?.mime || '';
   if (!ALLOWED_LOGO_MIME_TYPES.has(mimeType)) {
     const error = new Error('Only PNG, JPEG, and WebP logo uploads are supported.');
     error.status = 422;
@@ -57,17 +57,21 @@ const saveLogoFile = async (file, storeId = 'store') => {
   await ensureLogoUploadDir();
   const filename = `store-${sanitizedStoreId}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${getLogoExtension(mimeType)}`;
   const targetPath = path.join(env.logoUploadDir, filename);
-  
+
   // Security: Verify the resolved path is within the upload directory
   const resolvedPath = path.resolve(targetPath);
   const resolvedUploadDir = path.resolve(env.logoUploadDir);
-  if (!resolvedPath.startsWith(resolvedUploadDir)) {
+  const resolvedUploadPrefix = `${resolvedUploadDir}${path.sep}`;
+  if (resolvedPath !== resolvedUploadDir && !resolvedPath.startsWith(resolvedUploadPrefix)) {
     const error = new Error('Invalid file path.');
     error.status = 400;
     throw error;
   }
-  
-  await fs.writeFile(targetPath, file.buffer);
+
+  await fs.writeFile(targetPath, file.buffer, {
+    mode: 0o600,
+    flag: 'wx'
+  });
   return `/logos/${filename}`;
 };
 

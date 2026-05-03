@@ -265,6 +265,7 @@ const normalizeOrder = (order) => {
     customer_id: order.customer_id ? String(order.customer_id) : null,
     status: order.status || 'pending',
     payment_status: order.payment_status || 'pending',
+    payment_reference: order.payment_reference || null,
     payment_method: order.payment_method || 'Card',
     currency: order.currency || 'USD',
     subtotal: Number(order.subtotal || 0),
@@ -912,6 +913,37 @@ const updateAdminStoreOrderStatus = async (req, store, auth, orderId, status) =>
   return normalizeOrder(response?.order || null);
 };
 
+const refundAdminStoreOrder = async (req, store, auth, paymentReference, payload = {}) => {
+  if (!paymentReference) {
+    throw new BackendRequestError('Payment reference is required to refund an order.', {
+      status: 400
+    });
+  }
+
+  const response = await requestServiceJson(
+    req,
+    env.serviceUrls.payment,
+    `/payments/${encodeURIComponent(paymentReference)}/refund`,
+    {
+      method: 'POST',
+      auth: {
+        storeId: store.id,
+        userId: auth.userId,
+        actorRole: auth.actorRole,
+        actorType: 'platform_user'
+      },
+      body: {
+        reason: payload.reason || ''
+      }
+    }
+  );
+
+  return {
+    payment: response?.payment || null,
+    refund: response?.refund || null
+  };
+};
+
 const listAdminStoreCustomers = async (req, store, auth) => {
   const response = await requestServiceJson(req, env.serviceUrls.customer, '/customers', {
     auth: {
@@ -1378,6 +1410,37 @@ const getCustomerOrderById = async (req, store, auth, orderId) => {
   return normalizeOrder(response?.order || null);
 };
 
+const getStoreCheckoutProviders = async (req, store, auth = null) => {
+  const response = await requestServiceJson(req, env.serviceUrls.payment, '/payments/config', {
+    auth: {
+      storeId: store.id,
+      customerId: auth?.customerId || '',
+      actorType: auth?.actorType || ''
+    }
+  });
+
+  return Array.isArray(response?.configs)
+    ? response.configs
+      .filter((config) => {
+        const provider = String(config?.provider || '').trim().toLowerCase();
+        const status = String(config?.status || '').trim().toLowerCase();
+        const hasPublicKey = Boolean(String(config?.public_key || '').trim());
+        const hasSecretKey = Boolean(config?.has_secret_key);
+        const hasWebhookSecretHash = Boolean(config?.has_webhook_secret_hash);
+
+        return status === 'active'
+          && hasPublicKey
+          && hasSecretKey
+          && (provider !== 'flutterwave' || hasWebhookSecretHash);
+      })
+      .map((config) => ({
+        provider: String(config?.provider || '').trim().toLowerCase(),
+        public_key: String(config?.public_key || '').trim(),
+        has_secret_key: Boolean(config?.has_secret_key)
+      }))
+    : [];
+};
+
 const checkoutStorefrontCart = async (req, store, auth, payload = {}) => {
   const response = await requestServiceJson(req, env.serviceUrls.order, '/checkout', {
     method: 'POST',
@@ -1389,6 +1452,8 @@ const checkoutStorefrontCart = async (req, store, auth, payload = {}) => {
     body: {
       currency: payload.currency || 'USD',
       email: payload.email,
+      provider: payload.provider || 'paystack',
+      callback_url: payload.callback_url || null,
       shipping_address: {
         address: payload.address,
         city: payload.city,
@@ -1411,6 +1476,25 @@ const checkoutStorefrontCart = async (req, store, auth, payload = {}) => {
     order: normalizeOrder(response?.order || null),
     payment: response?.payment || null,
     providers: response?.providers || []
+  };
+};
+
+const verifyStorefrontCheckout = async (req, store, auth, reference) => {
+  const response = await requestServiceJson(req, env.serviceUrls.order, '/checkout/verify', {
+    method: 'POST',
+    auth: {
+      storeId: store.id,
+      customerId: auth.customerId,
+      actorType: 'customer'
+    },
+    body: {
+      reference
+    }
+  });
+
+  return {
+    order: normalizeOrder(response?.order || null),
+    payment: response?.payment || null
   };
 };
 
@@ -1511,6 +1595,7 @@ module.exports = {
   getRequestHost,
   getRequestHostname,
   getStoreByHost,
+  getStoreCheckoutProviders,
   getStoreProductById,
   listCustomerOrders,
   listStoreCoupons,
@@ -1542,10 +1627,12 @@ module.exports = {
   updateAdminStoreOrderStatus,
   updateAdminBillingPlan,
   updateAdminStoreProduct,
+  refundAdminStoreOrder,
   updateStoreCoupon,
   updatePlatformStore,
   updateCartItem,
   removeCartItem,
   getStoreProductBySlug,
-  checkoutStorefrontCart
+  checkoutStorefrontCart,
+  verifyStorefrontCheckout
 };

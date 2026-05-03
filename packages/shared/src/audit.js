@@ -9,6 +9,38 @@
  * - Admin actions
  */
 
+const SENSITIVE_AUDIT_FIELDS = new Set([
+  'password',
+  'password_hash',
+  'secret_key',
+  'webhook_secret_hash',
+  'authorization_code',
+  'token',
+  'access_token',
+  'refresh_token'
+]);
+
+const redactAuditPayload = (payload = {}) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return payload;
+  }
+
+  return Object.entries(payload).reduce((accumulator, [key, value]) => {
+    accumulator[key] = SENSITIVE_AUDIT_FIELDS.has(String(key || '').trim().toLowerCase())
+      ? '[redacted]'
+      : value;
+    return accumulator;
+  }, {});
+};
+
+const normalizeInsertResult = (result) => {
+  if (Array.isArray(result)) {
+    return result[0] || null;
+  }
+
+  return result || null;
+};
+
 const createAuditLog = async (db, {
   actorType,          // 'platform_user', 'store_owner', 'customer', 'system'
   actorId,            // User/customer ID
@@ -26,7 +58,10 @@ const createAuditLog = async (db, {
   }
 
   try {
-    const [result] = await db.query(
+    const runner = typeof db.execute === 'function'
+      ? db.execute.bind(db)
+      : db.query.bind(db);
+    const rawResult = await runner(
       `INSERT INTO audit_logs 
        (actor_type, actor_id, action, resource_type, resource_id, store_id, details, ip_address, user_agent, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
@@ -43,8 +78,9 @@ const createAuditLog = async (db, {
         status
       ]
     );
+    const result = normalizeInsertResult(rawResult);
 
-    return result.insertId;
+    return result?.insertId || null;
   } catch (error) {
     console.error('Failed to create audit log', {
       action,
@@ -79,9 +115,6 @@ const auditMiddleware = (options = {}) => {
       return originalSend(body);
     };
 
-    // Continue with request
-    next();
-
     // Log after response
     res.on('finish', async () => {
       const action = actionPrefix
@@ -91,9 +124,7 @@ const auditMiddleware = (options = {}) => {
       const details = {};
 
       if (captureRequestBody && req.body) {
-        // Redact sensitive fields
-        const { password, secret_key, password_hash, ...safe } = req.body;
-        details.request = safe;
+        details.request = redactAuditPayload(req.body);
       }
 
       if (captureResponseBody) {
@@ -101,17 +132,20 @@ const auditMiddleware = (options = {}) => {
       }
 
       await createAuditLog(req.db || req.app.get('db'), {
-        actorType: req.authContext?.actor_type || 'system',
-        actorId: req.authContext?.user_id || req.authContext?.customer_id,
+        actorType: req.authContext?.actorType || req.authContext?.actor_type || 'system',
+        actorId: req.authContext?.userId || req.authContext?.user_id || req.authContext?.customerId || req.authContext?.customer_id,
         action,
         resourceType,
         resourceId: req.params.id || req.body?.id,
-        storeId: req.storeContext?.store?.id,
+        storeId: req.storeContext?.store?.id || req.authContext?.storeId || req.authContext?.store_id || null,
         details,
         req,
         status: res.statusCode >= 400 ? 'failure' : 'success'
       });
     });
+
+    // Continue with request
+    next();
   };
 };
 

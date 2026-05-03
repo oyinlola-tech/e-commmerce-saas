@@ -522,7 +522,20 @@ const createAppHelpers = (context) => {
   };
 
   const buildStoreStats = ({ store = null, products = [], orders = [], customers = [] } = {}) => {
+    const now = Date.now();
+    const thirtyDaysAgoMs = now - (30 * 24 * 60 * 60 * 1000);
     const revenue30d = orders.reduce((sum, order) => {
+      const createdAtMs = new Date(order.created_at || 0).getTime();
+      const paymentStatus = String(order.payment_status || '').trim().toLowerCase();
+      const orderStatus = String(order.status || '').trim().toLowerCase();
+      const wasPaid = paymentStatus === 'paid'
+        || ['confirmed', 'shipped', 'delivered'].includes(orderStatus);
+      const wasRefunded = paymentStatus === 'refunded' || orderStatus === 'refunded';
+
+      if (!wasPaid || wasRefunded || !Number.isFinite(createdAtMs) || createdAtMs < thirtyDaysAgoMs) {
+        return sum;
+      }
+
       return sum + Number(order.total || 0);
     }, 0);
 
@@ -535,6 +548,52 @@ const createAppHelpers = (context) => {
       openSupportTickets: 0,
       marketsCount: Array.isArray(store?.markets) ? store.markets.length : 0
     };
+  };
+
+  const buildStoreLaunchChecklist = ({ store = null, products = [], orders = [], paymentProviderConfigs = {} } = {}) => {
+    const providerEntries = Object.values(paymentProviderConfigs || {});
+    const hasActiveGateway = providerEntries.some((entry) => String(entry?.status || '').trim().toLowerCase() === 'active');
+    const publishedProducts = products.filter((entry) => String(entry.status || '').toLowerCase() === 'published');
+    const hasStoreIdentity = Boolean(
+      sanitizePlainText(store?.name || '', { maxLength: 150 })
+      && sanitizeEmail(store?.support_email || '')
+      && sanitizePlainText(store?.fulfillment_sla || '', { maxLength: 120 })
+    );
+
+    return [
+      {
+        key: 'identity',
+        title: 'Add store identity and support details',
+        description: 'Customers should see a real support email, fulfillment promise, and branded storefront before launch.',
+        complete: hasStoreIdentity,
+        href: '/admin/settings',
+        action: 'Open settings'
+      },
+      {
+        key: 'catalog',
+        title: 'Publish the first product',
+        description: 'A store cannot reach its first sale until at least one product is live on the storefront.',
+        complete: publishedProducts.length > 0,
+        href: '/admin/products/new',
+        action: 'Add product'
+      },
+      {
+        key: 'payments',
+        title: 'Activate Paystack or Flutterwave',
+        description: 'Hosted checkout should be connected before shoppers reach the payment step.',
+        complete: hasActiveGateway,
+        href: '/admin/settings',
+        action: 'Connect payments'
+      },
+      {
+        key: 'launch',
+        title: 'Get the first paid order',
+        description: 'The final milestone is a verified payment that moves an order from pending into confirmed.',
+        complete: orders.some((entry) => String(entry.payment_status || '').trim().toLowerCase() === 'paid'),
+        href: '/admin/orders',
+        action: 'Review orders'
+      }
+    ];
   };
 
   const resolveRequestedStoreId = (req) => {
@@ -818,6 +877,7 @@ const createAppHelpers = (context) => {
     sortProducts,
     buildProductDiscovery,
     buildStoreStats,
+    buildStoreLaunchChecklist,
     resolveRequestedStoreId,
     parseLineList,
     decorateProducts,

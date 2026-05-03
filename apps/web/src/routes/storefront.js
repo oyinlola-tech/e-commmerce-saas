@@ -18,6 +18,7 @@ const registerStorefrontRoutes = (app, deps) => {
     clearWebAuthCookies,
     ensureStorefrontSession,
     getCustomerOrderById,
+    getStoreCheckoutProviders,
     getStoreProductById,
     getStoreProductBySlug,
     listCustomerOrders,
@@ -26,6 +27,7 @@ const registerStorefrontRoutes = (app, deps) => {
     mergeProductPresentation,
     registerStorefrontCustomer,
     removeCartItem,
+    verifyStorefrontCheckout,
     updateCartItem,
     clearSignedCookie,
     readSignedCookie,
@@ -107,6 +109,17 @@ const registerStorefrontRoutes = (app, deps) => {
 
       throw error;
     }
+  };
+
+  const loadCheckoutProviders = async (req, store) => {
+    if (!store?.id) {
+      req.storeCheckoutProviders = [];
+      return [];
+    }
+
+    const providers = await getStoreCheckoutProviders(req, store, req.customerAuth);
+    req.storeCheckoutProviders = providers;
+    return providers;
   };
 
   const buildCollectionStructuredData = (store, products = [], options = {}) => {
@@ -490,6 +503,7 @@ const registerStorefrontRoutes = (app, deps) => {
 
     try {
       await loadAppliedCouponPreview(req, res, store);
+      await loadCheckoutProviders(req, store);
       return renderCheckoutPage(req, res);
     } catch (error) {
       return next(error);
@@ -504,6 +518,7 @@ const registerStorefrontRoutes = (app, deps) => {
 
     try {
       await loadAppliedCouponPreview(req, res, store);
+      await loadCheckoutProviders(req, store);
       return next();
     } catch (error) {
       return next(error);
@@ -526,10 +541,18 @@ const registerStorefrontRoutes = (app, deps) => {
         return res.redirect('/cart?error=Your cart is empty');
       }
 
+      const checkoutProviders = req.storeCheckoutProviders || [];
+      const selectedProvider = String(req.body.provider || 'paystack').trim().toLowerCase();
+      if (!checkoutProviders.some((entry) => entry.provider === selectedProvider)) {
+        return res.redirect('/checkout?error=That payment provider is not active for this store right now.');
+      }
+
       const checkout = await checkoutStorefrontCart(req, store, req.customerAuth, {
         ...req.body,
         email: req.currentCustomer.email,
         phone: req.currentCustomer.phone,
+        provider: selectedProvider,
+        callback_url: buildStorefrontAbsoluteUrl(store, '/checkout/callback'),
         currency: res.locals.selectedCurrency || store.default_currency || 'USD',
         coupon_code: req.storeCouponPreview?.coupon?.code || getAppliedCouponCode(req, store.id) || null,
         sessionId: req.storefrontSessionId || ensureStorefrontSession(req, res)
@@ -539,9 +562,13 @@ const registerStorefrontRoutes = (app, deps) => {
         return res.redirect('/cart?error=Your cart is empty');
       }
 
+      const checkoutUrl = checkout?.providers?.[0]?.checkout_url;
+      if (!checkoutUrl) {
+        return res.redirect('/checkout?error=Unable to start the payment session right now.');
+      }
+
       clearAppliedCoupon(req, res, store.id);
-      setOrderTrackingCookie(req, res, store.id, checkout.order.id);
-      return res.redirect(`/order-confirmation?order=${encodeURIComponent(checkout.order.id)}&success=Order placed`);
+      return res.redirect(checkoutUrl);
     } catch (error) {
       if ([404, 422].includes(Number(error.status))) {
         clearAppliedCoupon(req, res, store.id);
@@ -549,6 +576,46 @@ const registerStorefrontRoutes = (app, deps) => {
 
       if ([400, 403, 404, 409, 422].includes(Number(error.status))) {
         return res.redirect(`/checkout?error=${encodeURIComponent(error.message || 'Unable to place the order right now.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
+  app.get('/checkout/callback', rateLimit({
+    windowMs: env.authRateLimitWindowMs,
+    limit: env.authRateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false
+  }), async (req, res, next) => {
+    try {
+      const store = resolveStore(req);
+      if (!store) {
+        return renderErrorPage(req, res, 404, createHttpError(404, 'Store not found.', null, { expose: true }));
+      }
+
+      if (!req.currentCustomer || !req.customerAuth) {
+        return res.redirect(`/login?returnTo=${encodeURIComponent(req.originalUrl || '/checkout/callback')}`);
+      }
+
+      const reference = String(req.query.reference || req.query.trxref || req.query.tx_ref || '').trim();
+      if (!reference) {
+        return res.redirect('/checkout?error=Payment reference was not returned by the payment provider.');
+      }
+
+      const verification = await verifyStorefrontCheckout(req, store, req.customerAuth, reference);
+      const order = verification?.order || null;
+      const payment = verification?.payment || null;
+
+      if (order && String(payment?.status || '').trim().toLowerCase() === 'success') {
+        setOrderTrackingCookie(req, res, store.id, order.id);
+        return res.redirect(`/order-confirmation?order=${encodeURIComponent(order.id)}&success=${encodeURIComponent('Payment confirmed and your order is now in progress.')}`);
+      }
+
+      return res.redirect('/orders?error=The payment was not completed successfully. You can try checkout again from your cart.');
+    } catch (error) {
+      if ([400, 403, 404, 409, 422].includes(Number(error.status))) {
+        return res.redirect(`/checkout?error=${encodeURIComponent(error.message || 'Unable to verify the payment session.')}`);
       }
 
       return next(error);

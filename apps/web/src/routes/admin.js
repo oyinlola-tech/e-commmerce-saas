@@ -20,11 +20,14 @@ const registerAdminRoutes = (app, deps) => {
     updateStoreCoupon,
     deleteAdminStoreProduct,
     getAdminStoreOrderById,
+    refundAdminStoreOrder,
     updateAdminStoreOrderStatus,
     updatePlatformStore,
     storePaymentProviders,
+    doubleCsrfProtection,
     validate,
     allowBodyFields,
+    commonRules,
     sanitizePlainText,
     normalizeHostname
   } = context;
@@ -34,6 +37,7 @@ const registerAdminRoutes = (app, deps) => {
     resolveStore,
     decorateProducts,
     buildStoreStats,
+    buildStoreLaunchChecklist,
     buildProductDraft,
     buildProductServicePayload,
     buildProductPresentationPayload,
@@ -93,7 +97,7 @@ const registerAdminRoutes = (app, deps) => {
     }
   };
 
-  app.get('/admin', async (req, res, next) => {
+  app.get('/admin', loadStorePaymentProviderConfigs, async (req, res, next) => {
     try {
       if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
         return;
@@ -113,6 +117,12 @@ const registerAdminRoutes = (app, deps) => {
         orders,
         recentOrders: orders.slice(0, 5),
         stats: buildStoreStats({ store, products, orders, customers }),
+        launchChecklist: buildStoreLaunchChecklist({
+          store,
+          products,
+          orders,
+          paymentProviderConfigs: req.storePaymentProviderConfigs || {}
+        }),
         supportQueue: [],
         customers: customers.slice(0, 5)
       });
@@ -287,6 +297,51 @@ const registerAdminRoutes = (app, deps) => {
     }
   });
 
+  app.post('/admin/orders/:id/refund', validate([
+    allowBodyFields(['refund_reason', '_csrf']),
+    param('id')
+      .trim()
+      .notEmpty()
+      .isLength({ max: 120 })
+      .withMessage('id is required.')
+      .customSanitizer((value) => sanitizePlainText(value, { maxLength: 120 })),
+    commonRules.optionalPlainText('refund_reason', 255)
+  ]), async (req, res, next) => {
+    try {
+      if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
+        return;
+      }
+
+      const order = await getAdminStoreOrderById(req, req.currentStore, req.platformAuth, req.params.id);
+      if (!order || !order.payment_reference) {
+        return res.redirect(`/admin/orders/${encodeURIComponent(req.params.id)}?error=${encodeURIComponent('This order does not have a refundable payment reference yet.')}`);
+      }
+
+      const refundResult = await refundAdminStoreOrder(
+        req,
+        req.currentStore,
+        req.platformAuth,
+        order.payment_reference,
+        {
+          reason: req.body.refund_reason || ''
+        }
+      );
+      const normalizedRefundStatus = String(refundResult?.refund?.status || '').trim().toLowerCase();
+      const nextOrderStatus = ['processed', 'successful', 'completed', 'refunded'].includes(normalizedRefundStatus)
+        ? 'refunded'
+        : 'refund_pending';
+
+      await updateAdminStoreOrderStatus(req, req.currentStore, req.platformAuth, req.params.id, nextOrderStatus);
+      return res.redirect(`/admin/orders/${encodeURIComponent(req.params.id)}?success=${encodeURIComponent('Refund initiated for this order.')}`);
+    } catch (error) {
+      if ([400, 403, 404, 409, 422].includes(Number(error.status))) {
+        return res.redirect(`/admin/orders/${encodeURIComponent(req.params.id)}?error=${encodeURIComponent(error.message || 'Unable to refund the order right now.')}`);
+      }
+
+      return next(error);
+    }
+  });
+
   app.get('/admin/settings', loadStorePaymentProviderConfigs, (req, res) => {
     if (requirePlatformUser(req, res) || requireActiveStore(req, res)) {
       return;
@@ -299,6 +354,7 @@ const registerAdminRoutes = (app, deps) => {
     '/admin/settings',
     loadStorePaymentProviderConfigs,
     handleMultipartLogo((req, res, errors, status) => renderSettingsPage(req, res, errors, status)),
+    doubleCsrfProtection,
     storeSettingsValidation,
     handleFormValidation((req, res, errors) => renderSettingsPage(req, res, errors, 422)),
     async (req, res, next) => {

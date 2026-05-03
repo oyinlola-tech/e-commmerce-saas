@@ -4,6 +4,8 @@ const {
   buildSignedInternalHeaders,
   requestJson,
   EVENT_NAMES,
+  PAYMENT_PROVIDERS,
+  PLATFORM_ROLES,
   asyncHandler,
   createHttpError,
   validate,
@@ -24,6 +26,8 @@ const {
   serializeCoupon,
   buildCouponPreview
 } = require('./coupons');
+
+const MANUAL_ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'payment_failed', 'refund_pending', 'refunded'];
 
 const hydrateOrder = async (db, orderId, storeId) => {
   const query = storeId
@@ -81,6 +85,137 @@ const requirePlatformOperator = (req) => {
   if (req.authContext.actorType !== 'platform_user') {
     throw createHttpError(403, 'Only store operators can perform this action.', null, { expose: true });
   }
+};
+
+const releaseReservation = async ({
+  reservationId,
+  headers,
+  config,
+  logger,
+  storeId = null,
+  orderId = null,
+  reason = 'checkout_cleanup'
+}) => {
+  if (!reservationId) {
+    return;
+  }
+
+  try {
+    await requestJson(`${config.serviceUrls.product}/inventory/reservations/${reservationId}/release`, {
+      method: 'POST',
+      headers,
+      timeoutMs: config.requestTimeoutMs
+    });
+  } catch (error) {
+    logger?.warn('inventory_reservation_release_failed', {
+      reservationId,
+      storeId,
+      orderId,
+      reason,
+      error: error.message
+    });
+  }
+};
+
+const markCheckoutAsPaymentFailed = async ({ db, orderId, storeId }) => {
+  if (!orderId) {
+    return;
+  }
+
+  await db.execute(
+    'UPDATE orders SET payment_status = ?, status = ? WHERE id = ? AND store_id = ?',
+    ['failed', 'payment_failed', orderId, storeId]
+  );
+  await db.execute(
+    'UPDATE coupon_redemptions SET status = ? WHERE order_id = ?',
+    ['voided', orderId]
+  );
+};
+
+const applyPaymentOutcomeToOrder = async ({ db, bus, config, order, payment }) => {
+  if (!order || !payment) {
+    return order;
+  }
+
+  const paymentStatus = String(payment.status || '').trim().toLowerCase();
+  const systemHeaders = buildSignedInternalHeaders({
+    requestId: `payment-sync-${order.id}`,
+    storeId: order.store_id,
+    actorType: 'platform_user',
+    actorRole: PLATFORM_ROLES.PLATFORM_OWNER,
+    secret: config.internalSharedSecret
+  });
+
+  if (paymentStatus === 'success') {
+    const needsStateUpdate = String(order.payment_status || '').toLowerCase() !== 'paid'
+      || String(order.status || '').toLowerCase() !== 'confirmed';
+
+    if (needsStateUpdate) {
+      await db.execute(
+        'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
+        ['paid', 'confirmed', order.id]
+      );
+      await db.execute(
+        'UPDATE coupon_redemptions SET status = ? WHERE order_id = ?',
+        ['confirmed', order.id]
+      );
+      if (order.reservation_id) {
+        await requestJson(`${config.serviceUrls.product}/inventory/reservations/${order.reservation_id}/commit`, {
+          method: 'POST',
+          headers: systemHeaders,
+          timeoutMs: config.requestTimeoutMs
+        });
+      }
+      await bus.publish(EVENT_NAMES.ORDER_STATUS_CHANGED, {
+        order_id: order.id,
+        store_id: order.store_id,
+        status: 'confirmed'
+      });
+    }
+  } else if (paymentStatus === 'failed') {
+    const needsStateUpdate = String(order.payment_status || '').toLowerCase() !== 'failed'
+      || String(order.status || '').toLowerCase() !== 'payment_failed';
+
+    if (needsStateUpdate) {
+      await db.execute(
+        'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
+        ['failed', 'payment_failed', order.id]
+      );
+      await db.execute(
+        'UPDATE coupon_redemptions SET status = ? WHERE order_id = ?',
+        ['voided', order.id]
+      );
+      if (order.reservation_id) {
+        await requestJson(`${config.serviceUrls.product}/inventory/reservations/${order.reservation_id}/release`, {
+          method: 'POST',
+          headers: systemHeaders,
+          timeoutMs: config.requestTimeoutMs
+        });
+      }
+      await bus.publish(EVENT_NAMES.ORDER_STATUS_CHANGED, {
+        order_id: order.id,
+        store_id: order.store_id,
+        status: 'payment_failed'
+      });
+    }
+  } else if (paymentStatus === 'refunded') {
+    const needsStateUpdate = String(order.payment_status || '').toLowerCase() !== 'refunded'
+      || String(order.status || '').toLowerCase() !== 'refunded';
+
+    if (needsStateUpdate) {
+      await db.execute(
+        'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
+        ['refunded', 'refunded', order.id]
+      );
+      await bus.publish(EVENT_NAMES.ORDER_STATUS_CHANGED, {
+        order_id: order.id,
+        store_id: order.store_id,
+        status: 'refunded'
+      });
+    }
+  }
+
+  return hydrateOrder(db, order.id, order.store_id);
 };
 
 const getCouponByCode = async (db, storeId, code) => {
@@ -441,12 +576,14 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   }));
 
   app.post('/checkout', requireInternal, validate([
-    allowBodyFields(['shipping_address', 'customer', 'currency', 'email', 'coupon_code']),
+    allowBodyFields(['shipping_address', 'customer', 'currency', 'email', 'coupon_code', 'provider', 'callback_url']),
     body('shipping_address').optional().isObject(),
     body('customer').optional().isObject(),
     body('currency').optional().isLength({ min: 3, max: 3 }),
     body('email').optional().isEmail().customSanitizer((value) => sanitizeEmail(value)),
-    body('coupon_code').optional().trim().isLength({ max: 80 })
+    body('coupon_code').optional().trim().isLength({ max: 80 }),
+    body('provider').optional().isIn(PAYMENT_PROVIDERS),
+    body('callback_url').optional().isURL({ require_protocol: true }).withMessage('callback_url must be a valid absolute URL.')
   ]), asyncHandler(async (req, res) => {
     if (!req.authContext.customerId) {
       throw createHttpError(401, 'Customer authentication is required for checkout.', null, { expose: true });
@@ -492,84 +629,142 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       },
       timeoutMs: config.requestTimeoutMs
     });
+    const reservationId = reservation.reservation_id;
 
     const shippingAddress = sanitizeJsonObject(req.body.shipping_address || {});
     const customerSnapshot = sanitizeJsonObject(req.body.customer || {});
-    const orderId = await db.withTransaction(async (connection) => {
-      const [orderResult] = await connection.execute(
-        `
-          INSERT INTO orders (
-            store_id, customer_id, status, payment_status, reservation_id, subtotal, discount_total, total,
-            currency, coupon_code, coupon_snapshot, shipping_address, customer_snapshot
-          ) VALUES (?, ?, 'pending', 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-          Number(req.authContext.storeId),
-          Number(req.authContext.customerId),
-          reservation.reservation_id,
-          subtotal,
-          discountTotal,
-          orderTotal,
-          req.body.currency || 'NGN',
-          couponPreview?.coupon?.code || null,
-          couponPreview?.coupon ? JSON.stringify(sanitizeCouponSnapshot(couponPreview.coupon)) : null,
-          JSON.stringify(shippingAddress),
-          JSON.stringify(customerSnapshot)
-        ]
-      );
-
-      for (const item of cart.items) {
-        await connection.execute(
-          'INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (?, ?, ?, ?, ?)',
-          [orderResult.insertId, item.product_id, item.title_snapshot, item.price_at_time, item.quantity]
-        );
-      }
-
-      if (couponPreview?.coupon?.id) {
-        await connection.execute(
+    let orderId = null;
+    try {
+      orderId = await db.withTransaction(async (connection) => {
+        const [orderResult] = await connection.execute(
           `
-            INSERT INTO coupon_redemptions (
-              coupon_id, order_id, store_id, customer_id, status, discount_total
-            ) VALUES (?, ?, ?, ?, 'pending', ?)
+            INSERT INTO orders (
+              store_id, customer_id, status, payment_status, reservation_id, subtotal, discount_total, total,
+              currency, coupon_code, coupon_snapshot, shipping_address, customer_snapshot
+            ) VALUES (?, ?, 'pending', 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `,
           [
-            couponPreview.coupon.id,
-            orderResult.insertId,
             Number(req.authContext.storeId),
             Number(req.authContext.customerId),
-            discountTotal
+            reservationId,
+            subtotal,
+            discountTotal,
+            orderTotal,
+            req.body.currency || 'NGN',
+            couponPreview?.coupon?.code || null,
+            couponPreview?.coupon ? JSON.stringify(sanitizeCouponSnapshot(couponPreview.coupon)) : null,
+            JSON.stringify(shippingAddress),
+            JSON.stringify(customerSnapshot)
           ]
         );
+
+        for (const item of cart.items) {
+          await connection.execute(
+            'INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (?, ?, ?, ?, ?)',
+            [orderResult.insertId, item.product_id, item.title_snapshot, item.price_at_time, item.quantity]
+          );
+        }
+
+        if (couponPreview?.coupon?.id) {
+          await connection.execute(
+            `
+              INSERT INTO coupon_redemptions (
+                coupon_id, order_id, store_id, customer_id, status, discount_total
+              ) VALUES (?, ?, ?, ?, 'pending', ?)
+            `,
+            [
+              couponPreview.coupon.id,
+              orderResult.insertId,
+              Number(req.authContext.storeId),
+              Number(req.authContext.customerId),
+              discountTotal
+            ]
+          );
+        }
+
+        return orderResult.insertId;
+      });
+    } catch (error) {
+      await releaseReservation({
+        reservationId,
+        headers,
+        config,
+        logger: req.log,
+        storeId: Number(req.authContext.storeId),
+        reason: 'order_persist_failure'
+      });
+      throw error;
+    }
+
+    let paymentSession = null;
+    try {
+      paymentSession = await requestJson(`${config.serviceUrls.payment}/payments/create-checkout-session`, {
+        method: 'POST',
+        headers,
+        body: {
+          order_id: orderId,
+          store_id: Number(req.authContext.storeId),
+          customer_id: Number(req.authContext.customerId),
+          amount: orderTotal,
+          currency: req.body.currency || 'NGN',
+          email: req.body.email || customerSnapshot.email || null,
+          provider: req.body.provider || 'paystack',
+          callback_url: req.body.callback_url || null,
+          customer_name: customerSnapshot.name || null,
+          customer_phone: customerSnapshot.phone || null
+        },
+        timeoutMs: config.requestTimeoutMs
+      });
+
+      if (!paymentSession?.payment?.reference) {
+        throw createHttpError(502, 'Payment session did not return a payment reference.', null, {
+          expose: true
+        });
+      }
+    } catch (error) {
+      await markCheckoutAsPaymentFailed({
+        db,
+        orderId,
+        storeId: Number(req.authContext.storeId)
+      });
+      await releaseReservation({
+        reservationId,
+        headers,
+        config,
+        logger: req.log,
+        storeId: Number(req.authContext.storeId),
+        orderId,
+        reason: 'payment_session_failure'
+      });
+
+      if (!Number(error.status) || Number(error.status) >= 500) {
+        throw createHttpError(502, 'Unable to start the payment session right now.', null, {
+          expose: true
+        });
       }
 
-      return orderResult.insertId;
-    });
-
-    const paymentSession = await requestJson(`${config.serviceUrls.payment}/payments/create-checkout-session`, {
-      method: 'POST',
-      headers,
-      body: {
-        order_id: orderId,
-        store_id: Number(req.authContext.storeId),
-        customer_id: Number(req.authContext.customerId),
-        amount: orderTotal,
-        currency: req.body.currency || 'NGN',
-        email: req.body.email || customerSnapshot.email || null
-      },
-      timeoutMs: config.requestTimeoutMs
-    });
+      throw error;
+    }
 
     await db.execute(
       'UPDATE orders SET payment_reference = ? WHERE id = ? AND store_id = ?',
       [paymentSession.payment.reference, orderId, req.authContext.storeId]
     );
 
-    await requestJson(`${config.serviceUrls.cart}/cart/clear`, {
-      method: 'POST',
-      headers,
-      body: {},
-      timeoutMs: config.requestTimeoutMs
-    });
+    try {
+      await requestJson(`${config.serviceUrls.cart}/cart/clear`, {
+        method: 'POST',
+        headers,
+        body: {},
+        timeoutMs: config.requestTimeoutMs
+      });
+    } catch (error) {
+      req.log?.warn('checkout_cart_clear_failed', {
+        orderId,
+        storeId: Number(req.authContext.storeId),
+        error: error.message
+      });
+    }
 
     const order = await hydrateOrder(db, orderId, req.authContext.storeId);
     await bus.publish(EVENT_NAMES.ORDER_CREATED, {
@@ -583,6 +778,54 @@ const registerRoutes = async ({ app, db, bus, config }) => {
       order,
       payment: paymentSession.payment,
       providers: paymentSession.providers
+    });
+  }));
+
+  app.post('/checkout/verify', requireInternal, validate([
+    allowBodyFields(['reference']),
+    body('reference').isString().notEmpty().isLength({ max: 191 })
+  ]), asyncHandler(async (req, res) => {
+    if (!req.authContext.storeId) {
+      throw createHttpError(400, 'Store context is required.', null, { expose: true });
+    }
+
+    if (!req.authContext.customerId) {
+      throw createHttpError(401, 'Customer authentication is required for payment verification.', null, { expose: true });
+    }
+
+    const paymentVerification = await requestJson(
+      `${config.serviceUrls.payment}/payments/verify/${encodeURIComponent(req.body.reference)}`,
+      {
+        method: 'GET',
+        headers: buildServiceHeaders(req, config),
+        timeoutMs: config.requestTimeoutMs
+      }
+    );
+    const payment = paymentVerification?.payment || null;
+    if (!payment || String(payment.store_id || '') !== String(req.authContext.storeId || '')) {
+      throw createHttpError(404, 'Payment not found for this store.', null, { expose: true });
+    }
+
+    const order = await hydrateOrder(db, payment.order_id, req.authContext.storeId);
+    if (!order) {
+      throw createHttpError(404, 'Order not found for this payment.', null, { expose: true });
+    }
+
+    if (String(order.customer_id || '') !== String(req.authContext.customerId || '')) {
+      throw createHttpError(403, 'You do not have access to this order.', null, { expose: true });
+    }
+
+    const syncedOrder = await applyPaymentOutcomeToOrder({
+      db,
+      bus,
+      config,
+      order,
+      payment
+    });
+
+    return res.json({
+      order: syncedOrder,
+      payment
     });
   }));
 
@@ -650,7 +893,7 @@ const registerRoutes = async ({ app, db, bus, config }) => {
   app.patch('/orders/:id/status', requireInternal, validate([
     allowBodyFields(['status']),
     commonRules.paramId('id'),
-    commonRules.plainText('status', 40)
+    body('status').trim().isIn(MANUAL_ORDER_STATUSES).withMessage('Choose a valid order status.')
   ]), asyncHandler(async (req, res) => {
     requirePlatformOperator(req);
 
@@ -675,5 +918,6 @@ const registerRoutes = async ({ app, db, bus, config }) => {
 
 module.exports = {
   registerRoutes,
-  hydrateOrder
+  hydrateOrder,
+  applyPaymentOutcomeToOrder
 };
