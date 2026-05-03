@@ -13,6 +13,7 @@ This audit reflects the repository state after the production-hardening work in 
 - `a947768` `security: require explicit production admin bootstrap credentials`
 - `6cd3ffb` `feat: enforce marketing plan capabilities`
 - `ccc2c4b` `feat: add guided store launch onboarding`
+- `da21b9e` `feat: add verified product reviews and moderation`
 
 ## Flow Validation
 
@@ -25,13 +26,13 @@ This audit reflects the repository state after the production-hardening work in 
 ### Customer flow
 
 - `PASS WITH GAPS`: browse -> product -> cart -> checkout -> payment -> order confirmation exists across storefront SSR, cart, order, payment, and notification services.
-- `Validated`: customer registration/login, cart mutations, coupon preview, checkout quoting with shipping and tax, hosted payment initiation, payment callback verification, order confirmation, and transactional email delivery.
-- `Remaining gaps`: no guest checkout, no verified review submission flow, no saved-payment or resume-checkout UX, and limited post-purchase trust features beyond receipts and confirmation pages.
+- `Validated`: customer registration/login, cart mutations, coupon preview, checkout quoting with shipping and tax, hosted payment initiation, payment callback verification, order confirmation, transactional email delivery, approved review rendering, and verified-purchase review submission.
+- `Remaining gaps`: no guest checkout, no saved-payment or resume-checkout UX, no shipping ETA estimation, and limited post-purchase retention beyond receipts, reviews, and confirmation pages.
 
 ### Admin flow
 
 - `PARTIAL`: store-level admin operations are real, but platform-wide support and incident operations remain intentionally incomplete.
-- `Validated`: platform owner login, billing plan management, compliance review, store management, launch tracking, and refund initiation.
+- `Validated`: platform owner login, billing plan management, compliance review, store management, launch tracking, product-review moderation, and refund initiation.
 - `Blocked/incomplete`: support queue, incident management, live chat, and the related services remain placeholders or preview surfaces.
 
 ## What Was Fixed In This Pass
@@ -44,6 +45,7 @@ This audit reflects the repository state after the production-hardening work in 
 - Compliance records now support encrypted-at-rest fields for sensitive KYC, KYB, and document payloads.
 - Production startup now rejects placeholder platform-admin bootstrap credentials instead of silently creating a weak default admin.
 - Store owners now have a guided launch workflow backed by persisted onboarding state in `store-service` instead of a dashboard-only checklist.
+- Product trust is now materially stronger. Verified reviews are gated by paid or fulfilled orders, routed through moderation, aggregated back into product ratings, and visible in both storefront and store-admin workflows.
 
 ## Remaining Gaps
 
@@ -62,9 +64,6 @@ This audit reflects the repository state after the production-hardening work in 
 
 - `Testing / release safety`: there is still no meaningful automated integration or browser test suite covering the owner first-sale path or the customer checkout/payment confirmation path.
   File areas: `tests/`, repo-wide
-
-- `Frontend / trust`: product reviews have schema support and storefront display hooks, but there is no review submission, moderation, or verified-purchase publishing API.
-  File areas: `database/migrations.js`, `apps/services/product-service/src/routes.js`, `apps/web/views/storefront/product.ejs`
 
 - `Storage / deployment`: store assets still rely on local-disk uploads. That breaks horizontal scaling and failover for production deployments.
   File areas: `apps/services/store-service/src/routes.js`, `docs/KNOWN-GAPS.md`
